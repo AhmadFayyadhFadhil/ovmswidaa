@@ -59,6 +59,15 @@ class AssignmentController extends Controller
     {
         $validated = $request->validated();
 
+        // Verify driver role
+        $driver = \App\Models\User::find($validated['driver_id']);
+        if (!$driver || !$driver->hasRole('Driver')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User yang dipilih bukan merupakan Driver'
+            ], 422);
+        }
+
         // Check if request is approved
         $vehicleRequest = VehicleRequest::find($validated['request_id']);
         if ($vehicleRequest->status !== 'Approved') {

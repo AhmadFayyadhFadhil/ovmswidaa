@@ -21,12 +21,12 @@ class RequestResource extends JsonResource
                 'name' => $this->user?->name,
                 'email' => $this->user?->email,
             ],
-            'vehicle' => [
-                'id' => $this->vehicle?->id,
-                'name' => $this->vehicle?->name,
-                'plate_number' => $this->vehicle?->plate_number,
-                'type' => $this->vehicle?->type,
-            ],
+            'vehicle' => $this->vehicle ? [
+                'id' => $this->vehicle->id,
+                'name' => $this->vehicle->name,
+                'plate_number' => $this->vehicle->plate_number,
+                'type' => $this->vehicle->type,
+            ] : null,
             'approved_by' => $this->approver ? [
                 'id' => $this->approver->id,
                 'name' => $this->approver->name,

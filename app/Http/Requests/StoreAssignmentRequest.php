@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\ValidationRule;
 
 class StoreAssignmentRequest extends FormRequest
 {
@@ -12,7 +12,6 @@ class StoreAssignmentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // Only GA or Admin can create assignments
         return $this->user()->hasAnyRole(['Admin', 'GA']);
     }
 
@@ -24,10 +23,10 @@ class StoreAssignmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'request_id' => 'required|exists:requests,id',
-            'vehicle_id' => 'required|exists:vehicles,id',
-            'driver_id' => 'required|exists:users,id',
-            'assigned_at' => 'required|date_format:Y-m-d H:i:s',
+            'request_id' => 'required|integer|exists:requests,id',
+            'vehicle_id' => 'required|integer|exists:vehicles,id',
+            'driver_id' => 'required|integer|exists:users,id',
+            'assigned_at' => 'required|date',
             'notes' => 'nullable|string|max:1000',
         ];
     }
@@ -40,13 +39,12 @@ class StoreAssignmentRequest extends FormRequest
         return [
             'request_id.required' => 'Request ID harus diisi',
             'request_id.exists' => 'Request tidak ditemukan',
-            'vehicle_id.required' => 'Kendaraan harus dipilih',
+            'vehicle_id.required' => 'Kendaraan harus diisi',
             'vehicle_id.exists' => 'Kendaraan tidak ditemukan',
-            'driver_id.required' => 'Driver harus dipilih',
+            'driver_id.required' => 'Driver harus diisi',
             'driver_id.exists' => 'Driver tidak ditemukan',
-            'assigned_at.required' => 'Waktu assign harus diisi',
-            'assigned_at.date_format' => 'Format waktu assign: YYYY-MM-DD HH:MM:SS',
-            'notes.max' => 'Notes maksimal 1000 karakter',
+            'assigned_at.required' => 'Waktu penugasan harus diisi',
+            'assigned_at.date' => 'Format waktu penugasan salah',
         ];
     }
 }

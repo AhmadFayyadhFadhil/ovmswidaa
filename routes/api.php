@@ -36,12 +36,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // ===== REQUEST ENDPOINTS =====
     Route::get('/requests', [RequestController::class, 'index']);
     Route::post('/requests', [RequestController::class, 'store']);
-    Route::get('/requests/{request}', [RequestController::class, 'show']);
-    Route::put('/requests/{request}', [RequestController::class, 'update']);
-    Route::patch('/requests/{request}', [RequestController::class, 'update']);
-    Route::delete('/requests/{request}', [RequestController::class, 'destroy']);
-    Route::post('/requests/{request}/approve', [RequestController::class, 'approve']);
-    Route::post('/requests/{request}/reject', [RequestController::class, 'reject']);
+    Route::get('/requests/{vehicleRequest}', [RequestController::class, 'show']);
+    Route::put('/requests/{vehicleRequest}', [RequestController::class, 'update']);
+    Route::patch('/requests/{vehicleRequest}', [RequestController::class, 'update']);
+    Route::delete('/requests/{vehicleRequest}', [RequestController::class, 'destroy']);
+    Route::post('/requests/{vehicleRequest}/approve', [RequestController::class, 'approve']);
+    Route::post('/requests/{vehicleRequest}/reject', [RequestController::class, 'reject']);
 
     // ===== VEHICLE ENDPOINTS =====
     Route::get('/vehicles', [VehicleController::class, 'index']);

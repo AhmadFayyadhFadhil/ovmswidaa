@@ -120,6 +120,14 @@ class VehicleController extends Controller
             ], 403);
         }
 
+        // Prevent deleting vehicle with active or past assignments
+        if ($vehicle->assignments()->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak dapat menghapus kendaraan yang memiliki riwayat penugasan'
+            ], 422);
+        }
+
         $vehicle->delete();
 
         return response()->json([

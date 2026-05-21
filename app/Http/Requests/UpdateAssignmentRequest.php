@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\ValidationRule;
 
 class UpdateAssignmentRequest extends FormRequest
 {
@@ -12,9 +12,7 @@ class UpdateAssignmentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // GA, Admin, or the assigned driver can update
-        $assignment = $this->route('assignment');
-        return $this->user()->hasAnyRole(['Admin', 'GA']) || $this->user()->id === $assignment->driver_id;
+        return $this->user()->hasAnyRole(['Admin', 'GA']);
     }
 
     /**
@@ -24,10 +22,8 @@ class UpdateAssignmentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $assignment = $this->route('assignment');
-        
         return [
-            'returned_at' => 'required|date_format:Y-m-d H:i:s|after:' . $assignment->assigned_at,
+            'returned_at' => 'required|date',
             'notes' => 'nullable|string|max:1000',
         ];
     }
@@ -38,10 +34,8 @@ class UpdateAssignmentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'returned_at.required' => 'Waktu kembali harus diisi',
-            'returned_at.date_format' => 'Format waktu kembali: YYYY-MM-DD HH:MM:SS',
-            'returned_at.after' => 'Waktu kembali harus setelah waktu assign',
-            'notes.max' => 'Notes maksimal 1000 karakter',
+            'returned_at.required' => 'Waktu pengembalian harus diisi',
+            'returned_at.date' => 'Format waktu pengembalian salah',
         ];
     }
 }

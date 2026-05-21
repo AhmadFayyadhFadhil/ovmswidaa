@@ -14,207 +14,207 @@ use Illuminate\Support\Facades\Auth;
 class RequestController extends Controller
 {
     /**
-     * Display a listing of the user's requests or all requests if user has permission
+     * Display a listing of requests with filtering and pagination.
      */
     public function index(Request $request): JsonResponse
     {
-        $user = Auth::user();
+        $user    = Auth::user();
         $perPage = $request->query('per_page', 15);
-        $status = $request->query('status');
-        $search = $request->query('search');
+        $status  = $request->query('status');
+        $search  = $request->query('search');
 
         $query = VehicleRequest::with(['user', 'vehicle', 'approver']);
 
-        // If user has permission to view all requests (Approver, GA, Admin)
+        // Only privileged roles see all requests; others see only their own
         if (!$user->can('view-all-requests')) {
-            // Otherwise show only user's own requests
             $query->where('user_id', $user->id);
         }
 
-        // Filter by status if provided
+        // Filter by status
         if ($status && in_array($status, ['Pending', 'Approved', 'Rejected', 'Completed', 'Cancelled'])) {
             $query->where('status', $status);
         }
 
-        // Search by purpose if provided
+        // FIX: wrap orWhere inside a closure so it doesn't break the user_id filter
         if ($search) {
-            $query->where('purpose', 'like', '%' . $search . '%')
-                ->orWhere('notes', 'like', '%' . $search . '%');
+            $query->where(function ($q) use ($search) {
+                $q->where('purpose', 'like', '%' . $search . '%')
+                  ->orWhere('notes', 'like', '%' . $search . '%');
+            });
         }
 
         $requests = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json([
-            'status' => 'success',
-            'data' => RequestResource::collection($requests->items()),
+            'status'     => 'success',
+            'data'       => RequestResource::collection($requests->items()),
             'pagination' => [
-                'total' => $requests->total(),
-                'per_page' => $requests->perPage(),
+                'total'        => $requests->total(),
+                'per_page'     => $requests->perPage(),
                 'current_page' => $requests->currentPage(),
-                'last_page' => $requests->lastPage(),
-                'from' => $requests->firstItem(),
-                'to' => $requests->lastItem(),
-            ]
+                'last_page'    => $requests->lastPage(),
+                'from'         => $requests->firstItem(),
+                'to'           => $requests->lastItem(),
+            ],
         ], 200);
     }
 
     /**
-     * Store a newly created request
+     * Store a newly created request.
      */
     public function store(StoreRequestRequest $request): JsonResponse
     {
-        // Create new request
         $newRequest = VehicleRequest::create([
-            'user_id' => Auth::id(),
-            'purpose' => $request->validated('purpose'),
+            'user_id'    => Auth::id(),
+            'purpose'    => $request->validated('purpose'),
             'start_time' => $request->validated('start_time'),
-            'end_time' => $request->validated('end_time'),
+            'end_time'   => $request->validated('end_time'),
             'vehicle_id' => $request->validated('vehicle_id'),
-            'notes' => $request->validated('notes'),
-            'status' => 'Pending',
+            'notes'      => $request->validated('notes'),
+            'status'     => 'Pending',
         ]);
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Permintaan berhasil diajukan',
-            'data' => new RequestResource($newRequest)
+            'data'    => new RequestResource($newRequest->load(['user', 'vehicle', 'approver'])),
         ], 201);
     }
 
     /**
-     * Display the specified request
+     * Display the specified request.
      */
-    public function show(VehicleRequest $request): JsonResponse
+    public function show(VehicleRequest $vehicleRequest): JsonResponse
     {
-        // Check if user can view this request
-        if (Auth::id() !== $request->user_id && !Auth::user()->can('view-all-requests')) {
+        if (Auth::id() !== $vehicleRequest->user_id && !Auth::user()->can('view-all-requests')) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Unauthorized'
+                'status'  => 'error',
+                'message' => 'Unauthorized',
             ], 403);
         }
 
-        $request->load(['user', 'vehicle', 'approver']);
+        $vehicleRequest->load(['user', 'vehicle', 'approver']);
 
         return response()->json([
             'status' => 'success',
-            'data' => new RequestResource($request)
+            'data'   => new RequestResource($vehicleRequest),
         ], 200);
     }
 
     /**
-     * Update the specified request
+     * Update the specified request (only if Pending).
      */
     public function update(UpdateRequestRequest $request, VehicleRequest $vehicleRequest): JsonResponse
     {
-        // Only allow update if request is still pending
         if ($vehicleRequest->status !== 'Pending') {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Hanya dapat mengubah request yang masih Pending'
+                'status'  => 'error',
+                'message' => 'Hanya dapat mengubah request yang masih Pending',
             ], 422);
         }
 
         $vehicleRequest->update($request->validated());
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Permintaan berhasil diperbarui',
-            'data' => new RequestResource($vehicleRequest->fresh(['user', 'vehicle', 'approver']))
+            'data'    => new RequestResource($vehicleRequest->fresh(['user', 'vehicle', 'approver'])),
         ], 200);
     }
 
     /**
-     * Delete the specified request
+     * Delete the specified request (only if Pending).
      */
-    public function destroy(VehicleRequest $request): JsonResponse
+    public function destroy(VehicleRequest $vehicleRequest): JsonResponse
     {
-        // Only allow delete if request is pending
-        if ($request->status !== 'Pending') {
+        if (Auth::id() !== $vehicleRequest->user_id && !Auth::user()->hasRole('Admin')) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Hanya dapat menghapus request yang masih Pending'
-            ], 422);
-        }
-
-        $request->delete();
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Permintaan berhasil dihapus'
-        ], 200);
-    }
-
-    /**
-     * Approve the specified request
-     */
-    public function approve(VehicleRequest $request): JsonResponse
-    {
-        // Check authorization
-        if (!Auth::user()->can('approve-request')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Unauthorized'
+                'status'  => 'error',
+                'message' => 'Unauthorized',
             ], 403);
         }
 
-        // Check if request is pending
-        if ($request->status !== 'Pending') {
+        if ($vehicleRequest->status !== 'Pending') {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Request tidak dalam status Pending'
+                'status'  => 'error',
+                'message' => 'Hanya dapat menghapus request yang masih Pending',
             ], 422);
         }
 
-        $request->update([
-            'status' => 'Approved',
-            'approver_id' => Auth::id(),
+        $vehicleRequest->delete();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Permintaan berhasil dihapus',
+        ], 200);
+    }
+
+    /**
+     * Approve the specified request.
+     */
+    public function approve(VehicleRequest $vehicleRequest): JsonResponse
+    {
+        if (!Auth::user()->can('approve-request')) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        if ($vehicleRequest->status !== 'Pending') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Request tidak dalam status Pending',
+            ], 422);
+        }
+
+        $vehicleRequest->update([
+            'status'        => 'Approved',
+            'approver_id'   => Auth::id(),
             'approval_date' => now(),
         ]);
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Permintaan berhasil disetujui',
-            'data' => new RequestResource($request->fresh(['user', 'vehicle', 'approver']))
+            'data'    => new RequestResource($vehicleRequest->fresh(['user', 'vehicle', 'approver'])),
         ], 200);
     }
 
     /**
-     * Reject the specified request
+     * Reject the specified request.
      */
     public function reject(Request $request, VehicleRequest $vehicleRequest): JsonResponse
     {
-        // Check authorization
         if (!Auth::user()->can('reject-request')) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Unauthorized'
+                'status'  => 'error',
+                'message' => 'Unauthorized',
             ], 403);
         }
 
-        // Check if request is pending
         if ($vehicleRequest->status !== 'Pending') {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Request tidak dalam status Pending'
+                'status'  => 'error',
+                'message' => 'Request tidak dalam status Pending',
             ], 422);
         }
 
         $request->validate([
-            'notes' => 'required|string|max:1000'
+            'notes' => 'required|string|max:1000',
         ]);
 
         $vehicleRequest->update([
-            'status' => 'Rejected',
-            'approver_id' => Auth::id(),
+            'status'        => 'Rejected',
+            'approver_id'   => Auth::id(),
             'approval_date' => now(),
-            'notes' => $request->input('notes'),
+            'notes'         => $request->input('notes'),
         ]);
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Permintaan berhasil ditolak',
-            'data' => new RequestResource($vehicleRequest->fresh(['user', 'vehicle', 'approver']))
+            'data'    => new RequestResource($vehicleRequest->fresh(['user', 'vehicle', 'approver'])),
         ], 200);
     }
 }

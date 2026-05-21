@@ -13,8 +13,8 @@ class UpdateRequestRequest extends FormRequest
     public function authorize(): bool
     {
         // User can only update their own requests or be an admin
-        $request = $this->route('request');
-        return $this->user()->id === $request->user_id || $this->user()->hasRole('Admin');
+        $vehicleRequest = $this->route('vehicleRequest');
+        return $this->user()->id === $vehicleRequest->user_id || $this->user()->hasRole('Admin');
     }
 
     /**
