@@ -14,9 +14,9 @@ use Illuminate\Support\Facades\Auth;
 class VehicleController extends Controller
 {
     /**
-     * Display a listing of all vehicles
+     * Display a listing of all vehicles with pagination and filtering
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         // Check authorization
         if (!Auth::user()->can('view-vehicle')) {
@@ -26,11 +26,37 @@ class VehicleController extends Controller
             ], 403);
         }
 
-        $vehicles = Vehicle::all();
+        $perPage = $request->query('per_page', 15);
+        $status = $request->query('status');
+        $search = $request->query('search');
+
+        $query = Vehicle::query();
+
+        // Filter by status if provided
+        if ($status && in_array($status, ['Available', 'In Use', 'Maintenance', 'Retired'])) {
+            $query->where('status', $status);
+        }
+
+        // Search by name or plate number if provided
+        if ($search) {
+            $query->where('name', 'like', '%' . $search . '%')
+                ->orWhere('plate_number', 'like', '%' . $search . '%')
+                ->orWhere('type', 'like', '%' . $search . '%');
+        }
+
+        $vehicles = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
-            'data' => VehicleResource::collection($vehicles)
+            'data' => VehicleResource::collection($vehicles->items()),
+            'pagination' => [
+                'total' => $vehicles->total(),
+                'per_page' => $vehicles->perPage(),
+                'current_page' => $vehicles->currentPage(),
+                'last_page' => $vehicles->lastPage(),
+                'from' => $vehicles->firstItem(),
+                'to' => $vehicles->lastItem(),
+            ]
         ], 200);
     }
 

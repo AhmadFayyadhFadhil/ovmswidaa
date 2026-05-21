@@ -42,4 +42,25 @@ class Request extends Model
     {
         return $this->belongsTo(User::class, 'approver_id');
     }
+
+    public function assignments()
+    {
+        return $this->hasMany(Assignment::class);
+    }
+
+    // Scopes
+    public function scopePending($query)
+    {
+        return $query->where('status', 'Pending');
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('status', 'Approved');
+    }
+
+    public function scopeCompleted($query)
+    {
+        return $query->where('status', 'Completed');
+    }
 }

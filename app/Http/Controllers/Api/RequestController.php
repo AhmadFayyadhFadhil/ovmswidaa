@@ -16,23 +16,45 @@ class RequestController extends Controller
     /**
      * Display a listing of the user's requests or all requests if user has permission
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $user = Auth::user();
+        $perPage = $request->query('per_page', 15);
+        $status = $request->query('status');
+        $search = $request->query('search');
+
+        $query = VehicleRequest::with(['user', 'vehicle', 'approver']);
 
         // If user has permission to view all requests (Approver, GA, Admin)
-        if ($user->can('view-all-requests')) {
-            $requests = VehicleRequest::with(['user', 'vehicle', 'approver'])->get();
-        } else {
+        if (!$user->can('view-all-requests')) {
             // Otherwise show only user's own requests
-            $requests = VehicleRequest::where('user_id', $user->id)
-                ->with(['user', 'vehicle', 'approver'])
-                ->get();
+            $query->where('user_id', $user->id);
         }
+
+        // Filter by status if provided
+        if ($status && in_array($status, ['Pending', 'Approved', 'Rejected', 'Completed', 'Cancelled'])) {
+            $query->where('status', $status);
+        }
+
+        // Search by purpose if provided
+        if ($search) {
+            $query->where('purpose', 'like', '%' . $search . '%')
+                ->orWhere('notes', 'like', '%' . $search . '%');
+        }
+
+        $requests = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
-            'data' => RequestResource::collection($requests)
+            'data' => RequestResource::collection($requests->items()),
+            'pagination' => [
+                'total' => $requests->total(),
+                'per_page' => $requests->perPage(),
+                'current_page' => $requests->currentPage(),
+                'last_page' => $requests->lastPage(),
+                'from' => $requests->firstItem(),
+                'to' => $requests->lastItem(),
+            ]
         ], 200);
     }
 

@@ -3,7 +3,11 @@
 namespace App\Providers;
 
 use App\Models\Request;
+use App\Models\Vehicle;
+use App\Models\Assignment;
 use App\Observers\RequestObserver;
+use App\Observers\VehicleObserver;
+use App\Observers\AssignmentObserver;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -21,7 +25,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Register observers
+        // Register observers for audit logging
         Request::observe(RequestObserver::class);
+        Vehicle::observe(VehicleObserver::class);
+        Assignment::observe(AssignmentObserver::class);
     }
 }
