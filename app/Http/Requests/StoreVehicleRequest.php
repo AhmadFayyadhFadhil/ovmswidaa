@@ -12,7 +12,7 @@ class StoreVehicleRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->can('create-vehicle');
+        return $this->user()->hasRole(['Admin', 'GA']);
     }
 
     /**

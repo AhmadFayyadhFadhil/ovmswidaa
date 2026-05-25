@@ -7,19 +7,19 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
-use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
-    /**
-     * Display a listing of users (Admin only).
-     */
+    private function isAdmin(): bool
+    {
+        return Auth::user()->hasRole('Admin');
+    }
+
     public function index(Request $request): JsonResponse
     {
-        if (!Auth::user()->can('view-user')) {
+        if (!$this->isAdmin()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -56,26 +56,23 @@ class UserController extends Controller
         ], 200);
     }
 
-    /**
-     * Create a new user (Admin only).
-     */
     public function store(Request $request): JsonResponse
     {
-        if (!Auth::user()->can('create-user')) {
+        if (!$this->isAdmin()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
         $validated = $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
-            'password' => ['required', Password::min(8)],
+            'password' => ['required', Password::min(6)],
             'role'     => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver'])],
         ]);
 
         $user = User::create([
             'name'     => $validated['name'],
             'email'    => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'password' => $validated['password'],
         ]);
 
         $user->assignRole($validated['role']);
@@ -87,12 +84,9 @@ class UserController extends Controller
         ], 201);
     }
 
-    /**
-     * Display the specified user (Admin only).
-     */
     public function show(User $user): JsonResponse
     {
-        if (!Auth::user()->can('view-user')) {
+        if (!$this->isAdmin()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -102,25 +96,18 @@ class UserController extends Controller
         ], 200);
     }
 
-    /**
-     * Update the specified user (Admin only).
-     */
     public function update(Request $request, User $user): JsonResponse
     {
-        if (!Auth::user()->can('update-user')) {
+        if (!$this->isAdmin()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
         $validated = $request->validate([
             'name'     => 'sometimes|required|string|max:255',
             'email'    => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($user->id)],
-            'password' => ['sometimes', Password::min(8)],
+            'password' => ['sometimes', Password::min(6)],
             'role'     => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver'])],
         ]);
-
-        if (isset($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
-        }
 
         $role = $validated['role'] ?? null;
         unset($validated['role']);
@@ -138,16 +125,12 @@ class UserController extends Controller
         ], 200);
     }
 
-    /**
-     * Delete the specified user (Admin only).
-     */
     public function destroy(User $user): JsonResponse
     {
-        if (!Auth::user()->can('delete-user')) {
+        if (!$this->isAdmin()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        // Prevent self-deletion
         if ($user->id === Auth::id()) {
             return response()->json([
                 'status'  => 'error',

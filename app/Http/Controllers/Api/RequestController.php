@@ -26,7 +26,7 @@ class RequestController extends Controller
         $query = VehicleRequest::with(['user', 'vehicle', 'approver']);
 
         // Only privileged roles see all requests; others see only their own
-        if (!$user->can('view-all-requests')) {
+        if (!$user->hasAnyRole(['Admin', 'GA', 'Approver'])) {
             $query->where('user_id', $user->id);
         }
 
@@ -86,7 +86,7 @@ class RequestController extends Controller
      */
     public function show(VehicleRequest $vehicleRequest): JsonResponse
     {
-        if (Auth::id() !== $vehicleRequest->user_id && !Auth::user()->can('view-all-requests')) {
+        if (Auth::id() !== $vehicleRequest->user_id && !Auth::user()->hasAnyRole(['Admin', 'GA', 'Approver'])) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Unauthorized',
@@ -187,7 +187,7 @@ class RequestController extends Controller
      */
     public function reject(Request $request, VehicleRequest $vehicleRequest): JsonResponse
     {
-        if (!Auth::user()->can('reject-request')) {
+        if (!Auth::user()->hasAnyRole(['Admin', 'Approver'])) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Unauthorized',

@@ -12,7 +12,7 @@ class UpdateVehicleRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->can('update-vehicle');
+        return $this->user()->hasRole(['Admin', 'GA']);
     }
 
     /**

@@ -2,24 +2,17 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 
 class RolePermissionSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        // Reset cached roles and permissions
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Define all permissions
         $permissions = [
-            // Request permissions
             'create-request',
             'view-own-request',
             'view-all-requests',
@@ -27,80 +20,82 @@ class RolePermissionSeeder extends Seeder
             'delete-request',
             'approve-request',
             'reject-request',
-            
-            // Vehicle permissions
             'view-vehicle',
             'create-vehicle',
             'update-vehicle',
             'delete-vehicle',
-            
-            // User permissions
             'view-user',
             'create-user',
             'update-user',
             'delete-user',
-            
-            // Audit log permissions
             'view-audit-log',
         ];
 
-        // Create permissions for web guard (default)
-        foreach ($permissions as $permission) {
-            Permission::firstOrCreate(['name' => $permission]);
+        // Buat permission untuk KEDUA guard: web dan api
+        foreach (['web', 'api'] as $guard) {
+            foreach ($permissions as $permission) {
+                Permission::firstOrCreate([
+                    'name'       => $permission,
+                    'guard_name' => $guard,
+                ]);
+            }
         }
 
-        // Clear cache
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Create roles for web guard (default)
-        $admin = Role::firstOrCreate(['name' => 'Admin']);
-        $ga = Role::firstOrCreate(['name' => 'GA']);
-        $approver = Role::firstOrCreate(['name' => 'Approver']);
-        $employee = Role::firstOrCreate(['name' => 'Employee']);
-        $driver = Role::firstOrCreate(['name' => 'Driver']);
+        $roleNames = ['Admin', 'GA', 'Approver', 'Employee', 'Driver'];
 
-        // Create roles for sanctum guard
-        Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'sanctum']);
-        Role::firstOrCreate(['name' => 'GA', 'guard_name' => 'sanctum']);
-        Role::firstOrCreate(['name' => 'Approver', 'guard_name' => 'sanctum']);
-        Role::firstOrCreate(['name' => 'Employee', 'guard_name' => 'sanctum']);
-        Role::firstOrCreate(['name' => 'Driver', 'guard_name' => 'sanctum']);
+        // Buat role untuk KEDUA guard: web dan api
+        foreach (['web', 'api'] as $guard) {
+            foreach ($roleNames as $roleName) {
+                Role::firstOrCreate([
+                    'name'       => $roleName,
+                    'guard_name' => $guard,
+                ]);
+            }
+        }
 
-        // Clear cache
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Assign permissions to web guard roles
-        $admin->syncPermissions(Permission::all());
+        // Assign permission ke role untuk masing-masing guard
+        foreach (['web', 'api'] as $guard) {
+            $allPerms = Permission::where('guard_name', $guard)->get();
 
-        $ga->syncPermissions([
-            'view-vehicle',
-            'create-vehicle',
-            'update-vehicle',
-            'delete-vehicle',
-            'view-all-requests',
-            'view-audit-log',
-        ]);
+            $admin    = Role::where('name', 'Admin')->where('guard_name', $guard)->first();
+            $ga       = Role::where('name', 'GA')->where('guard_name', $guard)->first();
+            $approver = Role::where('name', 'Approver')->where('guard_name', $guard)->first();
+            $employee = Role::where('name', 'Employee')->where('guard_name', $guard)->first();
+            $driver   = Role::where('name', 'Driver')->where('guard_name', $guard)->first();
 
-        $approver->syncPermissions([
-            'view-all-requests',
-            'approve-request',
-            'reject-request',
-            'view-vehicle',
-            'view-audit-log',
-        ]);
+            $admin->syncPermissions($allPerms);
 
-        $employee->syncPermissions([
-            'create-request',
-            'view-own-request',
-            'view-vehicle',
-        ]);
+            $ga->syncPermissions(
+                $allPerms->whereIn('name', [
+                    'view-vehicle', 'create-vehicle', 'update-vehicle', 'delete-vehicle',
+                    'view-all-requests', 'view-audit-log',
+                ])
+            );
 
-        $driver->syncPermissions([
-            'view-vehicle',
-            'view-own-request',
-        ]);
+            $approver->syncPermissions(
+                $allPerms->whereIn('name', [
+                    'view-all-requests', 'approve-request', 'reject-request',
+                    'view-vehicle', 'view-audit-log',
+                ])
+            );
 
-        // Clear cache after all assignments
+            $employee->syncPermissions(
+                $allPerms->whereIn('name', [
+                    'create-request', 'view-own-request', 'view-vehicle',
+                ])
+            );
+
+            $driver->syncPermissions(
+                $allPerms->whereIn('name', [
+                    'view-vehicle', 'view-own-request',
+                ])
+            );
+        }
+
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
     }
 }
