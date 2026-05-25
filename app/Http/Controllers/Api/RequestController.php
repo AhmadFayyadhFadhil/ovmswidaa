@@ -154,7 +154,8 @@ class RequestController extends Controller
      */
     public function approve(VehicleRequest $vehicleRequest): JsonResponse
     {
-        if (!Auth::user()->can('approve-request')) {
+        // Only Admin and Approver roles can approve
+        if (!Auth::user()->hasAnyRole(['Admin', 'Approver'])) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Unauthorized',

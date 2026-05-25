@@ -44,24 +44,35 @@ class RolePermissionSeeder extends Seeder
             'view-audit-log',
         ];
 
-        // Create permissions
+        // Create permissions for web guard (default)
         foreach ($permissions as $permission) {
-            Permission::create(['name' => $permission]);
+            Permission::firstOrCreate(['name' => $permission]);
         }
 
-        // Create roles
-        $admin = Role::create(['name' => 'Admin']);
-        $ga = Role::create(['name' => 'GA']);
-        $approver = Role::create(['name' => 'Approver']);
-        $employee = Role::create(['name' => 'Employee']);
-        $driver = Role::create(['name' => 'Driver']);
+        // Clear cache
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Assign permissions to roles
-        // Admin has all permissions
-        $admin->givePermissionTo(Permission::all());
+        // Create roles for web guard (default)
+        $admin = Role::firstOrCreate(['name' => 'Admin']);
+        $ga = Role::firstOrCreate(['name' => 'GA']);
+        $approver = Role::firstOrCreate(['name' => 'Approver']);
+        $employee = Role::firstOrCreate(['name' => 'Employee']);
+        $driver = Role::firstOrCreate(['name' => 'Driver']);
 
-        // GA can manage vehicles and view requests
-        $ga->givePermissionTo([
+        // Create roles for sanctum guard
+        Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'sanctum']);
+        Role::firstOrCreate(['name' => 'GA', 'guard_name' => 'sanctum']);
+        Role::firstOrCreate(['name' => 'Approver', 'guard_name' => 'sanctum']);
+        Role::firstOrCreate(['name' => 'Employee', 'guard_name' => 'sanctum']);
+        Role::firstOrCreate(['name' => 'Driver', 'guard_name' => 'sanctum']);
+
+        // Clear cache
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // Assign permissions to web guard roles
+        $admin->syncPermissions(Permission::all());
+
+        $ga->syncPermissions([
             'view-vehicle',
             'create-vehicle',
             'update-vehicle',
@@ -70,8 +81,7 @@ class RolePermissionSeeder extends Seeder
             'view-audit-log',
         ]);
 
-        // Approver can approve/reject requests and view all requests
-        $approver->givePermissionTo([
+        $approver->syncPermissions([
             'view-all-requests',
             'approve-request',
             'reject-request',
@@ -79,17 +89,18 @@ class RolePermissionSeeder extends Seeder
             'view-audit-log',
         ]);
 
-        // Employee can create and view own requests
-        $employee->givePermissionTo([
+        $employee->syncPermissions([
             'create-request',
             'view-own-request',
             'view-vehicle',
         ]);
 
-        // Driver can view vehicles and own requests
-        $driver->givePermissionTo([
+        $driver->syncPermissions([
             'view-vehicle',
             'view-own-request',
         ]);
+
+        // Clear cache after all assignments
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
     }
 }

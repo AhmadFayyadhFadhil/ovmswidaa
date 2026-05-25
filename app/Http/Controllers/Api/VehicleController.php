@@ -112,8 +112,8 @@ class VehicleController extends Controller
      */
     public function destroy(Vehicle $vehicle): JsonResponse
     {
-        // Check authorization
-        if (!Auth::user()->can('delete-vehicle')) {
+        // Check authorization - only Admin can delete vehicles
+        if (!Auth::user()->hasRole('Admin')) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unauthorized'
@@ -123,7 +123,6 @@ class VehicleController extends Controller
         // Prevent deleting vehicle with active or past assignments
         if ($vehicle->assignments()->exists()) {
             return response()->json([
-                'status' => 'error',
                 'message' => 'Tidak dapat menghapus kendaraan yang memiliki riwayat penugasan'
             ], 422);
         }

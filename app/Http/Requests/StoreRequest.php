@@ -12,8 +12,8 @@ class StoreRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        // User must have permission to create requests
-        return $this->user()->can('create-request');
+        // User must have Employee role or higher (Admin, GA, Approver)
+        return $this->user()->hasAnyRole(['Employee', 'Admin', 'GA', 'Approver', 'Driver']);
     }
 
     /**

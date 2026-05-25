@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateAssignmentRequest extends FormRequest
 {
@@ -12,20 +12,38 @@ class UpdateAssignmentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->hasAnyRole(['Admin', 'GA']);
+        $assignment = $this->route('assignment');
+        return $this->user()->hasAnyRole(['Admin', 'GA']) || $this->user()->id === $assignment->driver_id;
     }
 
     /**
      * Get the validation rules that apply to the request.
-     *
-     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
+        $assignment = $this->route('assignment');
+
         return [
-            'returned_at' => 'required|date',
-            'notes' => 'nullable|string|max:1000',
+            // FIX: support flexible date format (ISO 8601 included)
+            'returned_at' => 'required|date|after:' . $assignment->assigned_at,
+            'notes'       => 'nullable|string|max:1000',
         ];
+    }
+
+    /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->returned_at) {
+            try {
+                $this->merge([
+                    'returned_at' => date('Y-m-d H:i:s', strtotime($this->returned_at)),
+                ]);
+            } catch (\Throwable $e) {
+                // leave as-is
+            }
+        }
     }
 
     /**
@@ -34,8 +52,10 @@ class UpdateAssignmentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'returned_at.required' => 'Waktu pengembalian harus diisi',
-            'returned_at.date' => 'Format waktu pengembalian salah',
+            'returned_at.required' => 'Waktu kembali harus diisi',
+            'returned_at.date'     => 'Format waktu kembali tidak valid',
+            'returned_at.after'    => 'Waktu kembali harus setelah waktu assign',
+            'notes.max'            => 'Notes maksimal 1000 karakter',
         ];
     }
 }
