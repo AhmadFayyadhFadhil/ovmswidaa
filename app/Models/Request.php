@@ -71,6 +71,11 @@ class Request extends Model
         return $this->belongsTo(Vehicle::class, 'vehicle_id');
     }
 
+    public function passengers()
+    {
+        return $this->hasMany(Passenger::class);
+    }
+
     // Scopes
     public function scopePending($query)
     {

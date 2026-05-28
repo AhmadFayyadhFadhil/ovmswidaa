@@ -76,7 +76,19 @@ class RequestPolicy
      */
     public function approve(User $user, Request $request): bool
     {
-        return $user->hasPermissionTo('approve-request') && $request->status === 'Pending';
+        // Admin, GA can always approve
+        if ($user->hasAnyRole(['Admin', 'GA'])) {
+            return true;
+        }
+
+        // Approver can approve if they have the permission AND same department AND is department head
+        if ($user->hasRole('Approver')) {
+            return $user->hasPermissionTo('approve-request') &&
+                   $user->is_department_head &&
+                   $user->department_id === $request->department_id;
+        }
+
+        return false;
     }
 
     /**
@@ -84,6 +96,18 @@ class RequestPolicy
      */
     public function reject(User $user, Request $request): bool
     {
-        return $user->hasPermissionTo('reject-request') && $request->status === 'Pending';
+        // Admin, GA can always reject
+        if ($user->hasAnyRole(['Admin', 'GA'])) {
+            return true;
+        }
+
+        // Approver can reject if they have the permission AND same department AND is department head
+        if ($user->hasRole('Approver')) {
+            return $user->hasPermissionTo('reject-request') &&
+                   $user->is_department_head &&
+                   $user->department_id === $request->department_id;
+        }
+
+        return false;
     }
 }

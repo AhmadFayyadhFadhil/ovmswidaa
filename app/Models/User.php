@@ -14,6 +14,13 @@ class User extends Authenticatable
     use HasFactory, Notifiable, HasRoles, HasApiTokens;
 
     /**
+     * Guard name untuk Spatie Permission.
+     * Wajib di-set ke 'sanctum' agar hasRole/hasAnyRole
+     * bisa mengenali role saat request lewat API (auth:sanctum).
+     */
+    protected string $guard_name = 'sanctum';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>

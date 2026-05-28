@@ -23,7 +23,7 @@ class RequestController extends Controller
         $status  = $request->query('status');
         $search  = $request->query('search');
 
-        $query = VehicleRequest::with(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver']);
+        $query = VehicleRequest::with(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers']);
 
         if ($user->hasRole('Approver') && !$user->hasAnyRole(['Admin', 'GA'])) {
             $query->where('department_id', $user->department_id);
@@ -64,7 +64,7 @@ class RequestController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Permintaan berhasil diajukan',
-            'data'    => new RequestResource($newRequest->load(['user'])),
+            'data'    => new RequestResource($newRequest->load(['user', 'passengers'])),
         ], 201);
     }
 
@@ -79,7 +79,7 @@ class RequestController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $vehicleRequest->load(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'assignments']);
+        $vehicleRequest->load(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'assignments', 'passengers']);
 
         return response()->json([
             'status' => 'success',
@@ -93,12 +93,32 @@ class RequestController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Hanya dapat mengubah request yang baru diajukan (submitted)'], 422);
         }
 
-        $vehicleRequest->update($request->validated());
+        $validated = $request->validated();
+        
+        // Extract passengers from validated data if present
+        $passengers = $validated['passengers'] ?? null;
+        unset($validated['passengers']);
+
+        // Update request
+        $vehicleRequest->update($validated);
+
+        // Update passengers if provided
+        if ($passengers !== null) {
+            // Delete old passengers and create new ones
+            $vehicleRequest->passengers()->delete();
+            foreach ($passengers as $passengerData) {
+                \App\Models\Passenger::create([
+                    'request_id' => $vehicleRequest->id,
+                    'name' => $passengerData['name'],
+                    'department_id' => $passengerData['department_id'] ?? null,
+                ]);
+            }
+        }
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Permintaan berhasil diperbarui',
-            'data'    => new RequestResource($vehicleRequest->fresh(['user'])),
+            'data'    => new RequestResource($vehicleRequest->fresh(['user', 'passengers'])),
         ], 200);
     }
 
@@ -115,6 +135,14 @@ class RequestController extends Controller
 
     public function approve(Request $request, VehicleRequest $vehicleRequest, ApproveRequestAction $action): JsonResponse
     {
+        // Check authorization using policy
+        if (!Auth::user()->can('approve', $vehicleRequest)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Anda tidak berhak untuk approve request ini. Pastikan departemen Anda sama dan Anda adalah Kepala Departemen.'
+            ], 403);
+        }
+
         $request->validate([
             'role'  => 'nullable|in:dept_head,hrd_head',
             'notes' => 'nullable|string'
@@ -146,6 +174,14 @@ class RequestController extends Controller
 
     public function reject(Request $request, VehicleRequest $vehicleRequest, ApproveRequestAction $action): JsonResponse
     {
+        // Check authorization using policy
+        if (!Auth::user()->can('reject', $vehicleRequest)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Anda tidak berhak untuk reject request ini. Pastikan departemen Anda sama dan Anda adalah Kepala Departemen.'
+            ], 403);
+        }
+
         $request->validate([
             'role'  => 'nullable|in:dept_head,hrd_head',
             'notes' => 'required|string'

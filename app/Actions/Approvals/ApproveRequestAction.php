@@ -6,6 +6,7 @@ use App\Models\Request;
 use App\Models\RequestApproval;
 use App\Enums\RequestStatus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Exception;
 
 class ApproveRequestAction
@@ -13,6 +14,20 @@ class ApproveRequestAction
     public function execute(Request $request, string $role, string $status, ?string $notes = null): Request
     {
         return DB::transaction(function () use ($request, $role, $status, $notes) {
+            $user = Auth::user();
+
+            // Validate approver authorization
+            if (!$user->hasAnyRole(['Admin', 'GA'])) {
+                if ($user->hasRole('Approver')) {
+                    // Approver must be department head and from same department
+                    if (!$user->is_department_head || $user->department_id !== $request->department_id) {
+                        throw new Exception("Anda bukan Kepala Departemen untuk departemen ini atau departemen tidak sesuai.");
+                    }
+                } else {
+                    throw new Exception("Anda tidak berhak untuk approve/reject request ini.");
+                }
+            }
+
             // Validate sequence
             if ($role === 'dept_head') {
                 if ($request->status !== RequestStatus::SUBMITTED) {
@@ -31,7 +46,7 @@ class ApproveRequestAction
             // Create approval record
             RequestApproval::create([
                 'request_id' => $request->id,
-                'approver_id' => auth()->id(),
+                'approver_id' => $user->id,
                 'role' => $role,
                 'status' => $status,
                 'notes' => $notes,
@@ -44,3 +59,4 @@ class ApproveRequestAction
         });
     }
 }
+

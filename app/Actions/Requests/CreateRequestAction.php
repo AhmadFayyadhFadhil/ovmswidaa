@@ -3,6 +3,7 @@
 namespace App\Actions\Requests;
 
 use App\Models\Request;
+use App\Models\Passenger;
 use App\Enums\RequestStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -11,7 +12,7 @@ class CreateRequestAction
     public function execute(array $data): Request
     {
         return DB::transaction(function () use ($data) {
-            return Request::create([
+            $request = Request::create([
                 'user_id' => auth()->id(),
                 'department_id' => $data['department_id'] ?? auth()->user()->department_id,
                 'destination_city' => $data['destination_city'],
@@ -24,9 +25,19 @@ class CreateRequestAction
                 'status' => RequestStatus::SUBMITTED,
                 'notes' => $data['notes'] ?? null,
             ]);
-            
-            // Note: Event dispatcher can be added here
-            // event(new RequestCreated($request));
+
+            // Create passengers if provided
+            if (!empty($data['passengers'])) {
+                foreach ($data['passengers'] as $passengerData) {
+                    Passenger::create([
+                        'request_id' => $request->id,
+                        'name' => $passengerData['name'],
+                        'department_id' => $passengerData['department_id'] ?? null,
+                    ]);
+                }
+            }
+
+            return $request;
         });
     }
 }

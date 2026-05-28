@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -88,11 +89,11 @@ class UserController extends Controller
         }
 
         $user = User::create([
-            'name'           => $validated['name'],
-            'email'          => $validated['email'],
-            'password'       => $validated['password'],
-            'rank'           => $validated['rank'] ?? null,
-            'department_id'  => $validated['department_id'] ?? null,
+            'name'               => $validated['name'],
+            'email'              => $validated['email'],
+            'password'           => Hash::make($validated['password']),   // ← di-hash
+            'rank'               => $validated['rank'] ?? null,
+            'department_id'      => $validated['department_id'] ?? null,
             'is_department_head' => $validated['is_department_head'] ?? false,
         ]);
 
@@ -154,10 +155,9 @@ class UserController extends Controller
 
         unset($validated['role']);
 
-        // Ensure boolean field is present when updating
-        if (!array_key_exists('is_department_head', $validated)) {
-            // keep existing value by removing from payload
-            // nothing to do
+        // Hash password jika ada perubahan
+        if (!empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);   // ← di-hash
         }
 
         $user->update($validated);

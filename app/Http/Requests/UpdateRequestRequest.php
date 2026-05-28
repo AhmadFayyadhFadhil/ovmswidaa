@@ -36,6 +36,10 @@ class UpdateRequestRequest extends FormRequest
             'passenger_count' => 'sometimes|required|integer|min:1',
             'priority' => ['sometimes', 'required', new Enum(RequestPriority::class)],
             'notes' => 'sometimes|nullable|string|max:1000',
+            // Passengers validation
+            'passengers' => 'sometimes|array|min:1',
+            'passengers.*.name' => 'required|string|max:255',
+            'passengers.*.department_id' => 'nullable|string|max:255',
         ];
     }
 
@@ -53,6 +57,9 @@ class UpdateRequestRequest extends FormRequest
             'passenger_count.required' => 'Jumlah penumpang harus diisi',
             'passenger_count.min' => 'Jumlah penumpang minimal 1',
             'priority.required' => 'Prioritas harus dipilih',
+            'passengers.required' => 'Data penumpang harus diisi',
+            'passengers.min' => 'Minimal ada 1 penumpang',
+            'passengers.*.name.required' => 'Nama penumpang harus diisi',
         ];
     }
 }

@@ -54,6 +54,9 @@ class RequestResource extends JsonResource
                 ],
                 'status' => $this->operationalTrip->status,
             ] : null),
+            'passengers' => $this->whenLoaded('passengers', fn() =>
+                PassengerResource::collection($this->passengers)
+            ),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
