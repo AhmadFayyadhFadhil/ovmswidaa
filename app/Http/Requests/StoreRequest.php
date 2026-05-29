@@ -34,11 +34,20 @@ class StoreRequest extends FormRequest
             'passenger_count' => 'required|integer|min:1',
             'priority' => ['required', new Enum(RequestPriority::class)],
             'notes' => 'nullable|string|max:1000',
-            // Passengers validation
-            'passengers' => 'required|array|min:1',
-            'passengers.*.name' => 'required|string|max:255',
+            // Passengers validation (optional - can be provided or omitted)
+            'passengers' => 'nullable|array|min:0',
+            'passengers.*.name' => 'required_with:passengers|string|max:255',
             'passengers.*.department_id' => 'nullable|string|max:255',
         ];
+    }
+
+    protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
+    {
+        \Log::error('StoreRequest validation failed:', [
+            'errors' => $validator->errors()->all(),
+            'input' => $this->all()
+        ]);
+        parent::failedValidation($validator);
     }
 
     /**

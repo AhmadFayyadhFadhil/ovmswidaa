@@ -8,7 +8,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\Request as VehicleRequest;
 use App\Enums\RequestStatus;
-use Spatie\Permission\Models\Role;
+use Database\Seeders\RolePermissionSeeder;
 
 class WorkflowTest extends TestCase
 {
@@ -17,22 +17,17 @@ class WorkflowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
-        // Setup roles
-        Role::create(['name' => 'Admin']);
-        Role::create(['name' => 'Employee']);
-        Role::create(['name' => 'Approver']); // Dept Head
-        Role::create(['name' => 'GA']); // HRD Head
-        Role::create(['name' => 'Driver']);
+        // Use the seeder which handles all guards
+        $this->seed(RolePermissionSeeder::class);
     }
 
     public function test_full_vehicle_request_workflow()
     {
         // 1. Create Users
-        $employee = User::factory()->create();
+        $employee = User::factory()->create(['department_id' => 'IT']);
         $employee->assignRole('Employee');
 
-        $deptHead = User::factory()->create();
+        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
         $deptHead->assignRole('Approver');
 
         $hrdHead = User::factory()->create();
@@ -59,7 +54,7 @@ class WorkflowTest extends TestCase
             'purpose' => 'Meeting',
             'start_time' => now()->addDay()->format('Y-m-d H:i:s'),
             'passenger_count' => 2,
-            'priority' => 'normal',
+            'priority' => 'Normal',
         ]);
         $response->assertStatus(201);
         $requestId = $response->json('data.id');
@@ -89,6 +84,11 @@ class WorkflowTest extends TestCase
             'driver_id' => $driver->id,
             'notes' => 'Tolong antar ya'
         ]);
+        $status = $response->status();
+        fwrite(STDERR, "Assignment creation response status: $status\n");
+        if ($status !== 201) {
+            fwrite(STDERR, json_encode($response->json(), JSON_PRETTY_PRINT) . "\n");
+        }
         $response->assertStatus(201);
         $assignmentId = $response->json('data.id');
         $this->assertDatabaseHas('assignments', ['id' => $assignmentId, 'status' => 'pending_driver']);

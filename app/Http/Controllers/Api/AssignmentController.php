@@ -66,6 +66,12 @@ class AssignmentController extends Controller
                 'data'    => new AssignmentResource($assignment->load(['request', 'driver', 'assignedBy'])),
             ], 201);
         } catch (\Exception $e) {
+            \Log::error('Assignment creation error:', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
         }
     }

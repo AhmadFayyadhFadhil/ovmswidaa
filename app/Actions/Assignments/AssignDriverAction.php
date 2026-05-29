@@ -64,6 +64,11 @@ class AssignDriverAction
      */
     private function validateDriverTimeConflict(int $driverId, Request $request): void
     {
+        // Skip conflict check if end_time is not set
+        if (is_null($request->end_time)) {
+            return;
+        }
+
         $conflictingRequests = Request::where('driver_id', $driverId)
             ->whereIn('status', [
                 RequestStatus::WAITING_DRIVER,
@@ -99,6 +104,11 @@ class AssignDriverAction
      */
     private function validateVehicleTimeConflict(int $vehicleId, Request $request): void
     {
+        // Skip conflict check if end_time is not set
+        if (is_null($request->end_time)) {
+            return;
+        }
+
         $conflictingRequests = Request::where('vehicle_id', $vehicleId)
             ->whereIn('status', [
                 RequestStatus::WAITING_DRIVER,

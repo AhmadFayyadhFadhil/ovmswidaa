@@ -18,8 +18,8 @@ class RequestResource extends JsonResource
             'start_time'        => $this->start_time,
             'end_time'          => $this->end_time,
             'passenger_count'   => $this->passenger_count,
-            'priority'          => $this->priority,
-            'status'            => $this->status,
+            'priority'          => $this->priority?->value,
+            'status'            => $this->status?->value,
             'notes'             => $this->notes,
             'requested_by'      => [
                 'id'    => $this->user?->id,

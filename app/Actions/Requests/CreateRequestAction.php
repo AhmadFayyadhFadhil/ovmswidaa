@@ -21,7 +21,7 @@ class CreateRequestAction
                 'start_time' => $data['start_time'],
                 'end_time' => $data['end_time'] ?? null,
                 'passenger_count' => $data['passenger_count'] ?? 1,
-                'priority' => $data['priority'] ?? 'normal',
+                'priority' => $data['priority'] ?? 'Normal',
                 'status' => RequestStatus::SUBMITTED,
                 'notes' => $data['notes'] ?? null,
             ]);

@@ -37,8 +37,8 @@ class UpdateRequestRequest extends FormRequest
             'priority' => ['sometimes', 'required', new Enum(RequestPriority::class)],
             'notes' => 'sometimes|nullable|string|max:1000',
             // Passengers validation
-            'passengers' => 'sometimes|array|min:1',
-            'passengers.*.name' => 'required|string|max:255',
+            'passengers' => 'nullable|array|min:0',
+            'passengers.*.name' => 'required_with:passengers|string|max:255',
             'passengers.*.department_id' => 'nullable|string|max:255',
         ];
     }

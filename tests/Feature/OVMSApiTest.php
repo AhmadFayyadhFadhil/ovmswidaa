@@ -65,7 +65,7 @@ class OVMSApiTest extends TestCase
                 'start_time'        => now()->addDay()->format('Y-m-d H:i:s'),
                 'end_time'          => now()->addDay()->addHours(2)->format('Y-m-d H:i:s'),
                 'passenger_count'   => 1,
-                'priority'          => 'normal',
+                'priority'          => 'Normal',
             ]);
 
         $response->assertStatus(201)
@@ -74,7 +74,7 @@ class OVMSApiTest extends TestCase
 
     public function test_dept_head_can_approve_request()
     {
-        $deptHead = User::factory()->create(['department_id' => 'IT']);
+        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
         $deptHead->assignRole('Approver');
 
         $employee = User::factory()->create(['department_id' => 'IT']);
@@ -89,7 +89,7 @@ class OVMSApiTest extends TestCase
             'start_time'        => now()->addDay(),
             'end_time'          => now()->addDay()->addHours(4),
             'passenger_count'   => 1,
-            'priority'          => 'normal',
+            'priority'          => 'Normal',
             'status'            => RequestStatus::SUBMITTED,
         ]);
 
@@ -122,7 +122,7 @@ class OVMSApiTest extends TestCase
             'start_time'        => now()->addDay(),
             'end_time'          => now()->addDay()->addHours(4),
             'passenger_count'   => 1,
-            'priority'          => 'normal',
+            'priority'          => 'Normal',
             'status'            => RequestStatus::APPROVED_HRD_GA, // ready to be assigned
         ]);
 
@@ -179,7 +179,7 @@ class OVMSApiTest extends TestCase
             'start_time'        => now()->addDay(),
             'end_time'          => now()->addDay()->addHours(4),
             'passenger_count'   => 1,
-            'priority'          => 'normal',
+            'priority'          => 'Normal',
             'status'            => RequestStatus::DRIVER_ASSIGNED,
             'driver_id'         => $driver->id,
             'vehicle_id'        => $vehicle->id,
