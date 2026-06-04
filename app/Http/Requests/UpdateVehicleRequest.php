@@ -12,7 +12,7 @@ class UpdateVehicleRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->hasRole(['Admin', 'GA']);
+        return $this->user()->hasRole('Admin') || $this->user()->isHrGaHead();
     }
 
     /**
@@ -29,6 +29,8 @@ class UpdateVehicleRequest extends FormRequest
             'plate_number' => 'sometimes|required|string|unique:vehicles,plate_number,' . $vehicleId . '|max:20',
             'type' => 'sometimes|required|string|max:100',
             'capacity' => 'sometimes|nullable|integer|min:1',
+            'odometer' => 'sometimes|nullable|integer|min:0',
+            'photo' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,webp|max:1024',
             'status' => 'sometimes|in:Available,In Use,Maintenance,Retired',
             'last_maintained' => 'sometimes|nullable|date',
         ];
@@ -49,6 +51,11 @@ class UpdateVehicleRequest extends FormRequest
             'type.max' => 'Tipe kendaraan maksimal 100 karakter',
             'capacity.integer' => 'Kapasitas harus berupa angka',
             'capacity.min' => 'Kapasitas minimal 1',
+            'odometer.integer' => 'Odometer harus berupa angka',
+            'odometer.min' => 'Odometer tidak boleh kurang dari 0',
+            'photo.image' => 'Foto kendaraan harus berupa file gambar',
+            'photo.mimes' => 'Foto kendaraan harus berformat jpeg, png, jpg, atau webp',
+            'photo.max' => 'Ukuran foto kendaraan maksimal 1MB',
         ];
     }
 }

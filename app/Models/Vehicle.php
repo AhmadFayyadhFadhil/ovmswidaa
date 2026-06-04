@@ -15,6 +15,8 @@ class Vehicle extends Model
         'type',
         'capacity',
         'status',
+        'odometer',
+        'photo',
         'last_maintained',
     ];
 

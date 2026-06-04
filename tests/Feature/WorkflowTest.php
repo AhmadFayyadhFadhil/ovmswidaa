@@ -30,8 +30,11 @@ class WorkflowTest extends TestCase
         $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
         $deptHead->assignRole('Approver');
 
-        $hrdHead = User::factory()->create();
-        $hrdHead->assignRole('GA');
+        $hrdHead = User::factory()->create(['department_id' => 'HR&GA', 'is_department_head' => true]);
+        $hrdHead->assignRole('Approver');
+
+        $ga = User::factory()->create();
+        $ga->assignRole('GA');
 
         $driver = User::factory()->create();
         $driver->assignRole('Driver');
@@ -76,9 +79,10 @@ class WorkflowTest extends TestCase
             'notes' => 'ACC HRD'
         ]);
         $response->assertStatus(200);
-        $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'approved_hrd_ga']);
+        $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'approved_hrd']);
 
-        // 5. HRD assigns driver
+        // 5. GA assigns driver
+        $this->actingAs($ga);
         $response = $this->postJson("/api/assignments", [
             'request_id' => $requestId,
             'driver_id' => $driver->id,
@@ -134,8 +138,11 @@ class WorkflowTest extends TestCase
         $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
         $deptHead->assignRole('Approver');
 
-        $hrdHead = User::factory()->create();
-        $hrdHead->assignRole('GA');
+        $hrdHead = User::factory()->create(['department_id' => 'HR&GA', 'is_department_head' => true]);
+        $hrdHead->assignRole('Approver');
+
+        $ga = User::factory()->create();
+        $ga->assignRole('GA');
 
         $driver = User::factory()->create();
         $driver->assignRole('Driver');
@@ -168,7 +175,8 @@ class WorkflowTest extends TestCase
             'notes' => 'ACC HRD'
         ])->assertStatus(200);
 
-        // 5. HRD assigns driver
+        // 5. GA assigns driver
+        $this->actingAs($ga);
         $response = $this->postJson("/api/assignments", [
             'request_id' => $requestId,
             'driver_id' => $driver->id,
@@ -179,14 +187,15 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseHas('assignments', ['id' => $assignmentId, 'status' => 'pending_driver']);
         $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'waiting_driver']);
 
-        // 6. HRD cancels assignment
+        // 6. GA cancels assignment
+        $this->actingAs($ga);
         $response = $this->postJson("/api/assignments/{$assignmentId}/cancel");
         $response->assertStatus(200);
 
         $this->assertDatabaseMissing('assignments', ['id' => $assignmentId]);
         $this->assertDatabaseHas('requests', [
             'id' => $requestId,
-            'status' => 'approved_hrd_ga',
+            'status' => 'approved_hrd',
             'driver_id' => null,
             'assigned_by' => null,
             'assigned_at' => null,

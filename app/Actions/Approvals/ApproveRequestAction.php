@@ -17,10 +17,13 @@ class ApproveRequestAction
             $user = Auth::user();
 
             // Validate approver authorization
-            if (!$user->hasAnyRole(['Admin', 'GA'])) {
+            if (!$user->hasRole('Admin')) {
                 if ($user->hasRole('Approver')) {
-                    // Approver must be department head and from same department
-                    if (!$user->is_department_head || $user->department_id !== $request->department_id) {
+                    // Approver must be department head and from same department,
+                    // except HR&GA head can approve at HRD stage for any department.
+                    if (!$user->is_department_head ||
+                        (!($user->isHrGaHead() && $request->status === RequestStatus::APPROVED_DEPARTMENT) &&
+                         !in_array($request->department_id, $user->departmentGroup(), true))) {
                         throw new Exception("Anda bukan Kepala Departemen untuk departemen ini atau departemen tidak sesuai.");
                     }
                 } else {
@@ -38,6 +41,7 @@ class ApproveRequestAction
                 if ($request->status !== RequestStatus::APPROVED_DEPARTMENT) {
                     throw new Exception("Request must be approved by Department Head first.");
                 }
+                // HRD&GA head approval sets status to APPROVED_HRD_GA
                 $newStatus = $status === 'approved' ? RequestStatus::APPROVED_HRD_GA : RequestStatus::REJECTED;
             } else {
                 throw new Exception("Invalid approver role.");

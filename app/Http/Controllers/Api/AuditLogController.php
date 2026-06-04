@@ -16,8 +16,8 @@ class AuditLogController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Only Admin and GA can view all audit logs
-        if (!Auth::user()->hasAnyRole(['Admin', 'GA'])) {
+        // Only Admin and HRD&GA head can view all audit logs
+        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unauthorized'

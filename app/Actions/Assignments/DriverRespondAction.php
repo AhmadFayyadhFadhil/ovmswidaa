@@ -31,7 +31,7 @@ class DriverRespondAction
                     'end_photo' => $endPhotoPath,
                 ]);
 
-                // Revert request status back to APPROVED_HRD_GA so GA can re-assign, and store response status
+                // Revert request status back to APPROVED_HRD_GA so HRD&GA head can re-assign
                 $assignment->request()->update([
                     'status' => RequestStatus::APPROVED_HRD_GA,
                     'driver_id' => null,

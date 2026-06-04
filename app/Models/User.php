@@ -91,4 +91,22 @@ class User extends Authenticatable
             'HRD', 'GA', 'TECHNICAL', 'ENGINEERING', 'SUPPLY CHAIN', 'HSE', 'PRODUKSI',
         ];
     }
+
+    public function departmentGroup(): array
+    {
+        return match ($this->department_id) {
+            'HR&GA' => ['HR&GA', 'HRD', 'GA'],
+            default => [$this->department_id],
+        };
+    }
+
+    public function isHrGaDepartment(): bool
+    {
+        return $this->department_id === 'HR&GA';
+    }
+
+    public function isHrGaHead(): bool
+    {
+        return $this->isHrGaDepartment() && $this->is_department_head && $this->hasAnyRole(['Approver', 'GA']);
+    }
 }

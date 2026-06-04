@@ -187,7 +187,7 @@ class OVMSApiTest extends TestCase
             'end_time'          => now()->addDay()->addHours(4),
             'passenger_count'   => 1,
             'priority'          => 'Normal',
-            'status'            => RequestStatus::APPROVED_HRD_GA, // ready to be assigned
+            'status'            => RequestStatus::APPROVED_HRD, // ready to be assigned
         ]);
 
         // Attempting to assign with non-driver user should fail

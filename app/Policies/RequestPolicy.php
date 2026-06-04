@@ -14,8 +14,8 @@ class RequestPolicy
      */
     public function viewAny(User $user): bool
     {
-        // Approver, GA, Admin can view all requests
-        return $user->hasAnyRole(['Admin', 'Approver', 'GA']);
+        // Admin, Approver, or HRD&GA head can view requests.
+        return $user->hasAnyRole(['Admin', 'Approver']) || $user->isHrGaHead();
     }
 
     /**
@@ -25,7 +25,8 @@ class RequestPolicy
     {
         // User can view their own requests or if they have permission to view all
         return $user->id === $request->user_id || 
-               $user->hasAnyRole(['Admin', 'Approver', 'GA']);
+               $user->hasAnyRole(['Admin', 'Approver']) ||
+               $user->isHrGaHead();
     }
 
     /**
@@ -77,16 +78,21 @@ class RequestPolicy
      */
     public function approve(User $user, Request $request): bool
     {
-        // Admin, GA can always approve
-        if ($user->hasAnyRole(['Admin', 'GA'])) {
+        // Only Admin can always approve
+        if ($user->hasRole('Admin')) {
             return true;
         }
 
-        // Approver can approve if they have the permission AND same department AND is department head
+        // Approver can approve if they have the permission AND same department AND are department head
+        // HR&GA head can also approve any request at HRD stage.
         if ($user->hasRole('Approver')) {
+            if ($user->isHrGaHead() && $request->status === RequestStatus::APPROVED_DEPARTMENT) {
+                return true;
+            }
+
             return $user->hasPermissionTo('approve-request') &&
                    $user->is_department_head &&
-                   $user->department_id === $request->department_id;
+                   in_array($request->department_id, $user->departmentGroup(), true);
         }
 
         return false;
@@ -97,16 +103,19 @@ class RequestPolicy
      */
     public function reject(User $user, Request $request): bool
     {
-        // Admin, GA can always reject
-        if ($user->hasAnyRole(['Admin', 'GA'])) {
+        // Only Admin can always reject
+        if ($user->hasRole('Admin')) {
             return true;
         }
 
-        // Approver can reject if they have the permission AND same department AND is department head
         if ($user->hasRole('Approver')) {
+            if ($user->isHrGaHead() && $request->status === RequestStatus::APPROVED_DEPARTMENT) {
+                return true;
+            }
+
             return $user->hasPermissionTo('reject-request') &&
                    $user->is_department_head &&
-                   $user->department_id === $request->department_id;
+                   in_array($request->department_id, $user->departmentGroup(), true);
         }
 
         return false;

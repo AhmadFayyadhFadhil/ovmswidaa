@@ -4,11 +4,22 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Enums\RequestStatus;
 
 class RequestResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $user = $request->user();
+
+        $canApprove = false;
+        $canReject = false;
+
+        if ($user) {
+            $canApprove = $user->can('approve', $this->resource);
+            $canReject = $user->can('reject', $this->resource);
+        }
+
         return [
             'id'                => $this->id,
             'department_id'     => $this->department_id,
@@ -21,6 +32,13 @@ class RequestResource extends JsonResource
             'priority'          => $this->priority?->value,
             'status'            => $this->status?->value,
             'notes'             => $this->notes,
+            'can_approve'       => $canApprove,
+            'can_reject'        => $canReject,
+            'next_approval_role' => match ($this->status) {
+                RequestStatus::SUBMITTED => 'dept_head',
+                RequestStatus::APPROVED_DEPARTMENT => 'hrd_head',
+                default => null,
+            },
             'requested_by'      => [
                 'id'    => $this->user?->id,
                 'name'  => $this->user?->name,

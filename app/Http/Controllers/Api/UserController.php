@@ -20,7 +20,7 @@ class UserController extends Controller
 
     private const CATEGORY_DEPARTMENT_MAP = [
         'HRD'           => ['HR&GA', 'HRD'],
-        'GA'            => ['GA', 'HR&GA'],
+        'GA'            => ['HR&GA'],
     ];
 
     private function isAdmin(): bool
@@ -63,7 +63,10 @@ class UserController extends Controller
                 $query->where(function ($q) {
                     $q->whereHas('roles', function ($q) {
                         $q->where('name', 'GA');
-                    })->orWhereIn('department_id', self::CATEGORY_DEPARTMENT_MAP['GA']);
+                    })->orWhere(function ($q) {
+                        $q->whereIn('department_id', self::CATEGORY_DEPARTMENT_MAP['GA'])
+                          ->where('is_department_head', true);
+                    });
                 });
             } else {
                 $departments = self::CATEGORY_DEPARTMENT_MAP[$categoryKey] ?? [$categoryKey];

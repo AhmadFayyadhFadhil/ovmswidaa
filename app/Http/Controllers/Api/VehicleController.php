@@ -49,11 +49,16 @@ class VehicleController extends Controller
 
     public function store(StoreVehicleRequest $request): JsonResponse
     {
-        if (!Auth::user()->hasAnyRole(['Admin', 'GA'])) {
+        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $vehicle = Vehicle::create($request->validated());
+        $validated = $request->validated();
+        if ($request->hasFile('photo')) {
+            $validated['photo'] = $request->file('photo')->store('vehicles/photos', 'public');
+        }
+
+        $vehicle = Vehicle::create($validated);
 
         return response()->json([
             'status'  => 'success',
@@ -72,11 +77,16 @@ class VehicleController extends Controller
 
     public function update(UpdateVehicleRequest $request, Vehicle $vehicle): JsonResponse
     {
-        if (!Auth::user()->hasAnyRole(['Admin', 'GA'])) {
+        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $vehicle->update($request->validated());
+        $validated = $request->validated();
+        if ($request->hasFile('photo')) {
+            $validated['photo'] = $request->file('photo')->store('vehicles/photos', 'public');
+        }
+
+        $vehicle->update($validated);
 
         return response()->json([
             'status'  => 'success',
@@ -87,7 +97,7 @@ class VehicleController extends Controller
 
     public function destroy(Vehicle $vehicle): JsonResponse
     {
-        if (!Auth::user()->hasRole(['Admin', 'GA'])) {
+        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 

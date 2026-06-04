@@ -21,6 +21,15 @@ class AssignmentObserver
             'new_values' => $assignment->toArray(),
             'old_values' => null,
         ]);
+
+        // Mark driver as assigned to prevent double assignment until driver responds
+        try {
+            if ($assignment->driver) {
+                $assignment->driver->update(['availability_status' => 'assigned']);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('AssignmentObserver created: failed to update driver availability', ['err' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -41,6 +50,22 @@ class AssignmentObserver
                 'new_values' => $assignment->toArray(),
             ]);
         }
+
+        // React on status changes to keep driver availability in sync
+        if (array_key_exists('status', $changes)) {
+            try {
+                $status = $changes['status'];
+                if ($status === 'rejected' && $assignment->driver) {
+                    $assignment->driver->update(['availability_status' => 'available']);
+                }
+
+                if ($status === 'accepted' && $assignment->driver) {
+                    $assignment->driver->update(['availability_status' => 'assigned']);
+                }
+            } catch (\Throwable $e) {
+                \Log::error('AssignmentObserver updated: failed to sync driver availability', ['err' => $e->getMessage()]);
+            }
+        }
     }
 
     /**
@@ -56,6 +81,15 @@ class AssignmentObserver
             'old_values' => $assignment->toArray(),
             'new_values' => null,
         ]);
+
+        // Ensure driver availability is restored when assignment removed
+        try {
+            if ($assignment->driver) {
+                $assignment->driver->update(['availability_status' => 'available']);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('AssignmentObserver deleted: failed to restore driver availability', ['err' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -71,5 +105,14 @@ class AssignmentObserver
             'old_values' => null,
             'new_values' => $assignment->toArray(),
         ]);
+
+        // When restored, mark driver as assigned again
+        try {
+            if ($assignment->driver) {
+                $assignment->driver->update(['availability_status' => 'assigned']);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('AssignmentObserver restored: failed to set driver availability', ['err' => $e->getMessage()]);
+        }
     }
 }

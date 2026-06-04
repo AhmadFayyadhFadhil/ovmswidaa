@@ -32,7 +32,7 @@ class StoreRequest extends FormRequest
             'start_time' => 'required|date|after:now',
             'end_time' => 'nullable|date|after:start_time',
             'passenger_count' => 'required|integer|min:1',
-            'priority' => ['required', new Enum(RequestPriority::class)],
+            'priority' => 'required|in:Normal,Urgent,Critical',
             'notes' => 'nullable|string|max:1000',
             // Passengers validation (optional - can be provided or omitted)
             'passengers' => 'nullable|array|min:0',

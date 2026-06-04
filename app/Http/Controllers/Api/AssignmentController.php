@@ -24,7 +24,7 @@ class AssignmentController extends Controller
 
         $query = Assignment::with(['request.operationalTrip.vehicle', 'driver', 'assignedBy']);
 
-        if (!$user->hasAnyRole(['Admin', 'GA'])) {
+        if (!$user->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
             $query->where('driver_id', $user->id);
         }
 
@@ -48,6 +48,11 @@ class AssignmentController extends Controller
 
     public function store(StoreAssignmentRequest $request, AssignDriverAction $action): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user->hasRole('Admin') && !$user->isHrGaHead()) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
         $validated = $request->validated();
         $vehicleRequest = VehicleRequest::findOrFail($validated['request_id']);
 
@@ -78,7 +83,7 @@ class AssignmentController extends Controller
 
     public function show(Assignment $assignment): JsonResponse
     {
-        if (Auth::id() !== $assignment->driver_id && !Auth::user()->hasAnyRole(['Admin', 'GA'])) {
+        if (Auth::id() !== $assignment->driver_id && !Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -150,7 +155,7 @@ class AssignmentController extends Controller
 
     public function cancel(Assignment $assignment): JsonResponse
     {
-        if (!Auth::user()->hasAnyRole(['Admin', 'GA'])) {
+        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 

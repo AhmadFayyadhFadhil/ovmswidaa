@@ -38,7 +38,7 @@ class AuthServiceProvider extends ServiceProvider
 
         // Define GA gate
         Gate::define('ga', function ($user) {
-            return $user->hasAnyRole(['Admin', 'GA']);
+            return $user->hasRole('Admin') || $user->isHrGaHead();
         });
     }
 }

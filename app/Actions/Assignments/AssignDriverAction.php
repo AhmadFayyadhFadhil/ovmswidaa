@@ -17,8 +17,8 @@ class AssignDriverAction
             // Lock request row to prevent race condition
             $request = Request::where('id', $request->id)->lockForUpdate()->first();
 
-            if ($request->status !== RequestStatus::APPROVED_HRD_GA) {
-                throw new Exception("Request must be approved by HRD & GA first before assigning a driver.");
+            if (!in_array($request->status, [RequestStatus::APPROVED_HRD, RequestStatus::APPROVED_HRD_GA], true)) {
+                throw new Exception("Request must be approved by HRD first before assigning a driver.");
             }
 
             // Validate driver availability status
