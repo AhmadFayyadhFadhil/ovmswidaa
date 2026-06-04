@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\Request;
 use App\Models\User;
+use App\Enums\RequestStatus;
 use Illuminate\Auth\Access\Response;
 
 class RequestPolicy
@@ -41,7 +42,7 @@ class RequestPolicy
     public function update(User $user, Request $request): bool
     {
         // Only owner can update pending requests, or admin
-        return ($user->id === $request->user_id && $request->status === 'Pending') || 
+        return ($user->id === $request->user_id && $request->status === RequestStatus::SUBMITTED) || 
                $user->hasRole('Admin');
     }
 
@@ -51,7 +52,7 @@ class RequestPolicy
     public function delete(User $user, Request $request): bool
     {
         // Only owner can delete pending requests, or admin
-        return ($user->id === $request->user_id && $request->status === 'Pending') || 
+        return ($user->id === $request->user_id && $request->status === RequestStatus::SUBMITTED) || 
                $user->hasRole('Admin');
     }
 

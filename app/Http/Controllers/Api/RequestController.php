@@ -216,7 +216,7 @@ class RequestController extends Controller
         $user = Auth::user();
 
         // Authorize: Only assigned Driver, Admin, or GA can start trip
-        if ($vehicleRequest->driver_id !== $user->id && !$user->hasAnyRole(['Admin', 'GA'])) {
+        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasAnyRole(['Admin', 'GA'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau GA yang dapat memulai perjalanan.'], 403);
         }
 
@@ -263,7 +263,7 @@ class RequestController extends Controller
         $user = Auth::user();
 
         // Authorize: Only assigned Driver, Admin, or GA can complete trip
-        if ($vehicleRequest->driver_id !== $user->id && !$user->hasAnyRole(['Admin', 'GA'])) {
+        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasAnyRole(['Admin', 'GA'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau GA yang dapat menyelesaikan perjalanan.'], 403);
         }
 

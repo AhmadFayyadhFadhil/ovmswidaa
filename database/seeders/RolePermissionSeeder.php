@@ -56,6 +56,7 @@ class RolePermissionSeeder extends Seeder
             $admin->syncPermissions($allPerms);
 
             $ga->syncPermissions($allPerms->whereIn('name', [
+                'create-request',
                 'view-vehicle', 'create-vehicle', 'update-vehicle', 'delete-vehicle',
                 'view-all-requests', 'view-audit-log',
             ]));

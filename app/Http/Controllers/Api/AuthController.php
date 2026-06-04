@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
+use Spatie\Permission\Models\Role;
 
 class AuthController extends Controller
 {
@@ -49,6 +51,7 @@ class AuthController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
             'password' => 'required|string|min:6|confirmed',
+            'department_id' => ['nullable', 'string', 'max:255', Rule::in(User::validDepartments())],
         ], [
             'name.required'      => 'Nama harus diisi',
             'email.required'     => 'Email harus diisi',
@@ -64,8 +67,13 @@ class AuthController extends Controller
             'name'     => $validated['name'],
             'email'    => $validated['email'],
             'password' => $validated['password'],
+            'department_id' => $validated['department_id'] ?? null,
         ]);
 
+        // Ensure the Employee role exists for the sanctum guard before assigning (avoid runtime errors)
+        if (!Role::where('name', 'Employee')->where('guard_name', 'sanctum')->exists()) {
+            Role::firstOrCreate(['name' => 'Employee', 'guard_name' => 'sanctum']);
+        }
         $user->assignRole('Employee');
 
         $token = $user->createToken('api-token')->plainTextToken;

@@ -33,6 +33,7 @@ class User extends Authenticatable
         'availability_status',
         'rank',
         'is_department_head',
+        'sim_a_photo',
     ];
 
     /**
@@ -78,5 +79,16 @@ class User extends Authenticatable
     public function assignments()
     {
         return $this->hasMany(Assignment::class, 'driver_id');
+    }
+
+    /**
+     * Kembalikan daftar departemen valid yang digunakan di front/back.
+     */
+    public static function validDepartments(): array
+    {
+        return [
+            'IT', 'FA', 'HR&GA', 'QC', 'QA',
+            'HRD', 'GA', 'TECHNICAL', 'ENGINEERING', 'SUPPLY CHAIN', 'HSE', 'PRODUKSI',
+        ];
     }
 }

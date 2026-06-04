@@ -124,4 +124,73 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'completed']);
         $this->assertDatabaseHas('operational_trips', ['request_id' => $requestId, 'status' => 'completed']);
     }
+
+    public function test_cancel_assignment()
+    {
+        // 1. Create Users
+        $employee = User::factory()->create(['department_id' => 'IT']);
+        $employee->assignRole('Employee');
+
+        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $deptHead->assignRole('Approver');
+
+        $hrdHead = User::factory()->create();
+        $hrdHead->assignRole('GA');
+
+        $driver = User::factory()->create();
+        $driver->assignRole('Driver');
+
+        // 2. Employee submits request
+        $this->actingAs($employee);
+        $response = $this->postJson('/api/requests', [
+            'department_id' => 'IT',
+            'destination_city' => 'Jakarta',
+            'destination_place' => 'Sudirman',
+            'purpose' => 'Meeting',
+            'start_time' => now()->addDay()->format('Y-m-d H:i:s'),
+            'passenger_count' => 2,
+            'priority' => 'Normal',
+        ]);
+        $response->assertStatus(201);
+        $requestId = $response->json('data.id');
+
+        // 3. Dept Head approves
+        $this->actingAs($deptHead);
+        $this->postJson("/api/requests/{$requestId}/approve", [
+            'role' => 'dept_head',
+            'notes' => 'ACC Dept'
+        ])->assertStatus(200);
+
+        // 4. HRD Head approves
+        $this->actingAs($hrdHead);
+        $this->postJson("/api/requests/{$requestId}/approve", [
+            'role' => 'hrd_head',
+            'notes' => 'ACC HRD'
+        ])->assertStatus(200);
+
+        // 5. HRD assigns driver
+        $response = $this->postJson("/api/assignments", [
+            'request_id' => $requestId,
+            'driver_id' => $driver->id,
+            'notes' => 'Tolong antar ya'
+        ]);
+        $response->assertStatus(201);
+        $assignmentId = $response->json('data.id');
+        $this->assertDatabaseHas('assignments', ['id' => $assignmentId, 'status' => 'pending_driver']);
+        $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'waiting_driver']);
+
+        // 6. HRD cancels assignment
+        $response = $this->postJson("/api/assignments/{$assignmentId}/cancel");
+        $response->assertStatus(200);
+
+        $this->assertDatabaseMissing('assignments', ['id' => $assignmentId]);
+        $this->assertDatabaseHas('requests', [
+            'id' => $requestId,
+            'status' => 'approved_hrd_ga',
+            'driver_id' => null,
+            'assigned_by' => null,
+            'assigned_at' => null,
+            'driver_response_status' => null,
+        ]);
+    }
 }

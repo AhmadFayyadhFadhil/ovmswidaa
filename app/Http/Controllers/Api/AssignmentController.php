@@ -147,4 +147,28 @@ class AssignmentController extends Controller
 
         return response()->json(['status' => 'success', 'message' => 'Assignment berhasil dihapus'], 200);
     }
+
+    public function cancel(Assignment $assignment): JsonResponse
+    {
+        if (!Auth::user()->hasAnyRole(['Admin', 'GA'])) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        if ($assignment->status !== 'pending_driver') {
+            return response()->json(['status' => 'error', 'message' => 'Tidak dapat membatalkan assignment yang sudah diproses'], 422);
+        }
+
+        // Kembalikan status request ke approved_hrd_ga agar bisa di-assign ulang
+        $assignment->request()->update([
+            'status'      => \App\Enums\RequestStatus::APPROVED_HRD_GA,
+            'driver_id'   => null,
+            'assigned_by' => null,
+            'assigned_at' => null,
+            'driver_response_status' => null,
+        ]);
+
+        $assignment->delete();
+
+        return response()->json(['status' => 'success', 'message' => 'Assignment berhasil dibatalkan'], 200);
+    }
 }

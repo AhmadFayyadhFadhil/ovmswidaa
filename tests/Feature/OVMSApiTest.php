@@ -7,6 +7,7 @@ use App\Models\Vehicle;
 use App\Models\Request as VehicleRequest;
 use App\Models\Assignment;
 use App\Models\OperationalTrip;
+use Illuminate\Http\UploadedFile;
 use App\Enums\RequestStatus;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -50,6 +51,69 @@ class OVMSApiTest extends TestCase
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success');
+    }
+
+    public function test_user_index_can_filter_by_department_category()
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('Admin');
+
+        $qaUser = User::factory()->create(['department_id' => 'QA']);
+        $qaUser->assignRole('Employee');
+
+        $otherUser = User::factory()->create(['department_id' => 'IT']);
+        $otherUser->assignRole('Employee');
+
+        $response = $this->actingAs($admin)
+            ->getJson('/api/users?category=QA');
+
+        $response->assertStatus(200)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $qaUser->id);
+    }
+
+    public function test_user_index_can_filter_approver_and_department_heads()
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('Admin');
+
+        $approver = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $approver->assignRole('Approver');
+
+        $gaHead = User::factory()->create(['department_id' => 'HR&GA', 'is_department_head' => true]);
+        $gaHead->assignRole('GA');
+
+        $nonApprover = User::factory()->create(['department_id' => 'IT']);
+        $nonApprover->assignRole('Employee');
+
+        $response = $this->actingAs($admin)
+            ->getJson('/api/users?category=Approver');
+
+        $response->assertStatus(200)
+            ->assertJsonCount(2, 'data')
+            ->assertJsonFragment(['id' => $approver->id])
+            ->assertJsonFragment(['id' => $gaHead->id]);
+    }
+
+    public function test_admin_can_create_driver_with_sim_a_photo()
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('Admin');
+
+        $response = $this->actingAs($admin)
+            ->post('/api/users', [
+                'name' => 'Driver Test',
+                'email' => 'driver-test@ovms.test',
+                'password' => 'password123',
+                'password_confirmation' => 'password123',
+                'role' => 'Driver',
+                'sim_a_photo' => UploadedFile::fake()->create('sim_a_photo.jpg', 100, 'image/jpeg'),
+            ], ['Accept' => 'application/json']);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('status', 'success')
+            ->assertJsonPath('data.roles.0', 'Driver')
+            ->assertJsonPath('data.sim_a_photo_url', fn ($value) => !empty($value));
     }
 
     public function test_employee_can_create_request_with_null_vehicle()
