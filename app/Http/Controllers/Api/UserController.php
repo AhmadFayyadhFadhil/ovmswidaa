@@ -16,11 +16,13 @@ class UserController extends Controller
     private const VALID_DEPARTMENTS = [
         'IT', 'FA', 'HR&GA', 'QC', 'QA',
         'HRD', 'GA', 'TECHNICAL', 'ENGINEERING', 'SUPPLY CHAIN', 'HSE', 'PRODUKSI',
+        'HRD&GA',
     ];
 
     private const CATEGORY_DEPARTMENT_MAP = [
         'HRD'           => ['HR&GA', 'HRD'],
         'GA'            => ['HR&GA'],
+        'HRD&GA'        => ['HRD&GA'],
     ];
 
     private function isAdmin(): bool
@@ -30,7 +32,7 @@ class UserController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        if (!Auth::user()->hasAnyRole(['Admin', 'GA'])) {
+        if (!Auth::user()->hasAnyRole(['Admin', 'GA']) && !(Auth::user()->hasRole('Approver') && Auth::user()->isHrGaHead())) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 

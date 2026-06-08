@@ -89,6 +89,7 @@ class User extends Authenticatable
         return [
             'IT', 'FA', 'HR&GA', 'QC', 'QA',
             'HRD', 'GA', 'TECHNICAL', 'ENGINEERING', 'SUPPLY CHAIN', 'HSE', 'PRODUKSI',
+            'HRD&GA',
         ];
     }
 
@@ -96,13 +97,14 @@ class User extends Authenticatable
     {
         return match ($this->department_id) {
             'HR&GA' => ['HR&GA', 'HRD', 'GA'],
+            'HRD&GA' => ['HRD&GA'],
             default => [$this->department_id],
         };
     }
 
     public function isHrGaDepartment(): bool
     {
-        return $this->department_id === 'HR&GA';
+        return in_array($this->department_id, ['HR&GA', 'HRD&GA'], true);
     }
 
     public function isHrGaHead(): bool

@@ -35,8 +35,8 @@ class DriverRespondAction
                 $previousStatus = $assignment->request->status;
                 $revertStatus = RequestStatus::APPROVED_HRD_GA;
                 
-                // If request was from HR&GA department and was at APPROVED_DEPARTMENT, revert to it
-                if ($assignment->request->department_id === 'HR&GA' && $previousStatus === RequestStatus::APPROVED_DEPARTMENT) {
+                // If request was from HR&GA or HRD&GA department and was at APPROVED_DEPARTMENT, revert to it
+                if (in_array($assignment->request->department_id, ['HR&GA', 'HRD&GA'], true) && $previousStatus === RequestStatus::APPROVED_DEPARTMENT) {
                     $revertStatus = RequestStatus::APPROVED_DEPARTMENT;
                 }
 

@@ -34,10 +34,12 @@ class AuthController extends Controller
             'message' => 'Login berhasil',
             'data'    => [
                 'user' => [
-                    'id'    => $user->id,
-                    'name'  => $user->name,
-                    'email' => $user->email,
-                    'roles' => $user->getRoleNames(),
+                    'id'                => $user->id,
+                    'name'              => $user->name,
+                    'email'             => $user->email,
+                    'department_id'     => $user->department_id,
+                    'is_department_head' => $user->is_department_head,
+                    'roles'             => $user->getRoleNames(),
                 ],
                 'token'      => $token,
                 'token_type' => 'Bearer',
@@ -110,12 +112,14 @@ class AuthController extends Controller
         return response()->json([
             'status' => 'success',
             'data'   => [
-                'id'         => $user->id,
-                'name'       => $user->name,
-                'email'      => $user->email,
-                'roles'      => $user->getRoleNames(),
-                'created_at' => $user->created_at,
-                'updated_at' => $user->updated_at,
+                'id'                => $user->id,
+                'name'              => $user->name,
+                'email'             => $user->email,
+                'department_id'     => $user->department_id,
+                'is_department_head' => $user->is_department_head,
+                'roles'             => $user->getRoleNames(),
+                'created_at'        => $user->created_at,
+                'updated_at'        => $user->updated_at,
             ],
         ], 200);
     }

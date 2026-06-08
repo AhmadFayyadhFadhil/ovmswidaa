@@ -17,7 +17,7 @@ class RolePermissionSeeder extends Seeder
             'update-request', 'delete-request', 'approve-request', 'reject-request',
             'view-vehicle', 'create-vehicle', 'update-vehicle', 'delete-vehicle',
             'view-user', 'create-user', 'update-user', 'delete-user',
-            'view-audit-log',
+            'view-audit-log', 'create-assignment', 'update-assignment', 'delete-assignment',
         ];
 
         // Buat permission untuk guard web DAN sanctum
@@ -63,7 +63,7 @@ class RolePermissionSeeder extends Seeder
 
             $approver->syncPermissions($allPerms->whereIn('name', [
                 'view-all-requests', 'approve-request', 'reject-request',
-                'view-vehicle', 'view-audit-log',
+                'view-vehicle', 'view-audit-log', 'create-assignment', 'update-assignment',
             ]));
 
             $employee->syncPermissions($allPerms->whereIn('name', [
