@@ -25,7 +25,7 @@ class RequestController extends Controller
 
         $query = VehicleRequest::with(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers']);
 
-        if ($user->hasRole('Approver') && !$user->hasRole('Admin')) {
+        if ($user->hasRoleDirect('Approver') && !$user->hasRoleDirect('Admin') && !$user->hasRoleDirect('GA')) {
             if ($user->isHrGaHead()) {
                 $query->where(function ($q) use ($user) {
                     $q->whereIn('department_id', $user->departmentGroup())
@@ -34,18 +34,50 @@ class RequestController extends Controller
                               RequestStatus::APPROVED_DEPARTMENT,
                               RequestStatus::APPROVED_HRD,
                               RequestStatus::APPROVED_HRD_GA,
-                          ]);
+                              RequestStatus::WAITING_DRIVER,
+                              RequestStatus::DRIVER_ASSIGNED,
+                              RequestStatus::ON_GOING,
+                              RequestStatus::COMPLETED,
+                          ])->orWhere(function ($q2) {
+                              $q2->where('status', RequestStatus::REJECTED)
+                                 ->whereHas('approvals', function ($q3) {
+                                     $q3->where('role', 'hrd_head');
+                                 });
+                          });
                       });
                 });
             } else {
                 $query->whereIn('department_id', $user->departmentGroup());
             }
-        } elseif (!$user->hasAnyRole(['Admin', 'Approver']) && !$user->isHrGaHead()) {
-            $query->where('user_id', $user->id);
+        } elseif (!$user->hasRoleDirect(['Admin', 'Approver', 'GA']) && !$user->isHrGaHead()) {
+            if ($user->hasRoleDirect('Driver')) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id)
+                      ->orWhere('driver_id', $user->id)
+                      ->orWhereHas('operationalTrip', function ($sub) use ($user) {
+                          $sub->where('driver_id', $user->id);
+                      });
+                });
+            } else {
+                $query->where('user_id', $user->id);
+            }
         }
 
         if ($status) {
-            $query->where('status', $status);
+            $upperStatus = strtoupper($status);
+            if ($upperStatus === 'PENDING') {
+                $query->whereIn('status', [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::WAITING_DRIVER]);
+            } elseif ($upperStatus === 'APPROVED') {
+                $query->whereIn('status', [RequestStatus::DRIVER_ASSIGNED, RequestStatus::APPROVED_HRD, RequestStatus::APPROVED_HRD_GA]);
+            } elseif ($upperStatus === 'ONGOING') {
+                $query->where('status', RequestStatus::ON_GOING);
+            } elseif ($upperStatus === 'COMPLETED') {
+                $query->where('status', RequestStatus::COMPLETED);
+            } elseif ($upperStatus === 'REJECTED') {
+                $query->where('status', RequestStatus::REJECTED);
+            } else {
+                $query->where('status', $status);
+            }
         }
 
         if ($search) {
@@ -66,6 +98,8 @@ class RequestController extends Controller
                 'per_page'     => $requests->perPage(),
                 'current_page' => $requests->currentPage(),
                 'last_page'    => $requests->lastPage(),
+                'from'         => $requests->firstItem(),
+                'to'           => $requests->lastItem(),
             ],
         ], 200);
     }
@@ -84,7 +118,7 @@ class RequestController extends Controller
     public function show(VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
-        if ($user->hasRole('Approver') && !$user->hasRole('Admin')) {
+        if ($user->hasRoleDirect('Approver') && !$user->hasRoleDirect('Admin')) {
             if ($user->isHrGaHead() && in_array($vehicleRequest->status, [
                 RequestStatus::APPROVED_DEPARTMENT,
                 RequestStatus::APPROVED_HRD,
@@ -98,7 +132,14 @@ class RequestController extends Controller
             } elseif (!in_array($vehicleRequest->department_id, $user->departmentGroup(), true)) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized. Request tidak berasal dari departemen Anda.'], 403);
             }
-        } elseif (Auth::id() !== $vehicleRequest->user_id && !$user->hasRole('Admin') && !$user->isHrGaHead()) {
+        } elseif (
+            Auth::id() !== $vehicleRequest->user_id && 
+            !$user->hasRoleDirect('Admin') && 
+            !$user->isHrGaHead() && 
+            !$user->hasRoleDirect('GA') && 
+            $vehicleRequest->driver_id !== $user->id && 
+            $vehicleRequest->operationalTrip?->driver_id !== $user->id
+        ) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -239,7 +280,7 @@ class RequestController extends Controller
         $user = Auth::user();
 
         // Authorize: Only assigned Driver, Admin, or GA can start trip
-        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasRole('Admin') && !$user->isHrGaHead()) {
+        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Kepala Departemen HRD&GA yang dapat memulai perjalanan.'], 403);
         }
 
@@ -286,7 +327,7 @@ class RequestController extends Controller
         $user = Auth::user();
 
         // Authorize: Only assigned Driver, Admin, or GA can complete trip
-        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasRole('Admin') && !$user->isHrGaHead()) {
+        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Kepala Departemen HRD&GA yang dapat menyelesaikan perjalanan.'], 403);
         }
 

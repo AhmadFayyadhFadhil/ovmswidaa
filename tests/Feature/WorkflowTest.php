@@ -35,6 +35,8 @@ class WorkflowTest extends TestCase
 
         $ga = User::factory()->create();
         $ga->assignRole('GA');
+        fwrite(STDERR, "GA roles count: " . $ga->roles()->count() . "\n");
+        fwrite(STDERR, "GA roles name: " . json_encode($ga->roles->pluck('name')->toArray()) . "\n");
 
         $driver = User::factory()->create();
         $driver->assignRole('Driver');
@@ -79,7 +81,7 @@ class WorkflowTest extends TestCase
             'notes' => 'ACC HRD'
         ]);
         $response->assertStatus(200);
-        $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'approved_hrd']);
+        $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'approved_hrd_ga']);
 
         // 5. GA assigns driver
         $this->actingAs($ga);
@@ -195,11 +197,39 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseMissing('assignments', ['id' => $assignmentId]);
         $this->assertDatabaseHas('requests', [
             'id' => $requestId,
-            'status' => 'approved_hrd',
+            'status' => 'approved_hrd_ga',
             'driver_id' => null,
             'assigned_by' => null,
             'assigned_at' => null,
             'driver_response_status' => null,
         ]);
+    }
+
+    public function test_dept_head_can_see_pending_request()
+    {
+        $employee = User::factory()->create(['department_id' => 'IT']);
+        $employee->assignRole('Employee');
+
+        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $deptHead->assignRole('Approver');
+
+        $this->actingAs($employee);
+        $response = $this->postJson('/api/requests', [
+            'department_id' => 'IT',
+            'destination_city' => 'Jakarta',
+            'destination_place' => 'Sudirman',
+            'purpose' => 'Meeting',
+            'start_time' => now()->addDay()->format('Y-m-d H:i:s'),
+            'passenger_count' => 2,
+            'priority' => 'Normal',
+        ]);
+        $response->assertStatus(201);
+        $requestId = $response->json('data.id');
+
+        $this->actingAs($deptHead);
+        $response = $this->getJson('/api/requests?status=pending');
+        $response->assertStatus(200)
+            ->assertJsonFragment(['id' => $requestId])
+            ->assertJsonPath('data.0.can_approve', true);
     }
 }

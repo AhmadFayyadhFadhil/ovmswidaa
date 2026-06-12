@@ -14,7 +14,7 @@ class StoreRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->hasAnyRole(['Employee', 'Admin', 'GA', 'Approver', 'Driver']);
+        return $this->user()->hasRoleDirect(['Employee', 'Admin', 'GA', 'Approver', 'Driver']);
     }
 
     /**

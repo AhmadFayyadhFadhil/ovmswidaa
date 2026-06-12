@@ -16,7 +16,7 @@ class UpdateRequestRequest extends FormRequest
     {
         // User can only update their own requests or be an admin
         $vehicleRequest = $this->route('vehicleRequest') ?? $this->route('request'); // fallback
-        return $this->user()->id === $vehicleRequest->user_id || $this->user()->hasRole('Admin');
+        return $this->user()->id === $vehicleRequest->user_id || $this->user()->hasRoleDirect('Admin');
     }
 
     /**

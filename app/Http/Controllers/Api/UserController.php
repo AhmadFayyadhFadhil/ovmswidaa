@@ -27,16 +27,24 @@ class UserController extends Controller
 
     private function isAdmin(): bool
     {
-        return Auth::user()->hasRole('Admin');
+        $user = Auth::user();
+        return $user && $user->hasRoleDirect('Admin');
     }
 
     public function index(Request $request): JsonResponse
     {
-        if (!Auth::user()->hasAnyRole(['Admin', 'GA']) && !(Auth::user()->hasRole('Approver') && Auth::user()->isHrGaHead())) {
+        $user = Auth::user();
+        if (!$user) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $perPage  = $request->query('per_page', 15);
+        $hasAccess = $user->hasRoleDirect(['Admin', 'GA']) || $user->isHrGaHead();
+
+        if (!$hasAccess) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $perPage  = min((int) $request->query('per_page', 15), 1000);
         $search   = $request->query('search');
         $role     = $request->query('role');
         $category = $request->query('category');
@@ -77,7 +85,24 @@ class UserController extends Controller
         }
 
         if ($role) {
-            $query->role($role);
+            $query->whereHas('roles', function ($q) use ($role) {
+                $q->where('name', $role);
+            });
+        }
+
+        $status = $request->query('status');
+        if ($status) {
+            $upperStatus = strtoupper($status);
+            if ($upperStatus === 'AVAILABLE') {
+                $query->where('availability_status', 'available');
+            } elseif ($upperStatus === 'ON DUTY' || $upperStatus === 'ON_DUTY') {
+                $query->where('availability_status', 'on_trip');
+            } elseif ($upperStatus === 'OFF DUTY' || $upperStatus === 'OFF_DUTY') {
+                $query->where(function ($q) {
+                    $q->whereNotIn('availability_status', ['available', 'on_trip'])
+                      ->orWhereNull('availability_status');
+                });
+            }
         }
 
         $users = $query->orderBy('created_at', 'desc')->paginate($perPage);
@@ -114,13 +139,20 @@ class UserController extends Controller
             'rank'     => 'required_if:role,Approver|nullable|string|max:255',
             'department_id' => ['nullable', 'string', 'max:255', Rule::in(self::VALID_DEPARTMENTS)],
             'is_department_head' => 'boolean',
-            'sim_a_photo' => ['required_if:role,Driver', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
+            'sim_a_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
         ]);
 
         if ($validated['role'] === 'Approver' && empty($validated['rank'] ?? null)) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Rank wajib diisi untuk role Approver',
+            ], 422);
+        }
+
+        if ($validated['role'] === 'Driver' && !$request->hasFile('sim_a_photo')) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Foto SIM A wajib untuk role Driver',
             ], 422);
         }
 

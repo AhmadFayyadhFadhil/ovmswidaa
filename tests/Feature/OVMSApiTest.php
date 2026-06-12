@@ -266,4 +266,47 @@ class OVMSApiTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonPath('message', 'Tidak dapat menghapus kendaraan yang memiliki riwayat penugasan');
     }
+
+    public function test_user_can_update_profile()
+    {
+        $user = User::factory()->create([
+            'name' => 'Original Name',
+            'email' => 'original@ovms.test',
+            'password' => Hash::make('secret123')
+        ]);
+        $user->assignRole('Employee');
+
+        // Update profile
+        $response = $this->actingAs($user)
+            ->putJson('/api/profile', [
+                'name' => 'Updated Name',
+                'email' => 'updated@ovms.test',
+                'password' => 'newpassword123',
+                'password_confirmation' => 'newpassword123'
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', 'success')
+            ->assertJsonPath('data.name', 'Updated Name')
+            ->assertJsonPath('data.email', 'updated@ovms.test');
+
+        // Confirm database has updated values
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'name' => 'Updated Name',
+            'email' => 'updated@ovms.test'
+        ]);
+
+        // Verify password works
+        $user->refresh();
+        $this->assertTrue(Hash::check('newpassword123', $user->password));
+
+        // Get profile and assert
+        $response = $this->actingAs($user)
+            ->getJson('/api/profile');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.name', 'Updated Name')
+            ->assertJsonPath('data.email', 'updated@ovms.test');
+    }
 }

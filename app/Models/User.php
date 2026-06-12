@@ -102,6 +102,32 @@ class User extends Authenticatable
         };
     }
 
+    public function hasRoleDirect(string|array $roles): bool
+    {
+        $roles = is_array($roles) ? $roles : [$roles];
+        $lowercaseRoles = array_map('strtolower', $roles);
+        return $this->roles()
+            ->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), $lowercaseRoles)
+            ->exists();
+    }
+
+    public function hasPermissionDirect(string $permission): bool
+    {
+        $hasDirect = $this->permissions()
+            ->where('name', $permission)
+            ->exists();
+
+        if ($hasDirect) {
+            return true;
+        }
+
+        return $this->roles()
+            ->whereHas('permissions', function ($q) use ($permission) {
+                $q->where('name', $permission);
+            })
+            ->exists();
+    }
+
     public function isHrGaDepartment(): bool
     {
         return in_array($this->department_id, ['HR&GA', 'HRD&GA'], true);
@@ -109,6 +135,6 @@ class User extends Authenticatable
 
     public function isHrGaHead(): bool
     {
-        return $this->isHrGaDepartment() && $this->is_department_head && $this->hasAnyRole(['Approver', 'GA']);
+        return $this->isHrGaDepartment() && $this->is_department_head && $this->hasRoleDirect(['Approver', 'GA']);
     }
 }

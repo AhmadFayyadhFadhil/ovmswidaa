@@ -28,17 +28,17 @@ class AuthServiceProvider extends ServiceProvider
     {
         // Define admin gate
         Gate::define('admin', function ($user) {
-            return $user->hasRole('Admin');
+            return $user->hasRoleDirect('Admin');
         });
 
         // Define approver gate
         Gate::define('approver', function ($user) {
-            return $user->hasAnyRole(['Admin', 'Approver']);
+            return $user->hasRoleDirect(['Admin', 'Approver']);
         });
 
         // Define GA gate
         Gate::define('ga', function ($user) {
-            return $user->hasRole('Admin') || $user->isHrGaHead();
+            return $user->hasRoleDirect('Admin') || $user->isHrGaHead();
         });
     }
 }

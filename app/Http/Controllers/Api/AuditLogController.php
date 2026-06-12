@@ -16,8 +16,12 @@ class AuditLogController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Only Admin and HRD&GA head can view all audit logs
-        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
+        $user = Auth::user();
+        $isApprover = $user->hasRoleDirect('Approver');
+        $isAdmin = $user->hasRoleDirect('Admin');
+        $isGA = $user->hasRoleDirect('GA');
+
+        if (!$isAdmin && !$isGA && !$user->isHrGaHead() && !$isApprover) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unauthorized'
@@ -30,6 +34,12 @@ class AuditLogController extends Controller
         $user_id = $request->query('user_id');
 
         $query = AuditLog::with('user');
+
+        if ($isApprover && !$isAdmin && !$isGA && !$user->isHrGaHead()) {
+            $query->whereHas('user', function ($q) use ($user) {
+                $q->whereIn('department_id', $user->departmentGroup());
+            });
+        }
 
         // Filter by auditable type (Request, Vehicle, Assignment)
         if ($auditable_type) {
@@ -44,6 +54,47 @@ class AuditLogController extends Controller
         // Filter by user ID
         if ($user_id) {
             $query->where('user_id', $user_id);
+        }
+
+        $role = $request->query('role');
+        if ($role && $role !== 'All') {
+            $query->whereHas('user', function ($q) use ($role) {
+                $q->whereHas('roles', function ($r) use ($role) {
+                    $r->where('name', $role);
+                });
+            });
+        }
+
+        $department = $request->query('department');
+        if ($department && $department !== 'All') {
+            $query->whereHas('user', function ($q) use ($department) {
+                // Map frontend department name HRD & GA to database value
+                $deptId = $department === 'HRD & GA' ? 'HRD&GA' : $department;
+                $q->where('department_id', $deptId);
+            });
+        }
+
+        $severity = $request->query('severity');
+        if ($severity && $severity !== 'All') {
+            if ($severity === 'High') {
+                $query->where('action', 'deleted');
+            } elseif ($severity === 'Medium') {
+                $query->where('action', 'updated');
+            } elseif ($severity === 'Low') {
+                $query->whereIn('action', ['created', 'restored']);
+            }
+        }
+
+        $search = $request->query('search');
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('action', 'like', '%' . $search . '%')
+                  ->orWhere('auditable_type', 'like', '%' . $search . '%')
+                  ->orWhereHas('user', function ($q) use ($search) {
+                      $q->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('email', 'like', '%' . $search . '%');
+                  });
+            });
         }
 
         $auditLogs = $query->orderBy('created_at', 'desc')->paginate($perPage);

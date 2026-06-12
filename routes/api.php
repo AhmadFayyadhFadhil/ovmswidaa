@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\UserController;
 // ===== AUTH ENDPOINTS (public) =====
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 // Protected API routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -19,6 +21,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // ===== AUTH =====
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/profile', [AuthController::class, 'profile']);
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::put('/profile/status', [AuthController::class, 'updateStatus']);
 
     // Get current authenticated user (legacy, keep for compatibility)
     Route::get('/user', function (Request $request) {

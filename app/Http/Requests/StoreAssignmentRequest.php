@@ -9,7 +9,14 @@ class StoreAssignmentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->hasRole('Admin') || $this->user()->isHrGaHead();
+        $user = $this->user();
+        if (!$user) return false;
+        
+        $roles = $user->roles()->pluck('name')->map(fn($r) => strtolower($r))->toArray();
+        
+        return in_array('admin', $roles, true) || 
+               in_array('ga', $roles, true) || 
+               $user->isHrGaHead();
     }
 
     public function rules(): array

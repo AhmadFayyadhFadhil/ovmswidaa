@@ -16,6 +16,12 @@ use App\Actions\Assignments\DriverRespondAction;
 
 class AssignmentController extends Controller
 {
+    private function hasRoleDirect($user, array $roles): bool
+    {
+        if (!$user) return false;
+        return $user->roles()->whereIn('name', $roles)->exists();
+    }
+
     public function index(Request $request): JsonResponse
     {
         $user    = Auth::user();
@@ -24,7 +30,7 @@ class AssignmentController extends Controller
 
         $query = Assignment::with(['request.operationalTrip.vehicle', 'driver', 'assignedBy']);
 
-        if (!$user->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
             $query->where('driver_id', $user->id);
         }
 
@@ -49,7 +55,7 @@ class AssignmentController extends Controller
     public function store(StoreAssignmentRequest $request, AssignDriverAction $action): JsonResponse
     {
         $user = Auth::user();
-        if (!$user->hasRole('Admin') && !$user->isHrGaHead()) {
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !$user->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -58,7 +64,7 @@ class AssignmentController extends Controller
 
         // Check if assigned driver has the Driver role
         $driver = \App\Models\User::findOrFail($validated['driver_id']);
-        if (!$driver->hasRole('Driver')) {
+        if (!$this->hasRoleDirect($driver, ['Driver', 'driver'])) {
             return response()->json(['status' => 'error', 'message' => 'User yang dipilih bukan merupakan Driver'], 422);
         }
 
@@ -83,7 +89,7 @@ class AssignmentController extends Controller
 
     public function show(Assignment $assignment): JsonResponse
     {
-        if (Auth::id() !== $assignment->driver_id && !Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
+        if (Auth::id() !== $assignment->driver_id && !$this->hasRoleDirect(Auth::user(), ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect(Auth::user(), ['GA', 'ga'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -100,7 +106,7 @@ class AssignmentController extends Controller
      */
     public function update(UpdateAssignmentRequest $request, Assignment $assignment, DriverRespondAction $action): JsonResponse
     {
-        if (Auth::id() !== $assignment->driver_id && !Auth::user()->hasRole('Admin')) {
+        if (Auth::id() !== $assignment->driver_id && !$this->hasRoleDirect(Auth::user(), ['Admin', 'admin'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -140,7 +146,7 @@ class AssignmentController extends Controller
 
     public function destroy(Assignment $assignment): JsonResponse
     {
-        if (!Auth::user()->hasRole('Admin')) {
+        if (!$this->hasRoleDirect(Auth::user(), ['Admin', 'admin'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -155,7 +161,7 @@ class AssignmentController extends Controller
 
     public function cancel(Assignment $assignment): JsonResponse
     {
-        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
+        if (!$this->hasRoleDirect(Auth::user(), ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect(Auth::user(), ['GA', 'ga'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 

@@ -12,7 +12,11 @@ class UpdateAssignmentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->hasAnyRole(['Admin', 'Driver']);
+        $user = $this->user();
+        if (!$user) return false;
+        
+        $roles = $user->roles()->pluck('name')->map(fn($r) => strtolower($r))->toArray();
+        return in_array('admin', $roles, true) || in_array('driver', $roles, true);
     }
 
     /**

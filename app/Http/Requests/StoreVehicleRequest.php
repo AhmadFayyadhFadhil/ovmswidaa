@@ -12,7 +12,7 @@ class StoreVehicleRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->hasRole('Admin') || $this->user()->isHrGaHead();
+        return $this->user()->hasRoleDirect('Admin') || $this->user()->isHrGaHead();
     }
 
     /**

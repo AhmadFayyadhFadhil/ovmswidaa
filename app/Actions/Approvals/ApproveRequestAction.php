@@ -17,8 +17,8 @@ class ApproveRequestAction
             $user = Auth::user();
 
             // Validate approver authorization
-            if (!$user->hasRole('Admin')) {
-                if ($user->hasRole('Approver')) {
+            if (!$user->hasRoleDirect('Admin')) {
+                if ($user->hasRoleDirect('Approver')) {
                     // Approver must be department head and from same department,
                     // except HR&GA head can approve at HRD stage for any department.
                     if (!$user->is_department_head ||

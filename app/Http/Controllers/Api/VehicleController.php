@@ -21,8 +21,19 @@ class VehicleController extends Controller
 
         $query = Vehicle::query();
 
-        if ($status && in_array($status, ['Available', 'In Use', 'Maintenance', 'Retired'])) {
-            $query->where('status', $status);
+        if ($status) {
+            $upperStatus = strtoupper($status);
+            if ($upperStatus === 'AVAILABLE') {
+                $query->where('status', 'Available');
+            } elseif ($upperStatus === 'IN TRANSIT' || $upperStatus === 'IN_TRANSIT' || $upperStatus === 'IN USE') {
+                $query->where('status', 'In Use');
+            } elseif ($upperStatus === 'MAINTENANCE') {
+                $query->where('status', 'Maintenance');
+            } elseif ($upperStatus === 'RETIRED') {
+                $query->where('status', 'Retired');
+            } else {
+                $query->where('status', $status);
+            }
         }
 
         if ($search) {
@@ -49,7 +60,7 @@ class VehicleController extends Controller
 
     public function store(StoreVehicleRequest $request): JsonResponse
     {
-        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
+        if (!Auth::user()->hasRoleDirect('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -77,7 +88,7 @@ class VehicleController extends Controller
 
     public function update(UpdateVehicleRequest $request, Vehicle $vehicle): JsonResponse
     {
-        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
+        if (!Auth::user()->hasRoleDirect('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -97,7 +108,7 @@ class VehicleController extends Controller
 
     public function destroy(Vehicle $vehicle): JsonResponse
     {
-        if (!Auth::user()->hasRole('Admin') && !Auth::user()->isHrGaHead()) {
+        if (!Auth::user()->hasRoleDirect('Admin') && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 

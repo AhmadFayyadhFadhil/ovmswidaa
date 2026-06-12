@@ -59,6 +59,7 @@ class RolePermissionSeeder extends Seeder
                 'create-request',
                 'view-vehicle', 'create-vehicle', 'update-vehicle', 'delete-vehicle',
                 'view-all-requests', 'view-audit-log',
+                'create-assignment', 'update-assignment', 'delete-assignment',
             ]));
 
             $approver->syncPermissions($allPerms->whereIn('name', [
