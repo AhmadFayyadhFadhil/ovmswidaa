@@ -17,34 +17,8 @@ class ApproveRequestAction
             $user = Auth::user();
 
             // Validate approver authorization
-            if (!$user->hasRoleDirect('Admin')) {
-                if ($user->hasRoleDirect('Approver')) {
-                    // Approver must be department head and from same department,
-                    // except HR&GA head can approve at HRD stage for any department.
-                    if (!$user->is_department_head ||
-                        (!($user->isHrGaHead() && $request->status === RequestStatus::APPROVED_DEPARTMENT) &&
-                         !in_array($request->department_id, $user->departmentGroup(), true))) {
-                        throw new Exception("Anda bukan Kepala Departemen untuk departemen ini atau departemen tidak sesuai.");
-                    }
-                } else {
-                    throw new Exception("Anda tidak berhak untuk approve/reject request ini.");
-                }
-            }
-
-            // Validate sequence
-            if ($role === 'dept_head') {
-                if ($request->status !== RequestStatus::SUBMITTED) {
-                    throw new Exception("Request cannot be approved by Department Head because it is not in submitted status.");
-                }
-                $newStatus = $status === 'approved' ? RequestStatus::APPROVED_DEPARTMENT : RequestStatus::REJECTED;
-            } elseif ($role === 'hrd_head') {
-                if ($request->status !== RequestStatus::APPROVED_DEPARTMENT) {
-                    throw new Exception("Request must be approved by Department Head first.");
-                }
-                // HRD&GA head approval sets status to APPROVED_HRD_GA
-                $newStatus = $status === 'approved' ? RequestStatus::APPROVED_HRD_GA : RequestStatus::REJECTED;
-            } else {
-                throw new Exception("Invalid approver role.");
+            if (!$user->hasRoleDirect('Admin') && !$user->hasRoleDirect('Approver') && !$user->hasRoleDirect('GA')) {
+                throw new Exception("Anda tidak berhak untuk approve/reject request ini.");
             }
 
             // Create approval record
@@ -57,6 +31,17 @@ class ApproveRequestAction
             ]);
 
             // Update request status
+            if ($status === 'rejected') {
+                $newStatus = RequestStatus::REJECTED;
+            } else {
+                $newStatus = RequestStatus::DRIVER_ASSIGNED;
+                if (!$request->qr_code_token) {
+                    $request->update([
+                        'qr_code_token' => 'REQ-' . time() . '-' . bin2hex(random_bytes(4)),
+                    ]);
+                }
+            }
+
             $request->update(['status' => $newStatus]);
 
             return $request;

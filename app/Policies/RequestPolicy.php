@@ -14,8 +14,8 @@ class RequestPolicy
      */
     public function viewAny(User $user): bool
     {
-        // Admin, Approver, or HRD&GA head can view requests.
-        return $user->hasRoleDirect(['Admin', 'Approver']) || $user->isHrGaHead();
+        // Admin, Approver, GA or HRD&GA head can view requests.
+        return $user->hasRoleDirect(['Admin', 'Approver', 'GA']) || $user->isHrGaHead();
     }
 
     /**
@@ -25,7 +25,7 @@ class RequestPolicy
     {
         // User can view their own requests or if they have permission to view all
         return $user->id === $request->user_id || 
-               $user->hasRoleDirect(['Admin', 'Approver']) ||
+               $user->hasRoleDirect(['Admin', 'Approver', 'GA']) ||
                $user->isHrGaHead();
     }
 
@@ -86,7 +86,7 @@ class RequestPolicy
         // Approver can approve if they have the permission AND same department AND are department head
         // HR&GA head can also approve any request at HRD stage.
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && $request->status === RequestStatus::APPROVED_DEPARTMENT) {
+            if ($user->isHrGaHead() && $request->status === RequestStatus::ASSIGNED_BY_GA) {
                 return true;
             }
 
@@ -110,8 +110,12 @@ class RequestPolicy
             return true;
         }
 
+        if ($user->hasRoleDirect('GA') && $request->status === RequestStatus::APPROVED_DEPARTMENT) {
+            return true;
+        }
+
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && $request->status === RequestStatus::APPROVED_DEPARTMENT) {
+            if ($user->isHrGaHead() && $request->status === RequestStatus::ASSIGNED_BY_GA) {
                 return true;
             }
 

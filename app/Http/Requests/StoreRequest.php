@@ -14,7 +14,8 @@ class StoreRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->hasRoleDirect(['Employee', 'Admin', 'GA', 'Approver', 'Driver']);
+        $user = $this->user();
+        return $user->hasRoleDirect(['Employee', 'Admin', 'GA', 'Approver', 'Driver']) && (!isset($user->can_request) || $user->can_request);
     }
 
     /**
@@ -24,20 +25,54 @@ class StoreRequest extends FormRequest
      */
     public function rules(): array
     {
+        $user = $this->user();
+        $isGA = $user->hasRoleDirect('GA') || $user->hasRoleDirect('Admin');
+        $minLeadTime = (int)\App\Models\Setting::getValue('min_lead_time_hours', 24);
+        
+        if ($isGA) {
+            $startTimeRule = 'required|date';
+        } else {
+            $minTime = now()->addHours($minLeadTime);
+            $startTimeRule = [
+                'required',
+                'date',
+                function ($attribute, $value, $fail) use ($minTime, $minLeadTime) {
+                    $dateTime = \Carbon\Carbon::parse($value);
+                    if ($dateTime->lt($minTime)) {
+                        $formattedMin = $minTime->format('d-m-Y H:i');
+                        $fail("Waktu keberangkatan minimal {$minLeadTime} jam dari waktu pengajuan saat ini (keberangkatan tercepat yang diizinkan: {$formattedMin}).");
+                    }
+                }
+            ];
+        }
+
         return [
-            'department_id' => 'nullable|string|max:255',
+            'department_id' => 'nullable|integer|exists:departments,id',
             'destination_city' => 'required|string|max:255',
             'destination_place' => 'required|string|max:255',
             'purpose' => 'required|string|max:255',
-            'start_time' => 'required|date|after:now',
+            'start_time' => $startTimeRule,
             'end_time' => 'nullable|date|after:start_time',
-            'passenger_count' => 'required|integer|min:1',
+            'passenger_count' => 'required|integer|min:1|max:12',
             'priority' => 'required|in:Normal,Urgent,Critical',
             'notes' => 'nullable|string|max:1000',
             // Passengers validation (optional - can be provided or omitted)
             'passengers' => 'nullable|array|min:0',
             'passengers.*.name' => 'required_with:passengers|string|max:255',
-            'passengers.*.department_id' => 'nullable|string|max:255',
+            'passengers.*.department_id' => 'nullable|integer|exists:departments,id',
+            'passengers.*.user_id' => 'nullable|integer|exists:users,id',
+            // Optional driver/vehicle for GA urgent request
+            'driver_id' => 'nullable|integer|exists:users,id',
+            'vehicle_id' => 'nullable|integer|exists:vehicles,id',
+            // Third party / external fleet fields
+            'is_external' => 'nullable|boolean',
+            'third_party_cost' => 'nullable|numeric',
+            'external_fleet_info' => 'nullable|string|max:255',
+            'external_driver_name' => 'nullable|string|max:255',
+            'external_license_plate' => 'nullable|string|max:255',
+            'external_trip_type' => 'nullable|string|in:round_trip,one_way',
+            'external_departure_cost' => 'nullable|numeric',
+            'external_return_cost' => 'nullable|numeric',
         ];
     }
 
@@ -45,7 +80,7 @@ class StoreRequest extends FormRequest
     {
         \Log::error('StoreRequest validation failed:', [
             'errors' => $validator->errors()->all(),
-            'input' => $this->all()
+            'input' => $this->except(['passengers', 'purpose', 'destination', 'destination_city', 'destination_place'])
         ]);
         parent::failedValidation($validator);
     }
@@ -60,9 +95,10 @@ class StoreRequest extends FormRequest
             'destination_place.required' => 'Tempat tujuan harus diisi',
             'purpose.required' => 'Tujuan/Keperluan harus diisi',
             'start_time.required' => 'Waktu berangkat harus diisi',
-            'start_time.after' => 'Waktu berangkat harus di masa depan',
+            'start_time.after_or_equal' => 'Permintaan kendaraan harus diajukan maksimal H-1 (mulai besok atau seterusnya)',
             'passenger_count.required' => 'Jumlah penumpang harus diisi',
             'passenger_count.min' => 'Jumlah penumpang minimal 1',
+            'passenger_count.max' => 'Jumlah penumpang maksimal adalah 12 orang',
             'priority.required' => 'Prioritas harus dipilih',
             'passengers.required' => 'Data penumpang harus diisi',
             'passengers.min' => 'Minimal ada 1 penumpang',

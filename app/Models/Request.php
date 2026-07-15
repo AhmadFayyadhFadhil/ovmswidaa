@@ -31,6 +31,40 @@ class Request extends Model
         'completed_at',
         'rejected_reason',
         'driver_response_status',
+        'estimated_duration',
+        'is_external',
+        'third_party_cost',
+        'qr_code_token',
+        'security_checked_out_at',
+        'security_checked_in_at',
+        'security_checkout_by',
+        'security_checkin_by',
+        'security_checkout_notes',
+        'security_checkin_notes',
+        'external_fleet_info',
+        'external_photo_path',
+        'external_trip_type',
+        'external_departure_cost',
+        'external_return_cost',
+        'external_return_fleet_info',
+        'external_return_photo_path',
+        'external_driver_name',
+        'external_license_plate',
+        'external_return_driver_name',
+        'external_return_license_plate',
+        'external_provider',
+        // Second external vehicle:
+        'external_driver_name_2',
+        'external_license_plate_2',
+        'external_fleet_info_2',
+        'external_photo_path_2',
+        'external_departure_cost_2',
+        'external_return_cost_2',
+        'external_return_driver_name_2',
+        'external_return_license_plate_2',
+        'external_return_fleet_info_2',
+        'external_return_photo_path_2',
+        'third_party_cost_2',
     ];
 
     protected $casts = [
@@ -38,12 +72,20 @@ class Request extends Model
         'end_time' => 'datetime',
         'status' => RequestStatus::class,
         'priority' => RequestPriority::class,
+        'is_external' => 'boolean',
+        'security_checked_out_at' => 'datetime',
+        'security_checked_in_at' => 'datetime',
     ];
 
     // Relationships
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
     }
 
     public function approvals()

@@ -16,11 +16,19 @@ class OperationalTrip extends Model
         'start_datetime',
         'end_datetime',
         'status',
+        'security_checked_out_at',
+        'security_checked_in_at',
+        'security_checkout_by',
+        'security_checkin_by',
+        'security_checkout_notes',
+        'security_checkin_notes',
     ];
 
     protected $casts = [
         'start_datetime' => 'datetime',
         'end_datetime' => 'datetime',
+        'security_checked_out_at' => 'datetime',
+        'security_checked_in_at' => 'datetime',
     ];
 
     public function request()

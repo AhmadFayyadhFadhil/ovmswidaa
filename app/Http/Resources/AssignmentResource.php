@@ -11,12 +11,7 @@ class AssignmentResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'request' => [
-                'id' => $this->request?->id,
-                'purpose' => $this->request?->purpose,
-                'start_time' => $this->request?->start_time,
-                'end_time' => $this->request?->end_time,
-            ],
+            'request' => $this->request ? new RequestResource($this->request) : null,
             'vehicle' => $this->request?->operationalTrip?->vehicle ? [
                 'id' => $this->request->operationalTrip->vehicle->id,
                 'name' => $this->request->operationalTrip->vehicle->name,

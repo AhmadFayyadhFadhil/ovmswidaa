@@ -26,6 +26,7 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'nik',
         'name',
         'email',
         'password',
@@ -34,6 +35,13 @@ class User extends Authenticatable
         'rank',
         'is_department_head',
         'sim_a_photo',
+        'phone',
+        'location',
+        'avatar',
+        'is_active',
+        'can_request',
+        'availability_start',
+        'availability_end',
     ];
 
     /**
@@ -57,10 +65,17 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_department_head' => 'boolean',
+            'is_active' => 'boolean',
+            'can_request' => 'boolean',
         ];
     }
 
     // Relationships
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
+    }
+
     public function requests()
     {
         return $this->hasMany(Request::class);
@@ -86,20 +101,28 @@ class User extends Authenticatable
      */
     public static function validDepartments(): array
     {
-        return [
-            'IT', 'FA', 'HR&GA', 'QC', 'QA',
-            'HRD', 'GA', 'TECHNICAL', 'ENGINEERING', 'SUPPLY CHAIN', 'HSE', 'PRODUKSI',
-            'HRD&GA',
-        ];
+        $names = Department::pluck('name')->toArray();
+        if (empty($names)) {
+            return [
+                'Information and Technology',
+                'Finance and Accounting',
+                'HRD & GA',
+                'Supply Chain',
+                'Technical and Development',
+                'Quality Assurance',
+                'Quality Control',
+                'Production',
+                'Regulatory Affairs & PV',
+                'Legal & Compliance',
+                'Plant Management',
+            ];
+        }
+        return $names;
     }
 
     public function departmentGroup(): array
     {
-        return match ($this->department_id) {
-            'HR&GA' => ['HR&GA', 'HRD', 'GA'],
-            'HRD&GA' => ['HRD&GA'],
-            default => [$this->department_id],
-        };
+        return $this->department_id ? [$this->department_id] : [];
     }
 
     public function hasRoleDirect(string|array $roles): bool
@@ -130,11 +153,44 @@ class User extends Authenticatable
 
     public function isHrGaDepartment(): bool
     {
-        return in_array($this->department_id, ['HR&GA', 'HRD&GA'], true);
+        return $this->department && $this->department->name === 'HRD & GA';
     }
 
     public function isHrGaHead(): bool
     {
         return $this->isHrGaDepartment() && $this->is_department_head && $this->hasRoleDirect(['Approver', 'GA']);
+    }
+
+    public function getAvailabilityStatusAttribute($value)
+    {
+        if (is_null($value)) {
+            return 'available';
+        }
+
+        if ($value === 'unavailable') {
+            return 'unavailable';
+        }
+
+        if (in_array($value, ['assigned', 'on_trip'])) {
+            $now = now();
+            $hasActiveTrip = \App\Models\Request::where('driver_id', $this->id)
+                ->whereIn('status', [\App\Enums\RequestStatus::DRIVER_ASSIGNED, \App\Enums\RequestStatus::ON_GOING])
+                ->where(function ($query) use ($now) {
+                    $query->where('status', \App\Enums\RequestStatus::ON_GOING)
+                        ->orWhere(function ($q) use ($now) {
+                            $q->where('start_time', '<=', $now)
+                              ->where('end_time', '>=', $now);
+                        });
+                })
+                ->exists();
+
+            if ($hasActiveTrip) {
+                return 'on_trip';
+            }
+
+            return 'available';
+        }
+
+        return $value;
     }
 }

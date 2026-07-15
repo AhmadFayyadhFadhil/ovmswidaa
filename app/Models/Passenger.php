@@ -13,6 +13,7 @@ class Passenger extends Model
         'request_id',
         'name',
         'department_id',
+        'user_id',
     ];
 
     /**
@@ -21,5 +22,18 @@ class Passenger extends Model
     public function request()
     {
         return $this->belongsTo(Request::class);
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    /**
+     * Get the user account associated with this passenger.
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

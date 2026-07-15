@@ -28,6 +28,7 @@ class OVMSApiTest extends TestCase
     public function test_user_can_register_and_login()
     {
         $response = $this->postJson('/api/register', [
+            'nik'                   => 'NIK12345',
             'name'                  => 'John Doe',
             'email'                 => 'john@ovms.test',
             'password'              => 'password123',
@@ -38,14 +39,16 @@ class OVMSApiTest extends TestCase
             ->assertJsonPath('status', 'success')
             ->assertJsonStructure([
                 'data' => [
-                    'user'  => ['id', 'name', 'email', 'roles'],
-                    'token',
-                    'token_type'
+                    'user'  => ['id', 'name', 'email', 'roles']
                 ]
             ]);
 
+        // Activate the registered user
+        $user = User::where('email', 'john@ovms.test')->first();
+        $user->update(['is_active' => true]);
+
         $response = $this->postJson('/api/login', [
-            'email'    => 'john@ovms.test',
+            'nik'      => 'NIK12345',
             'password' => 'password123',
         ]);
 
@@ -58,14 +61,17 @@ class OVMSApiTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('Admin');
 
-        $qaUser = User::factory()->create(['department_id' => 'QA']);
+        $qaDept = \App\Models\Department::where('name', 'Quality Assurance')->first();
+        $itDept = \App\Models\Department::where('name', 'Information and Technology')->first();
+
+        $qaUser = User::factory()->create(['department_id' => $qaDept->id]);
         $qaUser->assignRole('Employee');
 
-        $otherUser = User::factory()->create(['department_id' => 'IT']);
+        $otherUser = User::factory()->create(['department_id' => $itDept->id]);
         $otherUser->assignRole('Employee');
 
         $response = $this->actingAs($admin)
-            ->getJson('/api/users?category=QA');
+            ->getJson('/api/users?category=Quality Assurance');
 
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
@@ -77,13 +83,16 @@ class OVMSApiTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('Admin');
 
-        $approver = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $itDept = \App\Models\Department::where('name', 'Information and Technology')->first();
+        $hrGaDept = \App\Models\Department::where('name', 'HRD & GA')->first();
+
+        $approver = User::factory()->create(['department_id' => $itDept->id, 'is_department_head' => true]);
         $approver->assignRole('Approver');
 
-        $gaHead = User::factory()->create(['department_id' => 'HR&GA', 'is_department_head' => true]);
+        $gaHead = User::factory()->create(['department_id' => $hrGaDept->id, 'is_department_head' => true]);
         $gaHead->assignRole('GA');
 
-        $nonApprover = User::factory()->create(['department_id' => 'IT']);
+        $nonApprover = User::factory()->create(['department_id' => $itDept->id]);
         $nonApprover->assignRole('Employee');
 
         $response = $this->actingAs($admin)
@@ -126,8 +135,8 @@ class OVMSApiTest extends TestCase
                 'destination_city'  => 'Jakarta',
                 'destination_place' => 'Sudirman',
                 'purpose'           => 'Meeting client',
-                'start_time'        => now()->addDay()->format('Y-m-d H:i:s'),
-                'end_time'          => now()->addDay()->addHours(2)->format('Y-m-d H:i:s'),
+                'start_time'        => now()->addDay()->setTime(10, 0, 0)->format('Y-m-d H:i:s'),
+                'end_time'          => now()->addDay()->setTime(12, 0, 0)->format('Y-m-d H:i:s'),
                 'passenger_count'   => 1,
                 'priority'          => 'Normal',
             ]);
@@ -138,20 +147,22 @@ class OVMSApiTest extends TestCase
 
     public function test_dept_head_can_approve_request()
     {
-        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $itDept = \App\Models\Department::where('name', 'Information and Technology')->first();
+
+        $deptHead = User::factory()->create(['department_id' => $itDept->id, 'is_department_head' => true]);
         $deptHead->assignRole('Approver');
 
-        $employee = User::factory()->create(['department_id' => 'IT']);
+        $employee = User::factory()->create(['department_id' => $itDept->id]);
         $employee->assignRole('Employee');
 
         $vehicleRequest = VehicleRequest::create([
             'user_id'           => $employee->id,
-            'department_id'     => 'IT',
+            'department_id'     => $itDept->id,
             'destination_city'  => 'Bandung',
             'destination_place' => 'Kantor',
             'purpose'           => 'Delivery',
-            'start_time'        => now()->addDay(),
-            'end_time'          => now()->addDay()->addHours(4),
+            'start_time'        => now()->addDay()->setTime(10, 0, 0),
+            'end_time'          => now()->addDay()->setTime(14, 0, 0),
             'passenger_count'   => 1,
             'priority'          => 'Normal',
             'status'            => RequestStatus::SUBMITTED,
@@ -164,7 +175,7 @@ class OVMSApiTest extends TestCase
             ]);
 
         $response->assertStatus(200)
-            ->assertJsonPath('data.status', 'approved_department');
+            ->assertJsonPath('data.status', 'driver_assigned');
     }
 
     public function test_assign_vehicle_validates_driver_role()
@@ -178,16 +189,24 @@ class OVMSApiTest extends TestCase
         $notADriver = User::factory()->create();
         $notADriver->assignRole('Employee'); // Not a Driver!
 
+        $vehicle = Vehicle::create([
+            'name' => 'Avanza Test',
+            'plate_number' => 'B 1234 CD',
+            'type' => 'Car',
+            'status' => 'Available',
+            'capacity' => 6,
+        ]);
+
         $vehicleRequest = VehicleRequest::create([
             'user_id'           => $employee->id,
             'destination_city'  => 'Jakarta',
             'destination_place' => 'Gedung A',
             'purpose'           => 'Delivery',
-            'start_time'        => now()->addDay(),
-            'end_time'          => now()->addDay()->addHours(4),
+            'start_time'        => now()->addDay()->setTime(10, 0, 0),
+            'end_time'          => now()->addDay()->setTime(14, 0, 0),
             'passenger_count'   => 1,
             'priority'          => 'Normal',
-            'status'            => RequestStatus::APPROVED_HRD, // ready to be assigned
+            'status'            => RequestStatus::APPROVED_DEPARTMENT,
         ]);
 
         // Attempting to assign with non-driver user should fail
@@ -195,6 +214,7 @@ class OVMSApiTest extends TestCase
             ->postJson('/api/assignments', [
                 'request_id' => $vehicleRequest->id,
                 'driver_id'  => $notADriver->id,
+                'vehicle_id' => $vehicle->id,
                 'notes'      => 'Tolong antar',
             ]);
 
@@ -202,13 +222,14 @@ class OVMSApiTest extends TestCase
             ->assertJsonPath('message', 'User yang dipilih bukan merupakan Driver');
 
         // Assign with real driver should succeed
-        $driver = User::factory()->create();
+        $driver = User::factory()->create(['is_active' => true]);
         $driver->assignRole('Driver');
 
         $response = $this->actingAs($ga)
             ->postJson('/api/assignments', [
                 'request_id' => $vehicleRequest->id,
                 'driver_id'  => $driver->id,
+                'vehicle_id' => $vehicle->id,
                 'notes'      => 'Tolong antar',
             ]);
 
@@ -240,8 +261,8 @@ class OVMSApiTest extends TestCase
             'destination_city'  => 'Surabaya',
             'destination_place' => 'Kantor Pusat',
             'purpose'           => 'Delivery',
-            'start_time'        => now()->addDay(),
-            'end_time'          => now()->addDay()->addHours(4),
+            'start_time'        => now()->addDay()->setTime(10, 0, 0),
+            'end_time'          => now()->addDay()->setTime(14, 0, 0),
             'passenger_count'   => 1,
             'priority'          => 'Normal',
             'status'            => RequestStatus::DRIVER_ASSIGNED,
@@ -254,8 +275,8 @@ class OVMSApiTest extends TestCase
             'request_id'     => $vehicleRequest->id,
             'driver_id'      => $driver->id,
             'vehicle_id'     => $vehicle->id,
-            'start_datetime' => now()->addDay(),
-            'end_datetime'   => now()->addDay()->addHours(4),
+            'start_datetime' => now()->addDay()->setTime(10, 0, 0),
+            'end_datetime'   => now()->addDay()->setTime(14, 0, 0),
             'status'         => 'scheduled',
         ]);
 
@@ -281,6 +302,8 @@ class OVMSApiTest extends TestCase
             ->putJson('/api/profile', [
                 'name' => 'Updated Name',
                 'email' => 'updated@ovms.test',
+                'phone' => '0812345678',
+                'location' => 'Surabaya Office',
                 'password' => 'newpassword123',
                 'password_confirmation' => 'newpassword123'
             ]);
@@ -288,13 +311,17 @@ class OVMSApiTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success')
             ->assertJsonPath('data.name', 'Updated Name')
-            ->assertJsonPath('data.email', 'updated@ovms.test');
+            ->assertJsonPath('data.email', 'updated@ovms.test')
+            ->assertJsonPath('data.phone', '0812345678')
+            ->assertJsonPath('data.location', 'Surabaya Office');
 
         // Confirm database has updated values
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
             'name' => 'Updated Name',
-            'email' => 'updated@ovms.test'
+            'email' => 'updated@ovms.test',
+            'phone' => '0812345678',
+            'location' => 'Surabaya Office'
         ]);
 
         // Verify password works
@@ -307,6 +334,45 @@ class OVMSApiTest extends TestCase
 
         $response->assertStatus(200)
             ->assertJsonPath('data.name', 'Updated Name')
-            ->assertJsonPath('data.email', 'updated@ovms.test');
+            ->assertJsonPath('data.email', 'updated@ovms.test')
+            ->assertJsonPath('data.phone', '0812345678')
+            ->assertJsonPath('data.location', 'Surabaya Office');
+    }
+
+    public function test_user_can_update_avatar()
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        $user = User::factory()->create();
+        $user->assignRole('Employee');
+
+        $file = UploadedFile::fake()->create('avatar.jpg', 100, 'image/jpeg');
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/profile/avatar', [
+                'avatar' => $file
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', 'success')
+            ->assertJsonStructure([
+                'status',
+                'message',
+                'data' => ['avatar_url']
+            ]);
+
+        $user->refresh();
+        $this->assertNotNull($user->avatar);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($user->avatar);
+
+        // Test max size validation (2049 KB is > 2MB limit)
+        $largeFile = UploadedFile::fake()->create('large_avatar.jpg', 2049, 'image/jpeg');
+        $response = $this->actingAs($user)
+            ->postJson('/api/profile/avatar', [
+                'avatar' => $largeFile
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['avatar']);
     }
 }

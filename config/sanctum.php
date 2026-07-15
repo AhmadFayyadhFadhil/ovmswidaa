@@ -50,7 +50,7 @@ return [
     |
     */
 
-    'expiration' => null,
+    'expiration' => 10080,
 
     /*
     |--------------------------------------------------------------------------
@@ -63,9 +63,10 @@ return [
     |
     | See: https://docs.github.com/en/code-security/secret-scanning/about-secret-scanning
     |
+    |
     */
 
-    'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),
+    'token_prefix' => env('SANCTUM_TOKEN_PREFIX', 'ovms_'),
 
     /*
     |--------------------------------------------------------------------------

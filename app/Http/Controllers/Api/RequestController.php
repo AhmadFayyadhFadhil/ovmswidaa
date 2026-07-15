@@ -19,11 +19,11 @@ class RequestController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user    = Auth::user();
-        $perPage = $request->query('per_page', 15);
+        $perPage = min((int) $request->query('per_page', 15), 100);
         $status  = $request->query('status');
         $search  = $request->query('search');
 
-        $query = VehicleRequest::with(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers']);
+        $query = VehicleRequest::with(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers.department', 'driver', 'vehicle']);
 
         if ($user->hasRoleDirect('Approver') && !$user->hasRoleDirect('Admin') && !$user->hasRoleDirect('GA')) {
             if ($user->isHrGaHead()) {
@@ -32,6 +32,7 @@ class RequestController extends Controller
                       ->orWhere(function ($q) {
                           $q->whereIn('status', [
                               RequestStatus::APPROVED_DEPARTMENT,
+                              RequestStatus::ASSIGNED_BY_GA,
                               RequestStatus::APPROVED_HRD,
                               RequestStatus::APPROVED_HRD_GA,
                               RequestStatus::WAITING_DRIVER,
@@ -49,24 +50,37 @@ class RequestController extends Controller
             } else {
                 $query->whereIn('department_id', $user->departmentGroup());
             }
-        } elseif (!$user->hasRoleDirect(['Admin', 'Approver', 'GA']) && !$user->isHrGaHead()) {
+        } elseif (!$user->hasRoleDirect(['Admin', 'Approver', 'GA', 'Security']) && !$user->isHrGaHead()) {
             if ($user->hasRoleDirect('Driver')) {
                 $query->where(function ($q) use ($user) {
                     $q->where('user_id', $user->id)
                       ->orWhere('driver_id', $user->id)
+                      ->orWhereHas('assignments', function ($sub) use ($user) {
+                          $sub->where('driver_id', $user->id);
+                      })
                       ->orWhereHas('operationalTrip', function ($sub) use ($user) {
                           $sub->where('driver_id', $user->id);
                       });
                 });
             } else {
-                $query->where('user_id', $user->id);
+                $query->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id)
+                      ->orWhereHas('passengers', function ($sub) use ($user) {
+                          $sub->where('user_id', $user->id);
+                      });
+                });
             }
         }
 
         if ($status) {
             $upperStatus = strtoupper($status);
             if ($upperStatus === 'PENDING') {
-                $query->whereIn('status', [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::WAITING_DRIVER]);
+                $query->whereIn('status', [
+                    RequestStatus::SUBMITTED,
+                    RequestStatus::APPROVED_DEPARTMENT,
+                    RequestStatus::ASSIGNED_BY_GA,
+                    RequestStatus::WAITING_DRIVER
+                ]);
             } elseif ($upperStatus === 'APPROVED') {
                 $query->whereIn('status', [RequestStatus::DRIVER_ASSIGNED, RequestStatus::APPROVED_HRD, RequestStatus::APPROVED_HRD_GA]);
             } elseif ($upperStatus === 'ONGOING') {
@@ -137,13 +151,16 @@ class RequestController extends Controller
             !$user->hasRoleDirect('Admin') && 
             !$user->isHrGaHead() && 
             !$user->hasRoleDirect('GA') && 
+            !$user->hasRoleDirect('Security') && 
             $vehicleRequest->driver_id !== $user->id && 
-            $vehicleRequest->operationalTrip?->driver_id !== $user->id
+            $vehicleRequest->operationalTrip?->driver_id !== $user->id &&
+            !$vehicleRequest->assignments()->where('driver_id', $user->id)->exists() &&
+            !$vehicleRequest->passengers()->where('user_id', $user->id)->exists()
         ) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $vehicleRequest->load(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'assignments', 'passengers']);
+        $vehicleRequest->load(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver', 'assignments', 'passengers.department', 'driver', 'vehicle']);
 
         return response()->json([
             'status' => 'success',
@@ -168,15 +185,54 @@ class RequestController extends Controller
 
         // Update passengers if provided
         if ($passengers !== null) {
-            // Delete old passengers and create new ones
-            $vehicleRequest->passengers()->delete();
-            foreach ($passengers as $passengerData) {
-                \App\Models\Passenger::create([
-                    'request_id' => $vehicleRequest->id,
-                    'name' => $passengerData['name'],
-                    'department_id' => $passengerData['department_id'] ?? null,
-                ]);
-            }
+             $date = date('Y-m-d', strtotime($vehicleRequest->start_time));
+             foreach ($passengers as $passengerData) {
+                 if (empty($passengerData['name'])) continue;
+                 $name = trim($passengerData['name']);
+                 
+                 $hasConflict = \App\Models\Passenger::where('name', $name)
+                     ->whereHas('request', function ($q) use ($date, $vehicleRequest) {
+                         $q->whereDate('start_time', $date)
+                           ->where('id', '!=', $vehicleRequest->id)
+                           ->whereIn('status', [
+                               RequestStatus::SUBMITTED,
+                               RequestStatus::APPROVED_DEPARTMENT,
+                               RequestStatus::ASSIGNED_BY_GA,
+                               RequestStatus::APPROVED_HRD,
+                               RequestStatus::APPROVED_HRD_GA,
+                               RequestStatus::WAITING_DRIVER,
+                               RequestStatus::DRIVER_ASSIGNED,
+                               RequestStatus::ON_GOING,
+                               RequestStatus::COMPLETED
+                           ]);
+                     })
+                     ->exists();
+                 
+                 if ($hasConflict) {
+                     return response()->json([
+                         'status' => 'error',
+                         'message' => "Penumpang '{$name}' sudah terdaftar pada perjalanan lain pada tanggal tersebut. Silakan pilih penumpang lain yang tidak memiliki jadwal perjalanan."
+                     ], 422);
+                 }
+             }
+
+             // Delete old passengers and create new ones
+             $vehicleRequest->passengers()->delete();
+             foreach ($passengers as $passengerData) {
+                 $userId = $passengerData['user_id'] ?? null;
+                 if (!$userId && !empty($passengerData['name'])) {
+                     $resolved = \App\Models\User::where('name', trim($passengerData['name']))->first();
+                     if ($resolved) {
+                         $userId = $resolved->id;
+                     }
+                 }
+                 \App\Models\Passenger::create([
+                     'request_id' => $vehicleRequest->id,
+                     'name' => $passengerData['name'],
+                     'department_id' => $passengerData['department_id'] ?? null,
+                     'user_id' => $userId,
+                 ]);
+             }
         }
 
         return response()->json([
@@ -188,11 +244,42 @@ class RequestController extends Controller
 
     public function destroy(VehicleRequest $vehicleRequest): JsonResponse
     {
-        if ($vehicleRequest->status !== RequestStatus::SUBMITTED) {
-            return response()->json(['status' => 'error', 'message' => 'Hanya dapat menghapus request yang baru diajukan (submitted)'], 422);
+        $user = Auth::user();
+        $isOwner = $vehicleRequest->user_id === $user->id;
+        $isAdminOrGA = $user->hasRoleDirect(['Admin', 'GA']);
+
+        if (!$isOwner && !$isAdminOrGA) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hanya pemohon atau Administrator yang dapat membatalkan request ini'
+            ], 403);
         }
 
-        $vehicleRequest->delete();
+        // Allow deleting requests unless they are already in progress (on_going) or completed
+        if (in_array($vehicleRequest->status, [RequestStatus::ON_GOING, RequestStatus::COMPLETED], true)) {
+            return response()->json([
+                'status' => 'error', 
+                'message' => 'Tidak dapat menghapus request yang sedang berjalan atau sudah selesai'
+            ], 422);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest) {
+            // Restore driver availability status if assigned
+            if ($vehicleRequest->driver) {
+                $vehicleRequest->driver->update(['availability_status' => 'available']);
+            }
+
+            // Delete assignments through Eloquent to trigger observers and restore driver status
+            foreach ($vehicleRequest->assignments as $assignment) {
+                $assignment->delete();
+            }
+
+            if ($vehicleRequest->operationalTrip) {
+                $vehicleRequest->operationalTrip->delete();
+            }
+
+            $vehicleRequest->delete();
+        });
 
         return response()->json(['status' => 'success', 'message' => 'Permintaan berhasil dihapus'], 200);
     }
@@ -212,10 +299,9 @@ class RequestController extends Controller
             'notes' => 'nullable|string'
         ]);
 
-        // Auto-detect role from current request status if not provided
         $role = $request->input('role') ?? match($vehicleRequest->status) {
             RequestStatus::SUBMITTED           => 'dept_head',
-            RequestStatus::APPROVED_DEPARTMENT => 'hrd_head',
+            RequestStatus::ASSIGNED_BY_GA      => 'hrd_head',
             default => null,
         };
 
@@ -279,17 +365,34 @@ class RequestController extends Controller
     {
         $user = Auth::user();
 
-        // Authorize: Only assigned Driver, Admin, or GA can start trip
-        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead()) {
-            return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Kepala Departemen HRD&GA yang dapat memulai perjalanan.'], 403);
+        // Authorize:
+        if ($vehicleRequest->is_external) {
+            if (Auth::id() !== $vehicleRequest->user_id && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead() && !$user->hasRoleDirect('GA')) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized. Perjalanan pihak ketiga hanya dapat dimulai oleh Requestor yang mengajukan.'], 403);
+            }
+        } else {
+            $isAssigned = $vehicleRequest->driver_id === $user->id ||
+                $vehicleRequest->operationalTrip?->driver_id === $user->id ||
+                $vehicleRequest->assignments()->where('driver_id', $user->id)->exists() ||
+                \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists();
+
+            if (!$isAssigned && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead()) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Kepala Departemen HRD&GA yang dapat memulai perjalanan.'], 403);
+            }
         }
 
-        if ($vehicleRequest->status !== RequestStatus::DRIVER_ASSIGNED) {
-            return response()->json(['status' => 'error', 'message' => 'Perjalanan hanya dapat dimulai jika status adalah driver_assigned.'], 422);
-        }
+        if ($vehicleRequest->is_external) {
+            if ($vehicleRequest->status !== RequestStatus::DRIVER_ASSIGNED) {
+                return response()->json(['status' => 'error', 'message' => 'Perjalanan hanya dapat dimulai jika status adalah driver_assigned (siap berangkat).'], 422);
+            }
+        } else {
+            if ($vehicleRequest->status !== RequestStatus::DRIVER_ASSIGNED) {
+                return response()->json(['status' => 'error', 'message' => 'Perjalanan hanya dapat dimulai jika status adalah driver_assigned.'], 422);
+            }
 
-        if (empty($vehicleRequest->driver_id) || empty($vehicleRequest->vehicle_id)) {
-            return response()->json(['status' => 'error', 'message' => 'Tidak dapat memulai perjalanan tanpa driver atau kendaraan.'], 422);
+            if (empty($vehicleRequest->driver_id) || empty($vehicleRequest->vehicle_id)) {
+                return response()->json(['status' => 'error', 'message' => 'Tidak dapat memulai perjalanan tanpa driver atau kendaraan.'], 422);
+            }
         }
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest) {
@@ -299,19 +402,17 @@ class RequestController extends Controller
                 'started_at' => now(),
             ]);
 
-            // Update operational trip status
-            if ($vehicleRequest->operationalTrip) {
-                $vehicleRequest->operationalTrip->update(['status' => 'on_going']);
-            }
-
-            // Update driver status
-            if ($vehicleRequest->driver) {
-                $vehicleRequest->driver->update(['availability_status' => 'on_trip']);
-            }
-
-            // Update vehicle status
-            if ($vehicleRequest->vehicle) {
-                $vehicleRequest->vehicle->update(['status' => 'In Use']);
+            if (!$vehicleRequest->is_external) {
+                $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
+                foreach ($trips as $trip) {
+                    $trip->update(['status' => 'on_going']);
+                    if ($trip->driver) {
+                        $trip->driver->update(['availability_status' => 'on_trip']);
+                    }
+                    if ($trip->vehicle) {
+                        $trip->vehicle->update(['status' => 'In Use']);
+                    }
+                }
             }
         });
 
@@ -326,9 +427,20 @@ class RequestController extends Controller
     {
         $user = Auth::user();
 
-        // Authorize: Only assigned Driver, Admin, or GA can complete trip
-        if ($vehicleRequest->operationalTrip?->driver_id !== $user->id && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead()) {
-            return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Kepala Departemen HRD&GA yang dapat menyelesaikan perjalanan.'], 403);
+        // Authorize:
+        if ($vehicleRequest->is_external) {
+            if (Auth::id() !== $vehicleRequest->user_id && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead() && !$user->hasRoleDirect('GA')) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized. Perjalanan pihak ketiga hanya dapat diselesaikan oleh Requestor yang mengajukan.'], 403);
+            }
+        } else {
+            $isAssigned = $vehicleRequest->driver_id === $user->id ||
+                $vehicleRequest->operationalTrip?->driver_id === $user->id ||
+                $vehicleRequest->assignments()->where('driver_id', $user->id)->exists() ||
+                \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists();
+
+            if (!$isAssigned && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead()) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Kepala Departemen HRD&GA yang dapat menyelesaikan perjalanan.'], 403);
+            }
         }
 
         if ($vehicleRequest->status !== RequestStatus::ON_GOING) {
@@ -342,19 +454,17 @@ class RequestController extends Controller
                 'completed_at' => now(),
             ]);
 
-            // Update operational trip status
-            if ($vehicleRequest->operationalTrip) {
-                $vehicleRequest->operationalTrip->update(['status' => 'completed']);
-            }
-
-            // Update driver status
-            if ($vehicleRequest->driver) {
-                $vehicleRequest->driver->update(['availability_status' => 'available']);
-            }
-
-            // Update vehicle status
-            if ($vehicleRequest->vehicle) {
-                $vehicleRequest->vehicle->update(['status' => 'Available']);
+            if (!$vehicleRequest->is_external) {
+                $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
+                foreach ($trips as $trip) {
+                    $trip->update(['status' => 'completed']);
+                    if ($trip->driver) {
+                        $trip->driver->update(['availability_status' => 'available']);
+                    }
+                    if ($trip->vehicle) {
+                        $trip->vehicle->update(['status' => 'Available']);
+                    }
+                }
             }
         });
 
@@ -362,6 +472,44 @@ class RequestController extends Controller
             'status' => 'success',
             'message' => 'Perjalanan selesai',
             'data' => new RequestResource($vehicleRequest->fresh(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver'])),
+        ], 200);
+    }
+
+    public function adjustDriver(Request $request, VehicleRequest $vehicleRequest): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user->hasRoleDirect(['Admin', 'GA']) && !$user->isHrGaHead()) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'driver_id'  => 'required|exists:users,id',
+            'vehicle_id' => 'required|exists:vehicles,id',
+        ]);
+
+        $driver = \App\Models\User::findOrFail($validated['driver_id']);
+        if (!$driver->hasRoleDirect('Driver')) {
+            return response()->json(['status' => 'error', 'message' => 'User yang ditunjuk bukan Driver.'], 422);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated) {
+            $vehicleRequest->update([
+                'driver_id'  => $validated['driver_id'],
+                'vehicle_id' => $validated['vehicle_id'],
+            ]);
+
+            if ($vehicleRequest->operationalTrip) {
+                $vehicleRequest->operationalTrip->update([
+                    'driver_id'  => $validated['driver_id'],
+                    'vehicle_id' => $validated['vehicle_id'],
+                ]);
+            }
+        });
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Driver & Kendaraan berhasil disesuaikan di tengah perjalanan.',
+            'data'    => new RequestResource($vehicleRequest->fresh(['user', 'approvals', 'operationalTrip.vehicle', 'operationalTrip.driver'])),
         ], 200);
     }
 }

@@ -18,6 +18,7 @@ class RolePermissionSeeder extends Seeder
             'view-vehicle', 'create-vehicle', 'update-vehicle', 'delete-vehicle',
             'view-user', 'create-user', 'update-user', 'delete-user',
             'view-audit-log', 'create-assignment', 'update-assignment', 'delete-assignment',
+            'scan-request',
         ];
 
         // Buat permission untuk guard web DAN sanctum
@@ -34,7 +35,7 @@ class RolePermissionSeeder extends Seeder
 
         // Buat role untuk guard web DAN sanctum
         foreach (['web', 'sanctum'] as $guard) {
-            foreach (['Admin', 'GA', 'Approver', 'Employee', 'Driver'] as $roleName) {
+            foreach (['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'Security'] as $roleName) {
                 Role::firstOrCreate([
                     'name'       => $roleName,
                     'guard_name' => $guard,
@@ -52,6 +53,7 @@ class RolePermissionSeeder extends Seeder
             $approver = Role::where('name', 'Approver')->where('guard_name', $guard)->first();
             $employee = Role::where('name', 'Employee')->where('guard_name', $guard)->first();
             $driver   = Role::where('name', 'Driver')->where('guard_name', $guard)->first();
+            $security = Role::where('name', 'Security')->where('guard_name', $guard)->first();
 
             $admin->syncPermissions($allPerms);
 
@@ -60,6 +62,7 @@ class RolePermissionSeeder extends Seeder
                 'view-vehicle', 'create-vehicle', 'update-vehicle', 'delete-vehicle',
                 'view-all-requests', 'view-audit-log',
                 'create-assignment', 'update-assignment', 'delete-assignment',
+                'scan-request',
             ]));
 
             $approver->syncPermissions($allPerms->whereIn('name', [
@@ -73,6 +76,10 @@ class RolePermissionSeeder extends Seeder
 
             $driver->syncPermissions($allPerms->whereIn('name', [
                 'view-vehicle', 'view-own-request',
+            ]));
+
+            $security->syncPermissions($allPerms->whereIn('name', [
+                'view-all-requests', 'scan-request'
             ]));
         }
 

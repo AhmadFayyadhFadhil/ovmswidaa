@@ -31,22 +31,15 @@ class DriverRespondAction
                     'end_photo' => $endPhotoPath,
                 ]);
 
-                // Revert request status back to previous approval state
-                $previousStatus = $assignment->request->status;
-                $revertStatus = RequestStatus::APPROVED_HRD_GA;
-                
-                // If request was from HR&GA or HRD&GA department and was at APPROVED_DEPARTMENT, revert to it
-                if (in_array($assignment->request->department_id, ['HR&GA', 'HRD&GA'], true) && $previousStatus === RequestStatus::APPROVED_DEPARTMENT) {
-                    $revertStatus = RequestStatus::APPROVED_DEPARTMENT;
-                }
-
+                // Revert request status to SUBMITTED so GA can re-assign
                 $assignment->request()->update([
-                    'status' => $revertStatus,
+                    'status' => RequestStatus::SUBMITTED,
                     'driver_id' => null,
                     'assigned_by' => null,
                     'assigned_at' => null,
                     'rejected_reason' => $rejectReason,
                     'driver_response_status' => 'rejected',
+                    'qr_code_token' => null,
                 ]);
 
                 // Set driver availability back to available
@@ -56,6 +49,8 @@ class DriverRespondAction
             }
 
             if ($response === 'accepted') {
+                $vehicleId = $vehicleId ?? $assignment->request->vehicle_id;
+                
                 if (empty($vehicleId)) {
                     throw new Exception("Vehicle ID is required when accepting an assignment.");
                 }
@@ -72,7 +67,7 @@ class DriverRespondAction
                     'end_photo' => $endPhotoPath,
                 ]);
 
-                // Create the final operational trip schedule
+                // Create the operational trip schedule
                 $trip = OperationalTrip::create([
                     'request_id' => $assignment->request_id,
                     'driver_id' => $assignment->driver_id,
@@ -82,12 +77,26 @@ class DriverRespondAction
                     'status' => 'scheduled',
                 ]);
 
-                // Update Request status to driver_assigned, save vehicle_id and accepted status
-                $assignment->request()->update([
-                    'status' => RequestStatus::DRIVER_ASSIGNED,
-                    'vehicle_id' => $vehicleId,
-                    'driver_response_status' => 'accepted',
-                ]);
+                // Check if ALL assignments for this request are now accepted
+                $request = $assignment->request;
+                $pendingCount = $request->assignments()
+                    ->where('status', 'pending_driver')
+                    ->count();
+
+                if ($pendingCount === 0) {
+                    // All drivers accepted → advance directly to DRIVER_ASSIGNED (Approved)
+                    $request->update([
+                        'status' => RequestStatus::DRIVER_ASSIGNED,
+                        'vehicle_id' => $vehicleId,
+                        'driver_response_status' => 'accepted',
+                        'qr_code_token' => 'REQ-' . time() . '-' . bin2hex(random_bytes(4)),
+                    ]);
+                } else {
+                    // Still waiting for other drivers, just update vehicle_id
+                    $request->update([
+                        'vehicle_id' => $vehicleId,
+                    ]);
+                }
                 
                 return $trip;
             }

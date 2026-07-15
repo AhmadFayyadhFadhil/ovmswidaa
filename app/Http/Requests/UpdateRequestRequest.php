@@ -27,7 +27,7 @@ class UpdateRequestRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'department_id' => 'sometimes|nullable|string|max:255',
+            'department_id' => 'sometimes|nullable|integer|exists:departments,id',
             'destination_city' => 'sometimes|required|string|max:255',
             'destination_place' => 'sometimes|required|string|max:255',
             'purpose' => 'sometimes|required|string|max:255',
@@ -39,7 +39,8 @@ class UpdateRequestRequest extends FormRequest
             // Passengers validation
             'passengers' => 'nullable|array|min:0',
             'passengers.*.name' => 'required_with:passengers|string|max:255',
-            'passengers.*.department_id' => 'nullable|string|max:255',
+            'passengers.*.department_id' => 'nullable|integer|exists:departments,id',
+            'passengers.*.user_id' => 'nullable|integer|exists:users,id',
         ];
     }
 

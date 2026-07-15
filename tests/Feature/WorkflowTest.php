@@ -24,21 +24,22 @@ class WorkflowTest extends TestCase
     public function test_full_vehicle_request_workflow()
     {
         // 1. Create Users
-        $employee = User::factory()->create(['department_id' => 'IT']);
+        $itDept = \App\Models\Department::where('name', 'Information and Technology')->first();
+        $hrGaDept = \App\Models\Department::where('name', 'HRD & GA')->first();
+
+        $employee = User::factory()->create(['department_id' => $itDept->id, 'is_active' => true]);
         $employee->assignRole('Employee');
 
-        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $deptHead = User::factory()->create(['department_id' => $itDept->id, 'is_department_head' => true, 'is_active' => true]);
         $deptHead->assignRole('Approver');
 
-        $hrdHead = User::factory()->create(['department_id' => 'HR&GA', 'is_department_head' => true]);
+        $hrdHead = User::factory()->create(['department_id' => $hrGaDept->id, 'is_department_head' => true, 'is_active' => true]);
         $hrdHead->assignRole('Approver');
 
-        $ga = User::factory()->create();
+        $ga = User::factory()->create(['is_active' => true]);
         $ga->assignRole('GA');
-        fwrite(STDERR, "GA roles count: " . $ga->roles()->count() . "\n");
-        fwrite(STDERR, "GA roles name: " . json_encode($ga->roles->pluck('name')->toArray()) . "\n");
 
-        $driver = User::factory()->create();
+        $driver = User::factory()->create(['is_active' => true]);
         $driver->assignRole('Driver');
 
         // Vehicle
@@ -53,11 +54,11 @@ class WorkflowTest extends TestCase
         // 2. Employee submits request
         $this->actingAs($employee);
         $response = $this->postJson('/api/requests', [
-            'department_id' => 'IT',
+            'department_id' => $itDept->id,
             'destination_city' => 'Jakarta',
             'destination_place' => 'Sudirman',
             'purpose' => 'Meeting',
-            'start_time' => now()->addDay()->format('Y-m-d H:i:s'),
+            'start_time' => now()->addDay()->setTime(10, 0, 0)->format('Y-m-d H:i:s'),
             'passenger_count' => 2,
             'priority' => 'Normal',
         ]);
@@ -65,42 +66,20 @@ class WorkflowTest extends TestCase
         $requestId = $response->json('data.id');
         $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'submitted']);
 
-        // 3. Dept Head approves
-        $this->actingAs($deptHead);
-        $response = $this->postJson("/api/requests/{$requestId}/approve", [
-            'role' => 'dept_head',
-            'notes' => 'ACC Dept'
-        ]);
-        $response->assertStatus(200);
-        $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'approved_department']);
-
-        // 4. HRD Head approves
-        $this->actingAs($hrdHead);
-        $response = $this->postJson("/api/requests/{$requestId}/approve", [
-            'role' => 'hrd_head',
-            'notes' => 'ACC HRD'
-        ]);
-        $response->assertStatus(200);
-        $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'approved_hrd_ga']);
-
-        // 5. GA assigns driver
+        // 3. GA assigns driver (Drafting assignment proposal directly on submitted request)
         $this->actingAs($ga);
         $response = $this->postJson("/api/assignments", [
             'request_id' => $requestId,
             'driver_id' => $driver->id,
+            'vehicle_id' => $vehicle->id,
             'notes' => 'Tolong antar ya'
         ]);
-        $status = $response->status();
-        fwrite(STDERR, "Assignment creation response status: $status\n");
-        if ($status !== 201) {
-            fwrite(STDERR, json_encode($response->json(), JSON_PRETTY_PRINT) . "\n");
-        }
         $response->assertStatus(201);
         $assignmentId = $response->json('data.id');
         $this->assertDatabaseHas('assignments', ['id' => $assignmentId, 'status' => 'pending_driver']);
         $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'waiting_driver']);
 
-        // 6. Driver responds (Accepts & Picks Vehicle)
+        // 4. Driver responds (Accepts & Picks Vehicle)
         $this->actingAs($driver);
         $response = $this->putJson("/api/assignments/{$assignmentId}", [
             'response' => 'accepted',
@@ -134,54 +113,53 @@ class WorkflowTest extends TestCase
     public function test_cancel_assignment()
     {
         // 1. Create Users
-        $employee = User::factory()->create(['department_id' => 'IT']);
+        $itDept = \App\Models\Department::where('name', 'Information and Technology')->first();
+        $hrGaDept = \App\Models\Department::where('name', 'HRD & GA')->first();
+
+        $employee = User::factory()->create(['department_id' => $itDept->id, 'is_active' => true]);
         $employee->assignRole('Employee');
 
-        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $deptHead = User::factory()->create(['department_id' => $itDept->id, 'is_department_head' => true, 'is_active' => true]);
         $deptHead->assignRole('Approver');
 
-        $hrdHead = User::factory()->create(['department_id' => 'HR&GA', 'is_department_head' => true]);
+        $hrdHead = User::factory()->create(['department_id' => $hrGaDept->id, 'is_department_head' => true, 'is_active' => true]);
         $hrdHead->assignRole('Approver');
 
-        $ga = User::factory()->create();
+        $ga = User::factory()->create(['is_active' => true]);
         $ga->assignRole('GA');
 
-        $driver = User::factory()->create();
+        $driver = User::factory()->create(['is_active' => true]);
         $driver->assignRole('Driver');
+
+        // Vehicle
+        $vehicle = Vehicle::create([
+            'name' => 'Avanza Test',
+            'plate_number' => 'B 1234 CD',
+            'type' => 'Car',
+            'status' => 'Available',
+            'capacity' => 6,
+        ]);
 
         // 2. Employee submits request
         $this->actingAs($employee);
         $response = $this->postJson('/api/requests', [
-            'department_id' => 'IT',
+            'department_id' => $itDept->id,
             'destination_city' => 'Jakarta',
             'destination_place' => 'Sudirman',
             'purpose' => 'Meeting',
-            'start_time' => now()->addDay()->format('Y-m-d H:i:s'),
+            'start_time' => now()->addDay()->setTime(10, 0, 0)->format('Y-m-d H:i:s'),
             'passenger_count' => 2,
             'priority' => 'Normal',
         ]);
         $response->assertStatus(201);
         $requestId = $response->json('data.id');
 
-        // 3. Dept Head approves
-        $this->actingAs($deptHead);
-        $this->postJson("/api/requests/{$requestId}/approve", [
-            'role' => 'dept_head',
-            'notes' => 'ACC Dept'
-        ])->assertStatus(200);
-
-        // 4. HRD Head approves
-        $this->actingAs($hrdHead);
-        $this->postJson("/api/requests/{$requestId}/approve", [
-            'role' => 'hrd_head',
-            'notes' => 'ACC HRD'
-        ])->assertStatus(200);
-
-        // 5. GA assigns driver
+        // 3. GA assigns driver directly on submitted request
         $this->actingAs($ga);
         $response = $this->postJson("/api/assignments", [
             'request_id' => $requestId,
             'driver_id' => $driver->id,
+            'vehicle_id' => $vehicle->id,
             'notes' => 'Tolong antar ya'
         ]);
         $response->assertStatus(201);
@@ -189,7 +167,7 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseHas('assignments', ['id' => $assignmentId, 'status' => 'pending_driver']);
         $this->assertDatabaseHas('requests', ['id' => $requestId, 'status' => 'waiting_driver']);
 
-        // 6. GA cancels assignment
+        // 4. GA cancels assignment
         $this->actingAs($ga);
         $response = $this->postJson("/api/assignments/{$assignmentId}/cancel");
         $response->assertStatus(200);
@@ -197,7 +175,7 @@ class WorkflowTest extends TestCase
         $this->assertDatabaseMissing('assignments', ['id' => $assignmentId]);
         $this->assertDatabaseHas('requests', [
             'id' => $requestId,
-            'status' => 'approved_hrd_ga',
+            'status' => 'submitted',
             'driver_id' => null,
             'assigned_by' => null,
             'assigned_at' => null,
@@ -207,19 +185,21 @@ class WorkflowTest extends TestCase
 
     public function test_dept_head_can_see_pending_request()
     {
-        $employee = User::factory()->create(['department_id' => 'IT']);
+        $itDept = \App\Models\Department::where('name', 'Information and Technology')->first();
+
+        $employee = User::factory()->create(['department_id' => $itDept->id, 'is_active' => true]);
         $employee->assignRole('Employee');
 
-        $deptHead = User::factory()->create(['department_id' => 'IT', 'is_department_head' => true]);
+        $deptHead = User::factory()->create(['department_id' => $itDept->id, 'is_department_head' => true, 'is_active' => true]);
         $deptHead->assignRole('Approver');
 
         $this->actingAs($employee);
         $response = $this->postJson('/api/requests', [
-            'department_id' => 'IT',
+            'department_id' => $itDept->id,
             'destination_city' => 'Jakarta',
             'destination_place' => 'Sudirman',
             'purpose' => 'Meeting',
-            'start_time' => now()->addDay()->format('Y-m-d H:i:s'),
+            'start_time' => now()->addDay()->setTime(10, 0, 0)->format('Y-m-d H:i:s'),
             'passenger_count' => 2,
             'priority' => 'Normal',
         ]);

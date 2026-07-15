@@ -8,12 +8,16 @@ use App\Http\Controllers\Api\VehicleController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\SecurityController;
+use App\Http\Controllers\Api\SecurityGuardController;
 
 // ===== AUTH ENDPOINTS (public) =====
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:3,1');
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:3,1');
+Route::get('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
+Route::get('/public-stats', [\App\Http\Controllers\Api\SettingController::class, 'getPublicStats']);
 
 // Protected API routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -22,6 +26,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/profile', [AuthController::class, 'profile']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/profile/avatar', [AuthController::class, 'updateAvatar']);
     Route::put('/profile/status', [AuthController::class, 'updateStatus']);
 
     // Get current authenticated user (legacy, keep for compatibility)
@@ -30,12 +35,16 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // ===== USER MANAGEMENT ENDPOINTS (Admin only) =====
+    Route::get('/users-search', [UserController::class, 'search']);
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
     Route::get('/users/{user}', [UserController::class, 'show']);
     Route::put('/users/{user}', [UserController::class, 'update']);
     Route::patch('/users/{user}', [UserController::class, 'update']);
     Route::delete('/users/{user}', [UserController::class, 'destroy']);
+    Route::post('/users/{user}/toggle-active', [UserController::class, 'toggleActive']);
+    Route::post('/users/{user}/toggle-request', [UserController::class, 'toggleRequest']);
+    Route::post('/users/{user}/driver-duty', [UserController::class, 'updateDriverDuty']);
 
     // ===== REQUEST ENDPOINTS =====
     Route::get('/requests', [RequestController::class, 'index']);
@@ -48,6 +57,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/requests/{vehicleRequest}/reject', [RequestController::class, 'reject']);
     Route::post('/requests/{vehicleRequest}/start', [RequestController::class, 'start']);
     Route::post('/requests/{vehicleRequest}/complete', [RequestController::class, 'complete']);
+    Route::post('/requests/{vehicleRequest}/adjust-driver', [RequestController::class, 'adjustDriver']);
+
+    // ===== SECURITY SCAN ENDPOINTS =====
+    Route::get('/security/lookup', [SecurityController::class, 'lookup']);
+    Route::post('/security/scan', [SecurityController::class, 'scan']);
+    Route::get('/security-guards', [SecurityGuardController::class, 'index']);
+    Route::post('/security-guards', [SecurityGuardController::class, 'store']);
+    Route::delete('/security-guards/{securityGuard}', [SecurityGuardController::class, 'destroy']);
 
     // ===== VEHICLE ENDPOINTS =====
     Route::get('/vehicles', [VehicleController::class, 'index']);
@@ -70,4 +87,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/audit-logs', [AuditLogController::class, 'index']);
     Route::get('/audit-logs/{type}/{id}', [AuditLogController::class, 'show']);
     Route::get('/my-activities', [AuditLogController::class, 'myActivities']);
+
+    // ===== SYSTEM CONFIG ENDPOINTS (Admin only) =====
+    Route::get('/system-config', [\App\Http\Controllers\Api\SettingController::class, 'index']);
+    Route::put('/system-config', [\App\Http\Controllers\Api\SettingController::class, 'update']);
+    Route::post('/system-config/logo', [\App\Http\Controllers\Api\SettingController::class, 'uploadLogo']);
+    Route::get('/system-config/stats', [\App\Http\Controllers\Api\SettingController::class, 'getStats']);
+    Route::post('/system-config/purge-logs', [\App\Http\Controllers\Api\SettingController::class, 'purgeLogs']);
+    Route::post('/system-config/flush-cache', [\App\Http\Controllers\Api\SettingController::class, 'flushCache']);
 });

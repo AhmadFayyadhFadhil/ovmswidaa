@@ -21,3 +21,10 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+/scratch
+/query_passengers.php
+/query_request_34.php
+/test-api-profile.php
+/test_output.log
+

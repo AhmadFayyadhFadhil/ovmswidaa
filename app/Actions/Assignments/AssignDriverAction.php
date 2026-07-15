@@ -11,30 +11,46 @@ use Exception;
 
 class AssignDriverAction
 {
-    public function execute(Request $request, int $driverId, ?string $notes = null): Assignment
+    public function execute(Request $request, int $driverId, int $vehicleId, ?string $notes = null, array $data = []): Assignment
     {
-        return DB::transaction(function () use ($request, $driverId, $notes) {
+        return DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
             // Lock request row to prevent race condition
             $request = Request::where('id', $request->id)->lockForUpdate()->first();
 
-            if (!in_array($request->status, [RequestStatus::APPROVED_DEPARTMENT, RequestStatus::APPROVED_HRD, RequestStatus::APPROVED_HRD_GA], true)) {
-                throw new Exception("Request must be approved by Department Head or HRD first before assigning a driver.");
+            $allowed = [
+                RequestStatus::SUBMITTED,
+                RequestStatus::APPROVED_DEPARTMENT,
+                RequestStatus::WAITING_DRIVER,
+                RequestStatus::DRIVER_ASSIGNED,
+            ];
+            if ($request->status === RequestStatus::DRIVER_ASSIGNED) {
+                $hasAssignments = Assignment::where('request_id', $request->id)->exists();
+                if ($hasAssignments) {
+                    throw new Exception("Request tidak dapat dijadwalkan dalam status ini.");
+                }
+            } elseif (!in_array($request->status, $allowed, true)) {
+                throw new Exception("Request tidak dapat dijadwalkan dalam status ini.");
             }
 
             // Validate driver availability status
             $driver = \App\Models\User::findOrFail($driverId);
             if (($driver->availability_status ?? 'available') !== 'available') {
-                throw new Exception("Driver yang dipilih sedang tidak tersedia atau sedang bertugas.");
+                throw new Exception("Driver {$driver->name} sedang tidak tersedia atau sedang bertugas.");
+            }
+
+            // Validate driver shift/work hours (status available dari jam sekian sampai sekian)
+            if ($driver->availability_start && $driver->availability_end) {
+                $reqTime = date('H:i:s', strtotime($request->start_time));
+                if ($reqTime < $driver->availability_start || $reqTime > $driver->availability_end) {
+                    throw new Exception("Waktu keberangkatan request ({$reqTime}) di luar jam kerja Driver {$driver->name} ({$driver->availability_start} - {$driver->availability_end}).");
+                }
             }
 
             // ===== VALIDATE DRIVER TIME CONFLICT =====
             $this->validateDriverTimeConflict($driverId, $request);
 
             // ===== VALIDATE VEHICLE TIME CONFLICT =====
-            // Vehicle akan di-assign sebelum trip dimulai, tapi kita perlu cek jika sudah ada vehicle_id
-            if ($request->vehicle_id) {
-                $this->validateVehicleTimeConflict($request->vehicle_id, $request);
-            }
+            $this->validateVehicleTimeConflict($vehicleId, $request);
 
             // Create assignment
             $assignment = Assignment::create([
@@ -50,8 +66,13 @@ class AssignDriverAction
             $request->update([
                 'status' => RequestStatus::WAITING_DRIVER,
                 'driver_id' => $driverId,
+                'vehicle_id' => $vehicleId,
                 'assigned_by' => auth()->id(),
                 'assigned_at' => now(),
+                'is_external' => false,
+                'third_party_cost' => 0,
+                'estimated_duration' => $data['estimated_duration'] ?? $request->estimated_duration,
+                'priority' => $data['priority'] ?? $request->priority->value ?? 'Normal',
                 'driver_response_status' => 'pending_driver',
             ]);
 
@@ -64,37 +85,24 @@ class AssignDriverAction
      */
     private function validateDriverTimeConflict(int $driverId, Request $request): void
     {
-        // Skip conflict check if end_time is not set
-        if (is_null($request->end_time)) {
-            return;
-        }
+        $driver = \App\Models\User::find($driverId);
+        $driverName = $driver ? $driver->name : 'yang bersangkutan';
+        $reqDate = date('Y-m-d', strtotime($request->start_time));
 
         $conflictingRequests = Request::where('driver_id', $driverId)
+            ->where('id', '!=', $request->id)
             ->whereIn('status', [
                 RequestStatus::WAITING_DRIVER,
                 RequestStatus::DRIVER_ASSIGNED,
                 RequestStatus::ON_GOING,
+                RequestStatus::COMPLETED,
             ])
-            ->where(function ($query) use ($request) {
-                // Check if time overlaps
-                $query->whereBetween('start_time', [$request->start_time, $request->end_time])
-                    ->orWhereBetween('end_time', [$request->start_time, $request->end_time])
-                    ->orWhere(function ($q) use ($request) {
-                        // Request completely contains existing request
-                        $q->where('start_time', '<=', $request->start_time)
-                          ->where('end_time', '>=', $request->end_time);
-                    });
-            })
+            ->whereDate('start_time', $reqDate)
             ->get();
 
         if ($conflictingRequests->isNotEmpty()) {
-            $conflicts = $conflictingRequests->map(function ($r) {
-                return "({$r->start_time->format('d-m-Y H:i')} - {$r->end_time->format('d-m-Y H:i')})";
-            })->join(', ');
-            
             throw new Exception(
-                "Driver sudah memiliki assignment pada waktu yang sama: {$conflicts}. " .
-                "Silakan pilih driver lain atau ubah jadwal."
+                "Driver {$driverName} sudah memiliki assignment pada tanggal yang sama. Silakan pilih driver lain yang tersedia."
             );
         }
     }
@@ -104,37 +112,24 @@ class AssignDriverAction
      */
     private function validateVehicleTimeConflict(int $vehicleId, Request $request): void
     {
-        // Skip conflict check if end_time is not set
-        if (is_null($request->end_time)) {
-            return;
-        }
+        $vehicle = \App\Models\Vehicle::find($vehicleId);
+        $vehiclePlate = $vehicle ? "{$vehicle->model} ({$vehicle->plate})" : 'yang bersangkutan';
+        $reqDate = date('Y-m-d', strtotime($request->start_time));
 
         $conflictingRequests = Request::where('vehicle_id', $vehicleId)
+            ->where('id', '!=', $request->id)
             ->whereIn('status', [
                 RequestStatus::WAITING_DRIVER,
                 RequestStatus::DRIVER_ASSIGNED,
                 RequestStatus::ON_GOING,
+                RequestStatus::COMPLETED,
             ])
-            ->where(function ($query) use ($request) {
-                // Check if time overlaps
-                $query->whereBetween('start_time', [$request->start_time, $request->end_time])
-                    ->orWhereBetween('end_time', [$request->start_time, $request->end_time])
-                    ->orWhere(function ($q) use ($request) {
-                        // Request completely contains existing request
-                        $q->where('start_time', '<=', $request->start_time)
-                          ->where('end_time', '>=', $request->end_time);
-                    });
-            })
+            ->whereDate('start_time', $reqDate)
             ->get();
 
         if ($conflictingRequests->isNotEmpty()) {
-            $conflicts = $conflictingRequests->map(function ($r) {
-                return "({$r->start_time->format('d-m-Y H:i')} - {$r->end_time->format('d-m-Y H:i')})";
-            })->join(', ');
-            
             throw new Exception(
-                "Kendaraan sudah memiliki assignment pada waktu yang sama: {$conflicts}. " .
-                "Silakan pilih kendaraan lain atau ubah jadwal."
+                "Kendaraan {$vehiclePlate} sudah memiliki assignment pada tanggal yang sama. Silakan pilih kendaraan lain yang tersedia."
             );
         }
     }

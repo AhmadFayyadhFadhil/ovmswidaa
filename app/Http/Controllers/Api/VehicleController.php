@@ -21,6 +21,66 @@ class VehicleController extends Controller
 
         $query = Vehicle::query();
 
+        $excludeRequestId = $request->query('exclude_busy_for_request_id');
+        if ($excludeRequestId) {
+            $targetRequest = \App\Models\Request::find($excludeRequestId);
+            if ($targetRequest && $targetRequest->start_time) {
+                $startTime = $targetRequest->start_time;
+                $endTime = $targetRequest->end_time;
+                if (!$endTime) {
+                    $duration = $targetRequest->estimated_duration ?: 3;
+                    $endTime = (clone $startTime)->addHours($duration);
+                }
+                
+                $overlappingRequestIds = \App\Models\Request::where('id', '!=', $targetRequest->id)
+                    ->where('status', '!=', \App\Enums\RequestStatus::REJECTED)
+                    ->where('status', '!=', \App\Enums\RequestStatus::COMPLETED)
+                    ->where(function ($q) use ($startTime, $endTime) {
+                        $q->where(function ($sub) use ($startTime, $endTime) {
+                            $sub->where('start_time', '>=', $startTime)
+                                ->where('start_time', '<', $endTime);
+                        })
+                        ->orWhere(function ($sub) use ($startTime, $endTime) {
+                            $sub->where('end_time', '>', $startTime)
+                                ->where('end_time', '<=', $endTime);
+                        })
+                        ->orWhere(function ($sub) use ($startTime, $endTime) {
+                            $sub->where('start_time', '<=', $startTime)
+                                ->where('end_time', '>=', $endTime);
+                        });
+                    })
+                    ->pluck('id');
+
+                $busyVehicleIds = [];
+
+                $busyFromRequests = \App\Models\Request::whereIn('id', $overlappingRequestIds)
+                    ->whereNotNull('vehicle_id')
+                    ->pluck('vehicle_id')
+                    ->toArray();
+                $busyVehicleIds = array_merge($busyVehicleIds, $busyFromRequests);
+
+                $busyFromAssignments = \App\Models\Assignment::whereIn('request_id', $overlappingRequestIds)
+                    ->where('status', '!=', 'rejected')
+                    ->whereNotNull('vehicle_id')
+                    ->pluck('vehicle_id')
+                    ->toArray();
+                $busyVehicleIds = array_merge($busyVehicleIds, $busyFromAssignments);
+
+                $busyFromTrips = \App\Models\OperationalTrip::whereIn('request_id', $overlappingRequestIds)
+                    ->where('status', '!=', 'cancelled')
+                    ->whereNotNull('vehicle_id')
+                    ->pluck('vehicle_id')
+                    ->toArray();
+                $busyVehicleIds = array_merge($busyVehicleIds, $busyFromTrips);
+
+                $busyVehicleIds = array_unique(array_filter($busyVehicleIds));
+
+                if (!empty($busyVehicleIds)) {
+                    $query->whereNotIn('id', $busyVehicleIds);
+                }
+            }
+        }
+
         if ($status) {
             $upperStatus = strtoupper($status);
             if ($upperStatus === 'AVAILABLE') {
@@ -80,6 +140,11 @@ class VehicleController extends Controller
 
     public function show(Vehicle $vehicle): JsonResponse
     {
+        $authUser = Auth::user();
+        if (!$authUser->hasRoleDirect(['Admin', 'GA', 'HRHead', 'Approver', 'Driver', 'Security'])) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
         return response()->json([
             'status' => 'success',
             'data'   => new VehicleResource($vehicle),
