@@ -56,8 +56,8 @@ class SettingController extends Controller
             $frontendKey = $keyMap[$setting->key] ?? $setting->key;
             $value = $setting->value;
             if ($setting->key === 'company_logo' && $value) {
-                // Prepend asset URL to make it a full public URL
-                $value = asset('storage/' . $value);
+                // Prepend custom caching assets route URL
+                $value = url('api/assets/settings/' . basename($value));
             } elseif ($setting->type === 'boolean') {
                 $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
             }
@@ -179,7 +179,7 @@ class SettingController extends Controller
             return response()->json([
                 'status' => 'success',
                 'data' => [
-                    'logo_url' => asset('storage/' . $path)
+                    'logo_url' => url('api/assets/settings/' . basename($path))
                 ]
             ]);
         }
@@ -265,7 +265,7 @@ class SettingController extends Controller
 
         $systemName = Setting::getValue('system_name', 'OVMS');
         $logo = Setting::getValue('company_logo');
-        $logoUrl = $logo ? asset('storage/' . $logo) : null;
+        $logoUrl = $logo ? url('api/assets/settings/' . basename($logo)) : null;
 
         return response()->json([
             'status' => 'success',
@@ -276,6 +276,23 @@ class SettingController extends Controller
                 'system_name' => $systemName,
                 'company_logo' => $logoUrl,
             ]
+        ]);
+    }
+
+    /**
+     * Serve setting logo file with optimal caching headers.
+     */
+    public function serveLogo($filename): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $path = storage_path('app/public/settings/' . $filename);
+        if (!file_exists($path)) {
+            abort(404);
+        }
+
+        return response()->file($path, [
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'Pragma' => 'cache',
+            'Expires' => gmdate('D, d M Y H:i:s \G\M\T', time() + 31536000),
         ]);
     }
 }
