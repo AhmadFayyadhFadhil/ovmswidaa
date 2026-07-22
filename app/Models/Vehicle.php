@@ -17,6 +17,7 @@ class Vehicle extends Model
         'status',
         'odometer',
         'photo',
+        'stnk_photo',
         'last_maintained',
     ];
 

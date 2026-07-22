@@ -10,6 +10,30 @@ use Illuminate\Validation\Rules\Enum;
 class StoreRequest extends FormRequest
 {
     /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->passengers)) {
+            $decoded = json_decode($this->passengers, true);
+            if (is_array($decoded)) {
+                $this->merge(['passengers' => $decoded]);
+            }
+        }
+
+        if (is_string($this->itineraries)) {
+            $decoded = json_decode($this->itineraries, true);
+            if (is_array($decoded)) {
+                $this->merge(['itineraries' => $decoded]);
+            }
+        }
+
+        if (!$this->hasFile('itinerary_file')) {
+            $this->offsetUnset('itinerary_file');
+        }
+    }
+
+    /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
@@ -73,6 +97,15 @@ class StoreRequest extends FormRequest
             'external_trip_type' => 'nullable|string|in:round_trip,one_way',
             'external_departure_cost' => 'nullable|numeric',
             'external_return_cost' => 'nullable|numeric',
+            // Multi-Day Itinerary fields
+            'itinerary_file' => 'nullable|file|mimes:jpeg,jpg,png,pdf|max:10240',
+            'itineraries' => 'nullable|array',
+            'itineraries.*.date' => 'required_with:itineraries|date',
+            'itineraries.*.morning_time' => 'nullable|string',
+            'itineraries.*.morning_destination' => 'nullable|string',
+            'itineraries.*.afternoon_time' => 'nullable|string',
+            'itineraries.*.afternoon_destination' => 'nullable|string',
+            'itineraries.*.passengers_notes' => 'nullable|string',
         ];
     }
 

@@ -59,13 +59,6 @@ class VehicleController extends Controller
                     ->toArray();
                 $busyVehicleIds = array_merge($busyVehicleIds, $busyFromRequests);
 
-                $busyFromAssignments = \App\Models\Assignment::whereIn('request_id', $overlappingRequestIds)
-                    ->where('status', '!=', 'rejected')
-                    ->whereNotNull('vehicle_id')
-                    ->pluck('vehicle_id')
-                    ->toArray();
-                $busyVehicleIds = array_merge($busyVehicleIds, $busyFromAssignments);
-
                 $busyFromTrips = \App\Models\OperationalTrip::whereIn('request_id', $overlappingRequestIds)
                     ->where('status', '!=', 'cancelled')
                     ->whereNotNull('vehicle_id')
@@ -128,6 +121,9 @@ class VehicleController extends Controller
         if ($request->hasFile('photo')) {
             $validated['photo'] = $request->file('photo')->store('vehicles/photos', 'public');
         }
+        if ($request->hasFile('stnk_photo')) {
+            $validated['stnk_photo'] = $request->file('stnk_photo')->store('vehicles/stnk', 'public');
+        }
 
         $vehicle = Vehicle::create($validated);
 
@@ -160,6 +156,9 @@ class VehicleController extends Controller
         $validated = $request->validated();
         if ($request->hasFile('photo')) {
             $validated['photo'] = $request->file('photo')->store('vehicles/photos', 'public');
+        }
+        if ($request->hasFile('stnk_photo')) {
+            $validated['stnk_photo'] = $request->file('stnk_photo')->store('vehicles/stnk', 'public');
         }
 
         $vehicle->update($validated);

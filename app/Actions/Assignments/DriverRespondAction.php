@@ -35,6 +35,7 @@ class DriverRespondAction
                 $assignment->request()->update([
                     'status' => RequestStatus::SUBMITTED,
                     'driver_id' => null,
+                    'vehicle_id' => null,
                     'assigned_by' => null,
                     'assigned_at' => null,
                     'rejected_reason' => $rejectReason,

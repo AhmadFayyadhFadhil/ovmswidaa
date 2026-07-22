@@ -66,6 +66,7 @@ class RolePermissionSeeder extends Seeder
             ]));
 
             $approver->syncPermissions($allPerms->whereIn('name', [
+                'create-request', 'view-own-request',
                 'view-all-requests', 'approve-request', 'reject-request',
                 'view-vehicle', 'view-audit-log', 'create-assignment', 'update-assignment',
             ]));

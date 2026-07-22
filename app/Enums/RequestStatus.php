@@ -14,4 +14,5 @@ enum RequestStatus: string
     case ON_GOING = 'on_going';
     case COMPLETED = 'completed';
     case REJECTED = 'rejected';
+    case CANCELLED = 'cancelled';
 }

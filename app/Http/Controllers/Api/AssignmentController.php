@@ -28,7 +28,7 @@ class AssignmentController extends Controller
         $perPage = $request->query('per_page', 15);
         $status  = $request->query('status');
 
-        $query = Assignment::with(['request.user', 'request.passengers', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'driver', 'assignedBy']);
+        $query = Assignment::with(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy']);
 
         if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
             $query->where('driver_id', $user->id);
@@ -92,9 +92,14 @@ class AssignmentController extends Controller
 
             $newStatus = \App\Enums\RequestStatus::DRIVER_ASSIGNED;
 
+            // Generate QR token if not yet set (handles both null AND empty string cases)
+            $qrToken = !empty($vehicleRequest->qr_code_token)
+                ? $vehicleRequest->qr_code_token
+                : ('REQ-' . time() . '-' . bin2hex(random_bytes(4)));
+
             $vehicleRequest->update([
                 'status' => $newStatus,
-                'qr_code_token' => $vehicleRequest->qr_code_token ?? ('REQ-' . time() . '-' . bin2hex(random_bytes(4))),
+                'qr_code_token' => $qrToken,
                 'is_external' => true,
                 'third_party_cost' => $validated['third_party_cost'] ?? 0,
                 'estimated_duration' => $validated['estimated_duration'] ?? null,
@@ -196,7 +201,7 @@ class AssignmentController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Kendaraan berhasil di-assign ke driver',
-                'data'    => new AssignmentResource($assignment->load(['request', 'driver', 'assignedBy'])),
+                'data'    => new AssignmentResource($assignment->load(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy'])),
             ], 201);
         } catch (\Exception $e) {
             \Log::error('Assignment creation error:', [
@@ -259,7 +264,7 @@ class AssignmentController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Respon driver berhasil disimpan',
-                'data'    => new AssignmentResource($assignment->fresh(['request.operationalTrip.vehicle', 'driver', 'assignedBy'])),
+                'data'    => new AssignmentResource($assignment->fresh(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy'])),
             ], 200);
         } catch (\Exception $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
@@ -297,6 +302,7 @@ class AssignmentController extends Controller
         $assignment->request()->update([
             'status'      => $revertStatus,
             'driver_id'   => null,
+            'vehicle_id'  => null,
             'assigned_by' => null,
             'assigned_at' => null,
             'driver_response_status' => null,
@@ -306,5 +312,111 @@ class AssignmentController extends Controller
         $assignment->delete();
 
         return response()->json(['status' => 'success', 'message' => 'Assignment berhasil dibatalkan'], 200);
+    }
+
+    public function storeDailyAssignments(Request $request, VehicleRequest $vehicleRequest): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !$user->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'daily_assignments' => 'required|array|min:1',
+            'daily_assignments.*.itinerary_id' => 'required|exists:request_itineraries,id',
+            'daily_assignments.*.driver_id' => 'nullable|exists:users,id',
+            'daily_assignments.*.vehicle_id' => 'nullable|exists:vehicles,id',
+            'daily_assignments.*.is_external' => 'nullable|boolean',
+            'daily_assignments.*.external_driver_name' => 'nullable|string|max:255',
+            'daily_assignments.*.external_license_plate' => 'nullable|string|max:255',
+            'daily_assignments.*.external_fleet_info' => 'nullable|string|max:255',
+            'daily_assignments.*.third_party_cost' => 'nullable|numeric',
+        ]);
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated, $user) {
+            foreach ($validated['daily_assignments'] as $asg) {
+                $itinerary = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)
+                    ->where('id', $asg['itinerary_id'])
+                    ->firstOrFail();
+
+                $isExternal = !empty($asg['is_external']);
+                $driverId = $asg['driver_id'] ?? null;
+                $vehicleId = $asg['vehicle_id'] ?? null;
+
+                if (!$isExternal && $driverId) {
+                    // Check driver conflict on this itinerary's date
+                    $driver = \App\Models\User::find($driverId);
+                    $driverName = $driver ? $driver->name : 'Driver';
+                    $itDateStr = $itinerary->date ? $itinerary->date->format('Y-m-d') : null;
+
+                    $conflictingDriver = \App\Models\RequestItinerary::where('driver_id', $driverId)
+                        ->where('id', '!=', $itinerary->id)
+                        ->where('date', $itDateStr)
+                        ->whereIn('status', ['assigned', 'on_going', 'completed'])
+                        ->exists();
+
+                    if ($conflictingDriver) {
+                        throw new \Exception("Driver {$driverName} sudah memiliki tugas pada tanggal {$itDateStr}. Silakan pilih driver lain.");
+                    }
+                }
+
+                if (!$isExternal && $vehicleId) {
+                    // Check vehicle conflict on this itinerary's date
+                    $vehicle = \App\Models\Vehicle::find($vehicleId);
+                    $vehicleName = $vehicle ? "{$vehicle->model} ({$vehicle->plate})" : 'Kendaraan';
+                    $itDateStr = $itinerary->date ? $itinerary->date->format('Y-m-d') : null;
+
+                    $conflictingVehicle = \App\Models\RequestItinerary::where('vehicle_id', $vehicleId)
+                        ->where('id', '!=', $itinerary->id)
+                        ->where('date', $itDateStr)
+                        ->whereIn('status', ['assigned', 'on_going', 'completed'])
+                        ->exists();
+
+                    if ($conflictingVehicle) {
+                        throw new \Exception("Kendaraan {$vehicleName} sudah ditugaskan pada tanggal {$itDateStr}. Silakan pilih kendaraan lain.");
+                    }
+                }
+
+                $itinerary->update([
+                    'driver_id' => $isExternal ? null : $driverId,
+                    'vehicle_id' => $isExternal ? null : $vehicleId,
+                    'is_external' => $isExternal,
+                    'external_driver_name' => $isExternal ? ($asg['external_driver_name'] ?? null) : null,
+                    'external_license_plate' => $isExternal ? ($asg['external_license_plate'] ?? null) : null,
+                    'external_fleet_info' => $isExternal ? ($asg['external_fleet_info'] ?? null) : null,
+                    'third_party_cost' => $isExternal ? ($asg['third_party_cost'] ?? 0) : 0,
+                    'status' => 'assigned',
+                ]);
+
+                // Create Assignment row for driver if internal
+                if (!$isExternal && $driverId) {
+                    Assignment::create([
+                        'request_id' => $vehicleRequest->id,
+                        'driver_id' => $driverId,
+                        'assigned_by' => $user->id,
+                        'assigned_at' => now(),
+                        'notes' => "Assignment per tanggal " . ($itinerary->date ? $itinerary->date->format('d-m-Y') : ''),
+                        'status' => 'accepted',
+                    ]);
+                }
+            }
+
+            $qrToken = !empty($vehicleRequest->qr_code_token)
+                ? $vehicleRequest->qr_code_token
+                : ('REQ-' . time() . '-' . bin2hex(random_bytes(4)));
+
+            $vehicleRequest->update([
+                'status' => \App\Enums\RequestStatus::DRIVER_ASSIGNED,
+                'qr_code_token' => $qrToken,
+                'assigned_by' => $user->id,
+                'assigned_at' => now(),
+            ]);
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Penugasan harian berhasil disimpan',
+            'data' => new RequestResource($vehicleRequest->fresh(['user', 'passengers.department', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'approvals.approver', 'driver', 'vehicle', 'operationalTrip.driver', 'operationalTrip.vehicle'])),
+        ], 200);
     }
 }

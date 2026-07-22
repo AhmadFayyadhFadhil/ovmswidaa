@@ -34,7 +34,11 @@ class ApproveRequestAction
             if ($status === 'rejected') {
                 $newStatus = RequestStatus::REJECTED;
             } else {
-                $newStatus = RequestStatus::DRIVER_ASSIGNED;
+                if ($role === 'dept_head') {
+                    $newStatus = RequestStatus::APPROVED_DEPARTMENT;
+                } else {
+                    $newStatus = RequestStatus::DRIVER_ASSIGNED;
+                }
                 if (!$request->qr_code_token) {
                     $request->update([
                         'qr_code_token' => 'REQ-' . time() . '-' . bin2hex(random_bytes(4)),

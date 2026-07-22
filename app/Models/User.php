@@ -163,34 +163,6 @@ class User extends Authenticatable
 
     public function getAvailabilityStatusAttribute($value)
     {
-        if (is_null($value)) {
-            return 'available';
-        }
-
-        if ($value === 'unavailable') {
-            return 'unavailable';
-        }
-
-        if (in_array($value, ['assigned', 'on_trip'])) {
-            $now = now();
-            $hasActiveTrip = \App\Models\Request::where('driver_id', $this->id)
-                ->whereIn('status', [\App\Enums\RequestStatus::DRIVER_ASSIGNED, \App\Enums\RequestStatus::ON_GOING])
-                ->where(function ($query) use ($now) {
-                    $query->where('status', \App\Enums\RequestStatus::ON_GOING)
-                        ->orWhere(function ($q) use ($now) {
-                            $q->where('start_time', '<=', $now)
-                              ->where('end_time', '>=', $now);
-                        });
-                })
-                ->exists();
-
-            if ($hasActiveTrip) {
-                return 'on_trip';
-            }
-
-            return 'available';
-        }
-
-        return $value;
+        return $value ?? 'available';
     }
 }

@@ -284,7 +284,9 @@ class SettingController extends Controller
      */
     public function serveLogo($filename): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
-        $path = storage_path('app/public/settings/' . $filename);
+        // Security Hardening: Use basename to prevent Directory Traversal attacks
+        $safeFilename = basename($filename);
+        $path = storage_path('app/public/settings/' . $safeFilename);
         if (!file_exists($path)) {
             abort(404);
         }

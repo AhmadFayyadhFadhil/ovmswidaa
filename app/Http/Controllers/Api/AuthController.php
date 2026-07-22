@@ -133,6 +133,7 @@ class AuthController extends Controller
                 'phone'              => $user->phone,
                 'location'           => $user->location,
                 'avatar_url'         => $user->avatar ? url('storage/' . $user->avatar) : null,
+                'sim_a_photo_url'    => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
                 'department_id'      => $user->department_id,
                 'department_name'    => $user->department?->name,
                 'is_department_head' => $user->is_department_head,

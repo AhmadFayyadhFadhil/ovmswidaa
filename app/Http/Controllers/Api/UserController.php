@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use App\Enums\RequestStatus;
 use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
@@ -403,6 +404,26 @@ class UserController extends Controller
             'availability_end'    => 'nullable|string',
         ]);
 
+        if (isset($validated['availability_status']) && $validated['availability_status'] === 'unavailable') {
+            $conflict = \App\Models\Request::where('driver_id', $user->id)
+                ->whereIn('status', [
+                    RequestStatus::WAITING_DRIVER,
+                    RequestStatus::DRIVER_ASSIGNED,
+                    RequestStatus::ON_GOING,
+                ])
+                ->whereDate('start_time', '>=', now()->toDateString())
+                ->orderBy('start_time', 'asc')
+                ->first();
+
+            if ($conflict) {
+                $formattedDate = date('d-m-Y', strtotime($conflict->start_time));
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => "Driver {$user->name} memiliki jadwal penugasan aktif pada tanggal {$formattedDate} (Request #{$conflict->id}). Silakan ubah driver pada request tersebut terlebih dahulu."
+                ], 422);
+            }
+        }
+
         $user->update($validated);
 
         return response()->json([
@@ -424,6 +445,7 @@ class UserController extends Controller
             'department_name' => $user->department?->name,
             'availability_status' => $user->availability_status,
             'is_department_head' => $user->is_department_head ?? false,
+            'avatar_url'     => $user->avatar ? url('storage/' . $user->avatar) : null,
             'sim_a_photo_url' => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
             'is_active'  => $user->is_active ?? false,
             'can_request' => $user->can_request ?? false,
@@ -442,7 +464,7 @@ class UserController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        if (!$user->hasRoleDirect(['Admin', 'GA', 'Approver'])) {
+        if (!$user->hasRoleDirect(['Admin', 'GA', 'Approver', 'Employee', 'Driver'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 

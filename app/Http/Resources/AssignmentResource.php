@@ -17,7 +17,12 @@ class AssignmentResource extends JsonResource
                 'name' => $this->request->operationalTrip->vehicle->name,
                 'plate_number' => $this->request->operationalTrip->vehicle->plate_number,
                 'type' => $this->request->operationalTrip->vehicle->type,
-            ] : null,
+            ] : ($this->request?->vehicle ? [
+                'id' => $this->request->vehicle->id,
+                'name' => $this->request->vehicle->name,
+                'plate_number' => $this->request->vehicle->plate_number,
+                'type' => $this->request->vehicle->type,
+            ] : null),
             'driver' => [
                 'id' => $this->driver?->id,
                 'name' => $this->driver?->name,

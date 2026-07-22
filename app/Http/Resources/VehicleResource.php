@@ -23,6 +23,7 @@ class VehicleResource extends JsonResource
             'odometer' => $this->odometer,
             'status' => $this->status,
             'photo_url' => $this->photo ? url('storage/' . $this->photo) : null,
+            'stnk_photo_url' => $this->stnk_photo ? url('storage/' . $this->stnk_photo) : null,
             'last_maintained' => $this->last_maintained,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

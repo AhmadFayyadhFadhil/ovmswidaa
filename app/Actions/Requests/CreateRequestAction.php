@@ -32,12 +32,19 @@ class CreateRequestAction
             throw new \Exception("Pengajuan gagal. Kuota maksimal request untuk tanggal {$date} telah penuh ({$maxRequests} request).");
         }
 
-        // Validate passenger same-day availability
+        // Validate passenger same-day availability and duplicates
         if (!empty($data['passengers'])) {
+            $seenNames = [];
             foreach ($data['passengers'] as $passengerData) {
                 if (empty($passengerData['name'])) continue;
                 
                 $name = trim($passengerData['name']);
+                $lowerName = strtolower($name);
+
+                if (in_array($lowerName, $seenNames, true)) {
+                    throw new \Exception("Nama penumpang '{$name}' tidak boleh diduplikasi dalam satu pengajuan.");
+                }
+                $seenNames[] = $lowerName;
                 
                 $hasConflict = Passenger::where('name', $name)
                     ->whereHas('request', function ($q) use ($date) {
@@ -51,7 +58,6 @@ class CreateRequestAction
                               RequestStatus::WAITING_DRIVER,
                               RequestStatus::DRIVER_ASSIGNED,
                               RequestStatus::ON_GOING,
-                              RequestStatus::COMPLETED
                           ]);
                     })
                     ->exists();
@@ -64,7 +70,7 @@ class CreateRequestAction
 
         return DB::transaction(function () use ($data) {
             $user = auth()->user();
-            $isGA = $user->hasRoleDirect('GA') || $user->hasRoleDirect('Admin');
+            $isGA = $user->hasRoleDirect('GA') || $user->hasRoleDirect('Admin') || $user->isHrGaHead();
             
             $status = RequestStatus::SUBMITTED;
             $driverId = $data['driver_id'] ?? null;
@@ -77,16 +83,21 @@ class CreateRequestAction
             if ($isGA) {
                 $priority = 'Urgent';
                 if ($isExternal) {
-                    $status = RequestStatus::ASSIGNED_BY_GA;
+                    $status = RequestStatus::DRIVER_ASSIGNED;
                     $assignedBy = $user->id;
                     $assignedAt = now();
                 } elseif ($driverId && $vehicleId) {
-                    $status = RequestStatus::ASSIGNED_BY_GA;
+                    $status = RequestStatus::DRIVER_ASSIGNED;
                     $assignedBy = $user->id;
                     $assignedAt = now();
                 } else {
                     $status = RequestStatus::APPROVED_DEPARTMENT;
                 }
+            }
+
+            $qrCodeToken = null;
+            if ($status === RequestStatus::DRIVER_ASSIGNED) {
+                $qrCodeToken = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));
             }
 
             $request = Request::create([
@@ -101,7 +112,8 @@ class CreateRequestAction
                 'priority' => $priority,
                 'status' => $status,
                 'notes' => $data['notes'] ?? null,
-                'qr_code_token' => null,
+                'itinerary_file_path' => $data['itinerary_file_path'] ?? null,
+                'qr_code_token' => $qrCodeToken,
                 'driver_id' => $isExternal ? null : $driverId,
                 'vehicle_id' => $isExternal ? null : $vehicleId,
                 'assigned_by' => $assignedBy,
@@ -154,6 +166,22 @@ class CreateRequestAction
                         'name' => $passengerData['name'],
                         'department_id' => $passengerData['department_id'] ?? null,
                         'user_id' => $userId,
+                    ]);
+                }
+            }
+
+            // Create itineraries if provided (multi-day itinerary builder)
+            if (!empty($data['itineraries']) && is_array($data['itineraries'])) {
+                foreach ($data['itineraries'] as $it) {
+                    \App\Models\RequestItinerary::create([
+                        'request_id'            => $request->id,
+                        'date'                  => $it['date'],
+                        'morning_time'          => $it['morning_time'] ?? null,
+                        'morning_destination'   => $it['morning_destination'] ?? null,
+                        'afternoon_time'        => $it['afternoon_time'] ?? null,
+                        'afternoon_destination' => $it['afternoon_destination'] ?? null,
+                        'passengers_notes'      => $it['passengers_notes'] ?? null,
+                        'status'                => 'pending',
                     ]);
                 }
             }

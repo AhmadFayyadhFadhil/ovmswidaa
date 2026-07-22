@@ -29,6 +29,7 @@ class StoreVehicleRequest extends FormRequest
             'capacity' => 'nullable|integer|min:1',
             'odometer' => 'nullable|integer|min:0',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:1024',
+            'stnk_photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
             'status' => 'sometimes|in:Available,In Use,Maintenance,Retired',
         ];
     }

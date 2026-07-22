@@ -31,6 +31,7 @@ class UpdateVehicleRequest extends FormRequest
             'capacity' => 'sometimes|nullable|integer|min:1',
             'odometer' => 'sometimes|nullable|integer|min:0',
             'photo' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,webp|max:1024',
+            'stnk_photo' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
             'status' => 'sometimes|in:Available,In Use,Maintenance,Retired',
             'last_maintained' => 'sometimes|nullable|date',
         ];

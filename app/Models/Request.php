@@ -23,6 +23,7 @@ class Request extends Model
         'priority',
         'status',
         'notes',
+        'itinerary_file_path',
         'driver_id',
         'vehicle_id',
         'assigned_by',
@@ -98,9 +99,19 @@ class Request extends Model
         return $this->hasMany(Assignment::class);
     }
 
+    public function itineraries()
+    {
+        return $this->hasMany(RequestItinerary::class)->orderBy('date', 'asc');
+    }
+
     public function operationalTrip()
     {
         return $this->hasOne(OperationalTrip::class);
+    }
+
+    public function operationalTrips()
+    {
+        return $this->hasMany(OperationalTrip::class);
     }
 
     public function driver()
@@ -116,6 +127,80 @@ class Request extends Model
     public function passengers()
     {
         return $this->hasMany(Passenger::class);
+    }
+
+    // Status Sync helper for multi-day requests
+    public function syncStatus()
+    {
+        if ($this->relationLoaded('itineraries') && $this->itineraries->isNotEmpty()) {
+            $allCount = $this->itineraries->count();
+            $doneCount = $this->itineraries->where('status', 'completed')->count();
+
+            if ($doneCount >= $allCount) {
+                if ($this->status !== RequestStatus::COMPLETED) {
+                    $this->update([
+                        'status' => RequestStatus::COMPLETED,
+                        'completed_at' => $this->completed_at ?? now(),
+                    ]);
+                    $this->status = RequestStatus::COMPLETED;
+                }
+            } else {
+                if ($this->status === RequestStatus::COMPLETED) {
+                    // Check if any itinerary is on_going or completed
+                    $anyStarted = $this->itineraries->contains(function ($it) {
+                        return in_array($it->status, ['on_going', 'completed'], true) ||
+                               $it->morning_status === 'on_going' ||
+                               $it->afternoon_status === 'on_going';
+                    });
+                    $newStatus = $anyStarted ? RequestStatus::ON_GOING : RequestStatus::DRIVER_ASSIGNED;
+                    $this->update([
+                        'status' => $newStatus,
+                        'completed_at' => null,
+                    ]);
+                    $this->status = $newStatus;
+                }
+            }
+        }
+    }
+
+    // Overtime Calculations
+    public function getOvertimeMinutesAttribute(): int
+    {
+        $actualReturn = $this->security_checked_in_at ?? $this->completed_at;
+        if (!$actualReturn) return 0;
+
+        $returnCarbon = \Carbon\Carbon::parse($actualReturn);
+        $shiftEndStr = $this->driver?->availability_end ?? '16:30:00';
+        
+        $shiftEndCarbon = $returnCarbon->copy()->setTimeFromTimeString($shiftEndStr);
+
+        if ($returnCarbon->greaterThan($shiftEndCarbon)) {
+            return (int) $shiftEndCarbon->diffInMinutes($returnCarbon);
+        }
+
+        return 0;
+    }
+
+    public function getIsOvertimeAttribute(): bool
+    {
+        return $this->getOvertimeMinutesAttribute() > 0;
+    }
+
+    public function getOvertimeFormattedAttribute(): ?string
+    {
+        $minutes = $this->getOvertimeMinutesAttribute();
+        if ($minutes <= 0) return null;
+
+        $hours = floor($minutes / 60);
+        $remainingMin = $minutes % 60;
+
+        if ($hours > 0 && $remainingMin > 0) {
+            return "{$hours} Jam {$remainingMin} Menit";
+        } elseif ($hours > 0) {
+            return "{$hours} Jam";
+        } else {
+            return "{$remainingMin} Menit";
+        }
     }
 
     // Scopes

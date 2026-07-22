@@ -175,7 +175,7 @@ class OVMSApiTest extends TestCase
             ]);
 
         $response->assertStatus(200)
-            ->assertJsonPath('data.status', 'driver_assigned');
+            ->assertJsonPath('data.status', 'approved_department');
     }
 
     public function test_assign_vehicle_validates_driver_role()

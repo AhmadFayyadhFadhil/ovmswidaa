@@ -14,9 +14,6 @@ class AssignDriverAction
     public function execute(Request $request, int $driverId, int $vehicleId, ?string $notes = null, array $data = []): Assignment
     {
         return DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
-            // Lock request row to prevent race condition
-            $request = Request::where('id', $request->id)->lockForUpdate()->first();
-
             $allowed = [
                 RequestStatus::SUBMITTED,
                 RequestStatus::APPROVED_DEPARTMENT,
@@ -53,18 +50,31 @@ class AssignDriverAction
             $this->validateVehicleTimeConflict($vehicleId, $request);
 
             // Create assignment
+            $priorityVal = $request->priority instanceof \App\Enums\RequestPriority 
+                ? $request->priority->value 
+                : ($request->priority->value ?? $request->priority);
+
+            $isUrgent = in_array($priorityVal, ['Urgent', 'Critical'], true);
+            $asgStatus = $isUrgent ? 'accepted' : 'pending_driver';
+
             $assignment = Assignment::create([
                 'request_id' => $request->id,
                 'driver_id' => $driverId,
                 'assigned_by' => auth()->id(),
                 'assigned_at' => now(),
-                'status' => 'pending_driver', // waiting for driver to accept/reject
+                'status' => $asgStatus,
                 'notes' => $notes,
             ]);
 
+            $reqStatus = $isUrgent ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::WAITING_DRIVER;
+            $qrCodeToken = $request->qr_code_token;
+            if ($isUrgent && !$qrCodeToken) {
+                $qrCodeToken = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));
+            }
+
             // Update request fields and status
             $request->update([
-                'status' => RequestStatus::WAITING_DRIVER,
+                'status' => $reqStatus,
                 'driver_id' => $driverId,
                 'vehicle_id' => $vehicleId,
                 'assigned_by' => auth()->id(),
@@ -73,8 +83,21 @@ class AssignDriverAction
                 'third_party_cost' => 0,
                 'estimated_duration' => $data['estimated_duration'] ?? $request->estimated_duration,
                 'priority' => $data['priority'] ?? $request->priority->value ?? 'Normal',
-                'driver_response_status' => 'pending_driver',
+                'driver_response_status' => $asgStatus,
+                'qr_code_token' => $qrCodeToken,
             ]);
+
+            if ($isUrgent) {
+                // Create OperationalTrip directly
+                \App\Models\OperationalTrip::create([
+                    'request_id' => $request->id,
+                    'driver_id' => $driverId,
+                    'vehicle_id' => $vehicleId,
+                    'start_datetime' => $request->start_time,
+                    'end_datetime' => $request->end_time,
+                    'status' => 'scheduled',
+                ]);
+            }
 
             return $assignment;
         });

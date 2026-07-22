@@ -10,6 +10,30 @@ use Illuminate\Validation\Rules\Enum;
 class UpdateRequestRequest extends FormRequest
 {
     /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->passengers)) {
+            $decoded = json_decode($this->passengers, true);
+            if (is_array($decoded)) {
+                $this->merge(['passengers' => $decoded]);
+            }
+        }
+
+        if (is_string($this->itineraries)) {
+            $decoded = json_decode($this->itineraries, true);
+            if (is_array($decoded)) {
+                $this->merge(['itineraries' => $decoded]);
+            }
+        }
+
+        if (!$this->hasFile('itinerary_file')) {
+            $this->offsetUnset('itinerary_file');
+        }
+    }
+
+    /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool

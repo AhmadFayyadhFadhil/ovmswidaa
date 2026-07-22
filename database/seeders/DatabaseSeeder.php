@@ -396,6 +396,8 @@ class DatabaseSeeder extends Seeder
             'department_id' => 18, // Plant Management
             'is_department_head' => false,
             'availability_status' => 'available',
+            'availability_start' => '07:30',
+            'availability_end' => '16:30',
             'is_active' => true,
         ]);
         $driver1->assignRole('Driver');
@@ -408,6 +410,8 @@ class DatabaseSeeder extends Seeder
             'department_id' => 18, // Plant Management
             'is_department_head' => false,
             'availability_status' => 'available',
+            'availability_start' => '07:30',
+            'availability_end' => '16:30',
             'is_active' => true,
         ]);
         $driver2->assignRole('Driver');
