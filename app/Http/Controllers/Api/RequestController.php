@@ -23,8 +23,17 @@ class RequestController extends Controller
         $status  = $request->query('status');
         $search  = $request->query('search');
 
+        // Cache role checks once to avoid repeated DB queries (N× hasRoleDirect calls)
+        $isAdmin    = $user->hasRoleDirect('Admin');
+        $isGA       = $user->hasRoleDirect('GA');
+        $isApprover = $user->hasRoleDirect('Approver');
+        $isDriver   = $user->hasRoleDirect('Driver');
+        $isSecurity = $user->hasRoleDirect('Security');
+        $isHrGaHead = $user->isHrGaHead();
+
         $query = VehicleRequest::with([
             'user',
+            'department',   // ← fix N+1: department was missing from eager load
             'approvals.approver',
             'operationalTrip.vehicle',
             'operationalTrip.driver',
@@ -38,8 +47,8 @@ class RequestController extends Controller
             'itineraries.vehicle',
         ]);
 
-        if ($user->hasRoleDirect('Approver') && !$user->hasRoleDirect('Admin') && !$user->hasRoleDirect('GA')) {
-            if ($user->isHrGaHead()) {
+        if ($isApprover && !$isAdmin && !$isGA) {
+            if ($isHrGaHead) {
                 $query->where(function ($q) use ($user) {
                     $q->whereIn('department_id', $user->departmentGroup())
                       ->orWhere(function ($q) {
@@ -63,8 +72,8 @@ class RequestController extends Controller
             } else {
                 $query->whereIn('department_id', $user->departmentGroup());
             }
-        } elseif (!$user->hasRoleDirect(['Admin', 'Approver', 'GA', 'Security']) && !$user->isHrGaHead()) {
-            if ($user->hasRoleDirect('Driver')) {
+        } elseif (!$isAdmin && !$isApprover && !$isGA && !$isSecurity && !$isHrGaHead) {
+            if ($isDriver) {
                 $query->where(function ($q) use ($user) {
                     $q->where('user_id', $user->id)
                       ->orWhere('driver_id', $user->id)

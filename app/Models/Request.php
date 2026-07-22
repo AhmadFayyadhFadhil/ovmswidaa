@@ -132,33 +132,36 @@ class Request extends Model
     // Status Sync helper for multi-day requests
     public function syncStatus()
     {
-        if ($this->relationLoaded('itineraries') && $this->itineraries->isNotEmpty()) {
-            $allCount = $this->itineraries->count();
-            $doneCount = $this->itineraries->where('status', 'completed')->count();
+        // Early exit: only multi-day requests with loaded itineraries need syncing
+        if (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty()) {
+            return;
+        }
 
-            if ($doneCount >= $allCount) {
-                if ($this->status !== RequestStatus::COMPLETED) {
-                    $this->update([
-                        'status' => RequestStatus::COMPLETED,
-                        'completed_at' => $this->completed_at ?? now(),
-                    ]);
-                    $this->status = RequestStatus::COMPLETED;
-                }
-            } else {
-                if ($this->status === RequestStatus::COMPLETED) {
-                    // Check if any itinerary is on_going or completed
-                    $anyStarted = $this->itineraries->contains(function ($it) {
-                        return in_array($it->status, ['on_going', 'completed'], true) ||
-                               $it->morning_status === 'on_going' ||
-                               $it->afternoon_status === 'on_going';
-                    });
-                    $newStatus = $anyStarted ? RequestStatus::ON_GOING : RequestStatus::DRIVER_ASSIGNED;
-                    $this->update([
-                        'status' => $newStatus,
-                        'completed_at' => null,
-                    ]);
-                    $this->status = $newStatus;
-                }
+        $allCount  = $this->itineraries->count();
+        $doneCount = $this->itineraries->where('status', 'completed')->count();
+
+        if ($doneCount >= $allCount) {
+            // Already completed — no need to write again
+            if ($this->status !== RequestStatus::COMPLETED) {
+                $this->update([
+                    'status'       => RequestStatus::COMPLETED,
+                    'completed_at' => $this->completed_at ?? now(),
+                ]);
+                $this->status = RequestStatus::COMPLETED;
+            }
+        } else {
+            if ($this->status === RequestStatus::COMPLETED) {
+                $anyStarted = $this->itineraries->contains(function ($it) {
+                    return in_array($it->status, ['on_going', 'completed'], true) ||
+                           $it->morning_status === 'on_going' ||
+                           $it->afternoon_status === 'on_going';
+                });
+                $newStatus = $anyStarted ? RequestStatus::ON_GOING : RequestStatus::DRIVER_ASSIGNED;
+                $this->update([
+                    'status'       => $newStatus,
+                    'completed_at' => null,
+                ]);
+                $this->status = $newStatus;
             }
         }
     }
