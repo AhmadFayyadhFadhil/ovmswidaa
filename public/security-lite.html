@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OVMS Security Lite - Pemindai Zebra</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: #0f172a; color: #f8fafc; padding: 12px; font-size: 14px; line-height: 1.4; }
+    
+    .header { text-align: center; padding: 12px 8px; background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-bottom: 12px; }
+    .header h1 { font-size: 18px; font-weight: 800; color: #38bdf8; letter-spacing: 0.5px; }
+    .header p { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); }
+    .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+    
+    .form-group { margin-bottom: 10px; }
+    .form-group label { display: block; font-size: 11px; font-weight: 700; color: #cbd5e1; margin-bottom: 4px; text-transform: uppercase; }
+    .form-input { width: 100%; height: 42px; padding: 0 12px; background: #0f172a; border: 1.5px solid #475569; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 600; outline: none; }
+    .form-input:focus { border-color: #38bdf8; box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
+
+    .btn { width: 100%; height: 44px; border: none; border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s ease; text-transform: uppercase; letter-spacing: 0.5px; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: #0284c7; color: #fff; }
+    .btn-checkout { background: #16a34a; color: #fff; margin-bottom: 8px; }
+    .btn-checkin { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #475569; color: #fff; }
+    .btn-camera { background: #334155; border: 1.5px dashed #64748b; color: #38bdf8; height: 50px; }
+
+    .alert { padding: 10px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 12px; display: none; }
+    .alert-error { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+    .alert-success { background: #052e16; color: #86efac; border: 1px solid #14532d; }
+
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+    .badge-blue { background: #0284c7; color: #fff; }
+    .badge-green { background: #16a34a; color: #fff; }
+    .badge-amber { background: #d97706; color: #fff; }
+
+    .data-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155; }
+    .data-row:last-child { border-bottom: none; }
+    .data-label { color: #94a3b8; font-size: 12px; font-weight: 600; }
+    .data-val { color: #f8fafc; font-size: 13px; font-weight: 700; text-align: right; }
+
+    #scannedResult { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <h1>OVMS SECURITY LITE</h1>
+    <p>POS PEMINDAI TIKET ARMAZA - ZEBRA HANDHELD</p>
+  </div>
+
+  <!-- Alert Messages -->
+  <div id="errorAlert" class="alert alert-error"></div>
+  <div id="successAlert" class="alert alert-success"></div>
+
+  <!-- Guard Name Form -->
+  <div class="card">
+    <div class="form-group" style="margin-bottom: 0;">
+      <label>PETUGAS SECURITY JAGA:</label>
+      <input type="text" id="guardNameInput" class="form-input" placeholder="Masukkan Nama Petugas (misal: Budi)" />
+    </div>
+  </div>
+
+  <!-- Search / Scan Form -->
+  <div class="card">
+    <div class="card-title">CARI / PINDAI TIKET</div>
+    
+    <div class="form-group">
+      <input type="text" id="tokenInput" class="form-input" placeholder="Ketik / Tempel Kode (misal: REQ-21)" />
+    </div>
+
+    <button id="btnSearch" class="btn btn-primary" style="margin-bottom: 8px;">
+      🔍 CARI DETAIL TIKET
+    </button>
+
+    <label class="btn btn-camera" style="margin-bottom: 0;">
+      📷 FOTO SCAN QR CODE
+      <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display: none;" />
+    </label>
+  </div>
+
+  <!-- Result Container -->
+  <div id="scannedResult" class="card">
+    <div class="card-title">
+      <span>DETAIL PERMINTAAN</span>
+      <span id="reqBadge" class="badge badge-blue"></span>
+    </div>
+
+    <div class="data-row">
+      <span class="data-label">Nama Pemohon:</span>
+      <span id="reqEmployee" class="data-val">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">Departemen:</span>
+      <span id="reqDept" class="data-val">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">Tujuan:</span>
+      <span id="reqDest" class="data-val">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">Armada & Plat:</span>
+      <span id="reqVehicle" class="data-val">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">Driver:</span>
+      <span id="reqDriver" class="data-val">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">Waktu Keluar:</span>
+      <span id="reqOutTime" class="data-val">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">Waktu Masuk:</span>
+      <span id="reqInTime" class="data-val">-</span>
+    </div>
+
+    <div style="margin-top: 14px;">
+      <div class="form-group">
+        <label>CATATAN SECURITY (OPSIONAL):</label>
+        <input type="text" id="securityNotes" class="form-input" placeholder="misal: Kondisi mobil aman, KM 12000" />
+      </div>
+
+      <button id="btnCheckout" class="btn btn-checkout">
+        🟢 PROSES BERANGKAT (CHECK OUT)
+      </button>
+
+      <button id="btnCheckin" class="btn btn-checkin">
+        🔵 PROSES KEMBALI (CHECK IN)
+      </button>
+    </div>
+  </div>
+
+  <!-- jsQR Library inline fallback for instant QR decode -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script>
+    (function() {
+      var API_BASE = window.location.origin + '/api';
+      
+      var guardInput = document.getElementById('guardNameInput');
+      var tokenInput = document.getElementById('tokenInput');
+      var btnSearch = document.getElementById('btnSearch');
+      var qrFileInput = document.getElementById('qrFileInput');
+      var resultCard = document.getElementById('scannedResult');
+      
+      var errorAlert = document.getElementById('errorAlert');
+      var successAlert = document.getElementById('successAlert');
+
+      var currentRequest = null;
+
+      // Load saved guard name
+      var savedGuard = localStorage.getItem('ovms_security_guard_name');
+      if (savedGuard) guardInput.value = savedGuard;
+
+      guardInput.addEventListener('change', function() {
+        if (guardInput.value.trim()) {
+          localStorage.setItem('ovms_security_guard_name', guardInput.value.trim());
+        }
+      });
+
+      function showError(msg) {
+        errorAlert.innerText = msg;
+        errorAlert.style.display = 'block';
+        successAlert.style.display = 'none';
+      }
+
+      function showSuccess(msg) {
+        successAlert.innerText = msg;
+        successAlert.style.display = 'block';
+        errorAlert.style.display = 'none';
+      }
+
+      function hideAlerts() {
+        errorAlert.style.display = 'none';
+        successAlert.style.display = 'none';
+      }
+
+      function lookupToken(token) {
+        if (!token) {
+          showError('Silakan masukkan atau scan kode tiket.');
+          return;
+        }
+
+        hideAlerts();
+        btnSearch.innerText = '⌛ MEMUAT DATA...';
+        btnSearch.disabled = true;
+
+        // Clean URL if scanned from full QR URL
+        var cleanToken = token;
+        if (token.indexOf('token=') !== -1) {
+          var parts = token.split('token=');
+          if (parts[1]) cleanToken = parts[1].split('&')[0];
+        }
+
+        fetch(API_BASE + '/security/lookup?qr_code_token=' + encodeURIComponent(cleanToken))
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            btnSearch.innerText = '🔍 CARI DETAIL TIKET';
+            btnSearch.disabled = false;
+
+            if (data.status === 'success' && data.data) {
+              currentRequest = data.data;
+              renderDetail(data.data);
+            } else {
+              showError(data.message || 'Tiket tidak ditemukan di sistem.');
+              resultCard.style.display = 'none';
+            }
+          })
+          .catch(function(err) {
+            btnSearch.innerText = '🔍 CARI DETAIL TIKET';
+            btnSearch.disabled = false;
+            showError('Gagal terhubung ke server. Periksa koneksi jaringan.');
+            resultCard.style.display = 'none';
+          });
+      }
+
+      function renderDetail(req) {
+        document.getElementById('reqBadge').innerText = '#REQ-' + req.id;
+        document.getElementById('reqEmployee').innerText = req.employee || '-';
+        document.getElementById('reqDept').innerText = req.department || '-';
+        document.getElementById('reqDest').innerText = req.destination || '-';
+        document.getElementById('reqVehicle').innerText = (req.vehicleModel || '-') + ' (' + (req.licensePlate || '-') + ')';
+        document.getElementById('reqDriver').innerText = req.driverName || '-';
+        document.getElementById('reqOutTime').innerText = req.security_checked_out_at || 'Belum Scan Keluar';
+        document.getElementById('reqInTime').innerText = req.security_checked_in_at || 'Belum Scan Masuk';
+
+        resultCard.style.display = 'block';
+        resultCard.scrollIntoView({ behavior: 'smooth' });
+      }
+
+      btnSearch.addEventListener('click', function() {
+        lookupToken(tokenInput.value.trim());
+      });
+
+      tokenInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') lookupToken(tokenInput.value.trim());
+      });
+
+      // Handle QR Photo Upload
+      qrFileInput.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+
+        hideAlerts();
+        showSuccess('Menganalisis foto QR Code...');
+
+        var reader = new FileReader();
+        reader.onload = function(evt) {
+          var img = new Image();
+          img.onload = function() {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var code = jsQR(imageData.data, imageData.width, imageData.height);
+
+            if (code && code.data) {
+              tokenInput.value = code.data;
+              lookupToken(code.data);
+            } else {
+              showError('QR Code tidak terbaca pada foto. Coba foto lebih dekat atau ketik manual.');
+            }
+          };
+          img.src = evt.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+
+      // Handle Scan Action (Checkout / Checkin)
+      function executeScan(type) {
+        var guardName = guardInput.value.trim();
+        if (!guardName) {
+          showError('Nama Petugas Security Wajib Diisi!');
+          guardInput.focus();
+          return;
+        }
+
+        if (!currentRequest) return;
+
+        var payload = {
+          qr_code_token: currentRequest.qr_code_token || ('REQ-' + currentRequest.id),
+          security_name: guardName,
+          type: type,
+          notes: document.getElementById('securityNotes').value.trim()
+        };
+
+        hideAlerts();
+
+        fetch(API_BASE + '/security/scan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'success') {
+            showSuccess('✅ SUCCESS: ' + data.message);
+            document.getElementById('securityNotes').value = '';
+            // Refresh detail
+            lookupToken(currentRequest.qr_code_token || ('REQ-' + currentRequest.id));
+          } else {
+            showError(data.message || 'Gagal memproses scan.');
+          }
+        })
+        .catch(function(err) {
+          showError('Gagal mengirim data scan ke server.');
+        });
+      }
+
+      document.getElementById('btnCheckout').addEventListener('click', function() {
+        executeScan('checkout');
+      });
+
+      document.getElementById('btnCheckin').addEventListener('click', function() {
+        executeScan('checkin');
+      });
+
+    })();
+  </script>
+</body>
+</html>
