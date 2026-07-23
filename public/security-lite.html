@@ -3,91 +3,78 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OVMS Security Lite - Pemindai Zebra</title>
+  <title>OVMS Security Lite - Pos Keamanan Intranet</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    body { background-color: #0f172a; color: #f8fafc; padding: 12px; font-size: 14px; line-height: 1.4; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { background-color: #0f172a; color: #ffffff; padding: 12px; font-size: 14px; }
     
-    .header { text-align: center; padding: 12px 8px; background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-bottom: 12px; }
-    .header h1 { font-size: 18px; font-weight: 800; color: #38bdf8; letter-spacing: 0.5px; }
-    .header p { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+    .header { text-align: center; padding: 12px; background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-bottom: 12px; }
+    .header h1 { font-size: 18px; font-weight: 800; color: #38bdf8; }
+    .header p { font-size: 11px; color: #94a3b8; margin-top: 3px; }
 
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); }
-    .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
     
     .form-group { margin-bottom: 10px; }
     .form-group label { display: block; font-size: 11px; font-weight: 700; color: #cbd5e1; margin-bottom: 4px; text-transform: uppercase; }
-    .form-input { width: 100%; height: 42px; padding: 0 12px; background: #0f172a; border: 1.5px solid #475569; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 600; outline: none; }
-    .form-input:focus { border-color: #38bdf8; box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
+    .form-input { width: 100%; height: 44px; padding: 0 12px; background: #0f172a; border: 1.5px solid #475569; border-radius: 10px; color: #ffffff; font-size: 15px; font-weight: 700; outline: none; }
+    .form-input:focus { border-color: #38bdf8; }
 
-    .btn { width: 100%; height: 44px; border: none; border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s ease; text-transform: uppercase; letter-spacing: 0.5px; }
-    .btn:active { transform: scale(0.98); }
-    .btn-primary { background: #0284c7; color: #fff; }
-    .btn-checkout { background: #16a34a; color: #fff; margin-bottom: 8px; }
-    .btn-checkin { background: #2563eb; color: #fff; }
-    .btn-secondary { background: #475569; color: #fff; }
-    .btn-camera { background: #334155; border: 1.5px dashed #64748b; color: #38bdf8; height: 50px; }
+    .btn { width: 100%; height: 46px; border: none; border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; text-transform: uppercase; margin-bottom: 8px; }
+    .btn-search { background: #0284c7; color: #ffffff; }
+    .btn-checkout { background: #16a34a; color: #ffffff; height: 50px; font-size: 15px; }
+    .btn-checkin { background: #2563eb; color: #ffffff; height: 50px; font-size: 15px; }
 
-    .alert { padding: 10px 12px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-bottom: 12px; display: none; }
-    .alert-error { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
-    .alert-success { background: #052e16; color: #86efac; border: 1px solid #14532d; }
+    .alert { padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 700; margin-bottom: 12px; display: none; word-break: break-all; }
+    .alert-error { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+    .alert-success { background: #14532d; color: #86efac; border: 1px solid #22c55e; }
 
-    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
-    .badge-blue { background: #0284c7; color: #fff; }
-    .badge-green { background: #16a34a; color: #fff; }
-    .badge-amber { background: #d97706; color: #fff; }
-
-    .data-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155; }
-    .data-row:last-child { border-bottom: none; }
+    .data-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #334155; }
     .data-label { color: #94a3b8; font-size: 12px; font-weight: 600; }
-    .data-val { color: #f8fafc; font-size: 13px; font-weight: 700; text-align: right; }
+    .data-val { color: #ffffff; font-size: 13px; font-weight: 700; text-align: right; }
 
     #scannedResult { display: none; }
   </style>
 </head>
 <body>
 
-  <!-- Header -->
+  <!-- Header Pos Security -->
   <div class="header">
-    <h1>OVMS SECURITY LITE</h1>
-    <p>POS PEMINDAI TIKET ARMAZA - ZEBRA HANDHELD</p>
+    <h1>OVMS POS SECURITY</h1>
+    <p>PEMINDAI TIKET ARMADA - PT WIDATRA BHAKTI</p>
   </div>
 
-  <!-- Alert Messages -->
+  <!-- Pesan Notifikasi Alert -->
   <div id="errorAlert" class="alert alert-error"></div>
   <div id="successAlert" class="alert alert-success"></div>
 
-  <!-- Guard Name Form -->
+  <!-- Input Nama Petugas -->
   <div class="card">
     <div class="form-group" style="margin-bottom: 0;">
-      <label>PETUGAS SECURITY JAGA:</label>
-      <input type="text" id="guardNameInput" class="form-input" placeholder="Masukkan Nama Petugas (misal: Budi)" />
+      <label>NAMA PETUGAS SECURITY JAGA:</label>
+      <input type="text" id="guardNameInput" class="form-input" placeholder="Ketik Nama Anda (misal: Budi)" />
     </div>
   </div>
 
-  <!-- Search / Scan Form -->
+  <!-- Form Pencarian Tiket -->
   <div class="card">
-    <div class="card-title">CARI / PINDAI TIKET</div>
+    <div class="card-title">INPUT / PINDAI TIKET</div>
     
     <div class="form-group">
-      <input type="text" id="tokenInput" class="form-input" placeholder="Ketik / Tempel Kode (misal: REQ-21)" />
+      <label>KODE TIKET / QR TOKEN:</label>
+      <input type="text" id="tokenInput" class="form-input" placeholder="misal: 21 atau REQ-21" />
     </div>
 
-    <button id="btnSearch" class="btn btn-primary" style="margin-bottom: 8px;">
+    <button id="btnSearch" class="btn btn-search">
       🔍 CARI DETAIL TIKET
     </button>
-
-    <label class="btn btn-camera" style="margin-bottom: 0;">
-      📷 FOTO SCAN QR CODE
-      <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display: none;" />
-    </label>
   </div>
 
-  <!-- Result Container -->
+  <!-- Hasil Detail Tiket -->
   <div id="scannedResult" class="card">
     <div class="card-title">
-      <span>DETAIL PERMINTAAN</span>
-      <span id="reqBadge" class="badge badge-blue"></span>
+      <span>DETAIL PERMINTAAN TIKET</span>
+      <span id="reqBadge" style="color: #38bdf8; font-weight: 800;"></span>
     </div>
 
     <div class="data-row">
@@ -99,44 +86,42 @@
       <span id="reqDept" class="data-val">-</span>
     </div>
     <div class="data-row">
-      <span class="data-label">Tujuan:</span>
+      <span class="data-label">Tujuan Perjalanan:</span>
       <span id="reqDest" class="data-val">-</span>
     </div>
     <div class="data-row">
-      <span class="data-label">Armada & Plat:</span>
+      <span class="data-label">Mobil & Plat Nomor:</span>
       <span id="reqVehicle" class="data-val">-</span>
     </div>
     <div class="data-row">
-      <span class="data-label">Driver:</span>
+      <span class="data-label">Nama Driver:</span>
       <span id="reqDriver" class="data-val">-</span>
     </div>
     <div class="data-row">
-      <span class="data-label">Waktu Keluar:</span>
+      <span class="data-label">Status Scan Keluar:</span>
       <span id="reqOutTime" class="data-val">-</span>
     </div>
     <div class="data-row">
-      <span class="data-label">Waktu Masuk:</span>
+      <span class="data-label">Status Scan Masuk:</span>
       <span id="reqInTime" class="data-val">-</span>
     </div>
 
-    <div style="margin-top: 14px;">
+    <div style="margin-top: 16px;">
       <div class="form-group">
         <label>CATATAN SECURITY (OPSIONAL):</label>
-        <input type="text" id="securityNotes" class="form-input" placeholder="misal: Kondisi mobil aman, KM 12000" />
+        <input type="text" id="securityNotes" class="form-input" placeholder="misal: Mobil bersih, KM 12500" />
       </div>
 
       <button id="btnCheckout" class="btn btn-checkout">
-        🟢 PROSES BERANGKAT (CHECK OUT)
+        🟢 SCAN KELUAR (BERANGKAT)
       </button>
 
       <button id="btnCheckin" class="btn btn-checkin">
-        🔵 PROSES KEMBALI (CHECK IN)
+        🔵 SCAN MASUK (KEMBALI)
       </button>
     </div>
   </div>
 
-  <!-- jsQR Library inline fallback for instant QR decode -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script>
     (function() {
       var API_BASE = window.location.origin + '/api';
@@ -144,7 +129,6 @@
       var guardInput = document.getElementById('guardNameInput');
       var tokenInput = document.getElementById('tokenInput');
       var btnSearch = document.getElementById('btnSearch');
-      var qrFileInput = document.getElementById('qrFileInput');
       var resultCard = document.getElementById('scannedResult');
       
       var errorAlert = document.getElementById('errorAlert');
@@ -157,7 +141,7 @@
       if (savedGuard) guardInput.value = savedGuard;
 
       guardInput.addEventListener('change', function() {
-        if (guardInput.value.trim()) {
+        if (guardInput.value) {
           localStorage.setItem('ovms_security_guard_name', guardInput.value.trim());
         }
       });
@@ -181,7 +165,7 @@
 
       function lookupToken(token) {
         if (!token) {
-          showError('Silakan masukkan atau scan kode tiket.');
+          showError('Silakan ketikkan kode tiket terlebih dahulu.');
           return;
         }
 
@@ -189,10 +173,9 @@
         btnSearch.innerText = '⌛ MEMUAT DATA...';
         btnSearch.disabled = true;
 
-        // Clean URL if scanned from full QR URL
-        var cleanToken = token;
-        if (token.indexOf('token=') !== -1) {
-          var parts = token.split('token=');
+        var cleanToken = token.trim();
+        if (cleanToken.indexOf('token=') !== -1) {
+          var parts = cleanToken.split('token=');
           if (parts[1]) cleanToken = parts[1].split('&')[0];
         }
 
@@ -213,7 +196,7 @@
           .catch(function(err) {
             btnSearch.innerText = '🔍 CARI DETAIL TIKET';
             btnSearch.disabled = false;
-            showError('Gagal terhubung ke server. Periksa koneksi jaringan.');
+            showError('Gagal terhubung ke API server. Periksa koneksi jaringan.');
             resultCard.style.display = 'none';
           });
       }
@@ -229,51 +212,16 @@
         document.getElementById('reqInTime').innerText = req.security_checked_in_at || 'Belum Scan Masuk';
 
         resultCard.style.display = 'block';
-        resultCard.scrollIntoView({ behavior: 'smooth' });
       }
 
       btnSearch.addEventListener('click', function() {
-        lookupToken(tokenInput.value.trim());
+        lookupToken(tokenInput.value);
       });
 
       tokenInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') lookupToken(tokenInput.value.trim());
+        if (e.keyCode === 13 || e.key === 'Enter') lookupToken(tokenInput.value);
       });
 
-      // Handle QR Photo Upload
-      qrFileInput.addEventListener('change', function(e) {
-        var file = e.target.files[0];
-        if (!file) return;
-
-        hideAlerts();
-        showSuccess('Menganalisis foto QR Code...');
-
-        var reader = new FileReader();
-        reader.onload = function(evt) {
-          var img = new Image();
-          img.onload = function() {
-            var canvas = document.createElement('canvas');
-            var ctx = canvas.getContext('2d');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-
-            var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            var code = jsQR(imageData.data, imageData.width, imageData.height);
-
-            if (code && code.data) {
-              tokenInput.value = code.data;
-              lookupToken(code.data);
-            } else {
-              showError('QR Code tidak terbaca pada foto. Coba foto lebih dekat atau ketik manual.');
-            }
-          };
-          img.src = evt.target.result;
-        };
-        reader.readAsDataURL(file);
-      });
-
-      // Handle Scan Action (Checkout / Checkin)
       function executeScan(type) {
         var guardName = guardInput.value.trim();
         if (!guardName) {
@@ -304,16 +252,15 @@
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data.status === 'success') {
-            showSuccess('✅ SUCCESS: ' + data.message);
+            showSuccess('✅ SUKSES: ' + data.message);
             document.getElementById('securityNotes').value = '';
-            // Refresh detail
             lookupToken(currentRequest.qr_code_token || ('REQ-' + currentRequest.id));
           } else {
             showError(data.message || 'Gagal memproses scan.');
           }
         })
         .catch(function(err) {
-          showError('Gagal mengirim data scan ke server.');
+          showError('Gagal mengirim data ke server.');
         });
       }
 
