@@ -201,31 +201,47 @@ class AuthController extends Controller
         $user = $request->user();
 
         $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'avatar' => 'required|file|max:10240',
         ], [
             'avatar.required' => 'File foto profil wajib diunggah',
-            'avatar.image'    => 'File harus berupa gambar',
-            'avatar.mimes'    => 'Format gambar harus jpeg, png, jpg, atau gif',
-            'avatar.max'      => 'Ukuran gambar maksimal 2MB',
+            'avatar.max'      => 'Ukuran gambar maksimal 10MB',
         ]);
 
-        // Hapus avatar lama jika ada di storage
-        if ($user->avatar && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar)) {
-            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar);
+        try {
+            // Hapus avatar lama jika ada di storage
+            if ($user->avatar && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar)) {
+                @\Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar);
+            }
+
+            // Simpan file avatar baru dengan nama unik
+            $file = $request->file('avatar');
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+
+            // Pastikan folder terbuat
+            $targetDir = storage_path('app/public/users/avatars');
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0777, true);
+            }
+
+            $path = $file->storeAs('users/avatars', $filename, 'public');
+            $user->avatar = $path;
+            $user->save();
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Foto profil berhasil diperbarui',
+                'data'    => [
+                    'avatar_url' => url('storage/' . $path),
+                ],
+            ], 200);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Avatar Upload Error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal menyimpan foto profil: ' . $e->getMessage(),
+            ], 500);
         }
-
-        // Simpan file avatar baru
-        $path = $request->file('avatar')->store('users/avatars', 'public');
-        $user->avatar = $path;
-        $user->save();
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Foto profil berhasil diperbarui',
-            'data'    => [
-                'avatar_url' => url('storage/' . $path),
-            ],
-        ], 200);
     }
 
     public function forgotPassword(Request $request): JsonResponse
