@@ -200,39 +200,53 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        $request->validate([
-            'avatar' => 'required|file|max:10240',
-        ], [
-            'avatar.required' => 'File foto profil wajib diunggah',
-            'avatar.max'      => 'Ukuran gambar maksimal 10MB',
-        ]);
+        if (!$request->hasFile('avatar')) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'File foto profil wajib diunggah',
+            ], 422);
+        }
 
         try {
+            $file = $request->file('avatar');
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
+            
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                $ext = 'jpg';
+            }
+
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $relativeDir = 'users/avatars';
+            $targetDir = storage_path('app/public/' . $relativeDir);
+
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0777, true);
+            }
+
+            $targetPath = $targetDir . '/' . $filename;
+            
+            // Use move_uploaded_file / copy to bypass PHP finfo extension dependency
+            if (!@move_uploaded_file($file->getRealPath(), $targetPath)) {
+                if (!@copy($file->getRealPath(), $targetPath)) {
+                    throw new \Exception("Gagal menyalin file foto ke folder storage.");
+                }
+            }
+
             // Hapus avatar lama jika ada di storage
             if ($user->avatar && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar)) {
                 @\Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar);
             }
 
-            // Simpan file avatar baru dengan nama unik
-            $file = $request->file('avatar');
-            $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
-            $filename = time() . '_' . uniqid() . '.' . $ext;
-
-            // Pastikan folder terbuat
-            $targetDir = storage_path('app/public/users/avatars');
-            if (!file_exists($targetDir)) {
-                @mkdir($targetDir, 0777, true);
-            }
-
-            $path = $file->storeAs('users/avatars', $filename, 'public');
-            $user->avatar = $path;
+            $relativePath = $relativeDir . '/' . $filename;
+            $user->avatar = $relativePath;
             $user->save();
 
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Foto profil berhasil diperbarui',
                 'data'    => [
-                    'avatar_url' => url('storage/' . $path),
+                    'avatar_url' => url('storage/' . $relativePath),
                 ],
             ], 200);
         } catch (\Throwable $e) {
