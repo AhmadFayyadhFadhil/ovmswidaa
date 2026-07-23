@@ -29,10 +29,6 @@ class SettingController extends Controller
      */
     public function index(): JsonResponse
     {
-        if (!$this->checkAdmin()) {
-            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
-        }
-
         $settings = Setting::all();
         $formatted = [];
         
@@ -56,8 +52,9 @@ class SettingController extends Controller
             $frontendKey = $keyMap[$setting->key] ?? $setting->key;
             $value = $setting->value;
             if ($setting->key === 'company_logo' && $value) {
-                // Prepend custom caching assets route URL
-                $value = url('api/assets/settings/' . basename($value));
+                $filename = basename($value);
+                $fullPath = storage_path('app/public/settings/' . $filename);
+                $value = file_exists($fullPath) ? url('api/assets/settings/' . $filename) : null;
             } elseif ($setting->type === 'boolean') {
                 $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
             }
@@ -265,7 +262,14 @@ class SettingController extends Controller
 
         $systemName = Setting::getValue('system_name', 'OVMS');
         $logo = Setting::getValue('company_logo');
-        $logoUrl = $logo ? url('api/assets/settings/' . basename($logo)) : null;
+        $logoUrl = null;
+        if ($logo) {
+            $filename = basename($logo);
+            $fullPath = storage_path('app/public/settings/' . $filename);
+            if (file_exists($fullPath)) {
+                $logoUrl = url('api/assets/settings/' . $filename);
+            }
+        }
 
         return response()->json([
             'status' => 'success',
