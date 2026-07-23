@@ -153,35 +153,70 @@ class SettingController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $request->validate([
-            'logo' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
-        ]);
+        if (!$request->hasFile('logo')) {
+            return response()->json(['status' => 'error', 'message' => 'File logo wajib diunggah'], 422);
+        }
 
-        if ($request->hasFile('logo')) {
+        try {
             $file = $request->file('logo');
-            // Store the file in public/settings disk
-            $path = $file->store('settings', 'public');
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'png');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'])) {
+                $ext = 'png';
+            }
+
+            $filename = 'company_logo_' . time() . '.' . $ext;
             
+            // Target 1: storage/app/public/settings
+            $storageDir = storage_path('app/public/settings');
+            if (!file_exists($storageDir)) {
+                @mkdir($storageDir, 0777, true);
+            }
+            $storagePath = $storageDir . '/' . $filename;
+
+            // Target 2: public/api/assets/settings (Nginx static dir)
+            $publicAssetDir = public_path('api/assets/settings');
+            if (!file_exists($publicAssetDir)) {
+                @mkdir($publicAssetDir, 0777, true);
+            }
+            $publicAssetPath = $publicAssetDir . '/' . $filename;
+
+            // Save file natively without finfo dependency
+            if (!@move_uploaded_file($file->getRealPath(), $storagePath)) {
+                if (!@copy($file->getRealPath(), $storagePath)) {
+                    throw new \Exception("Gagal menyalin file logo ke storage.");
+                }
+            }
+            @copy($storagePath, $publicAssetPath);
+
+            $dbPath = 'settings/' . $filename;
+
             // Save path to setting DB
             $setting = Setting::firstOrCreate(['key' => 'company_logo'], [
                 'type' => 'string',
                 'group' => 'company'
             ]);
-            $setting->value = $path;
+            $setting->value = $dbPath;
             $setting->save();
 
             // Clear branding cache
             Cache::forget('ovms_branding_config');
+            Cache::flush();
 
             return response()->json([
                 'status' => 'success',
+                'message' => 'Logo perusahaan berhasil diperbarui',
                 'data' => [
-                    'logo_url' => url('api/assets/settings/' . basename($path))
+                    'logo_url' => url('api/assets/settings/' . $filename)
                 ]
             ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Logo Upload Error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengunggah logo: ' . $e->getMessage()
+            ], 500);
         }
-
-        return response()->json(['status' => 'error', 'message' => 'File logo tidak ditemukan.'], 400);
     }
 
     /**
