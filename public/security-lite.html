@@ -10304,42 +10304,56 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         successAlert.style.display = 'none';
       }
 
-      // API Endpoints Fallback list to guarantee network connection
-      function getApiEndpoints(path) {
-        var endpoints = [
-          window.location.origin + '/api' + path,
-          'http://172.16.4.24/api' + path,
-          'http://172.16.4.24:8080/api' + path,
-          'http://127.0.0.1:8080/api' + path,
-          'https://ovms.widatra.com/api' + path
-        ];
-        return endpoints;
+      // Robust Token Cleaner to extract REQ-xxx from full URLs or query params
+      function extractQrToken(inputStr) {
+        if (!inputStr) return '';
+        var str = inputStr.trim();
+        var reqMatch = str.match(/REQ-[\w-]+/i);
+        if (reqMatch && reqMatch[0]) {
+          return reqMatch[0];
+        }
+        if (str.indexOf('token=') !== -1) {
+          var parts = str.split('token=');
+          if (parts[1]) return parts[1].split('&')[0].trim();
+        }
+        return str;
       }
 
-      // Robust fetch with automatic URL retry
+      // Robust API Fetch with relative paths first and fallback servers
       function fetchApiWithFallback(path, options, callback) {
-        var endpoints = getApiEndpoints(path);
+        var host = window.location.hostname || '172.16.4.24';
+        var proto = window.location.protocol || 'http:';
+
+        var endpoints = [
+          '/api' + path,
+          proto + '//' + host + '/api' + path,
+          'http://172.16.4.24/api' + path,
+          'http://172.16.4.24:8080/api' + path,
+          'http://122.248.33.66/api' + path,
+          'https://ovms.widatra.com/api' + path
+        ];
+
         var index = 0;
 
         function tryNext() {
           if (index >= endpoints.length) {
-            callback(new Error('Semua endpoint API gagal terhubung. Periksa jaringan intranet server.'));
+            callback(new Error('Tidak dapat terhubung ke server API. Periksa jaringan IP 172.16.4.24.'));
             return;
           }
 
           var url = endpoints[index++];
           var opts = options || {};
-          
+
           fetch(url, opts)
             .then(function(res) {
-              if (!res.ok) throw new Error('HTTP status ' + res.status);
+              if (!res.ok) throw new Error('HTTP ' + res.status);
               return res.json();
             })
             .then(function(data) {
               callback(null, data);
             })
             .catch(function(err) {
-              console.log('Failed endpoint: ' + url + ', trying next...');
+              console.log('Failed URL: ' + url + ', trying next fallback...');
               tryNext();
             });
         }
@@ -10347,21 +10361,17 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         tryNext();
       }
 
-      function lookupToken(token) {
-        if (!token) {
+      function lookupToken(rawToken) {
+        var cleanToken = extractQrToken(rawToken);
+        if (!cleanToken) {
           showError('Silakan masukkan atau scan kode tiket terlebih dahulu.');
           return;
         }
 
+        tokenInput.value = cleanToken;
         hideAlerts();
-        btnSearch.innerText = '⌛ MEMUAT DATA...';
+        btnSearch.innerText = '⌛ MEMUAT DATA TIKET...';
         btnSearch.disabled = true;
-
-        var cleanToken = token.trim();
-        if (cleanToken.indexOf('token=') !== -1) {
-          var parts = cleanToken.split('token=');
-          if (parts[1]) cleanToken = parts[1].split('&')[0];
-        }
 
         fetchApiWithFallback('/security/lookup?qr_code_token=' + encodeURIComponent(cleanToken), { method: 'GET' }, function(err, data) {
           btnSearch.innerText = '🔍 CARI DETAIL TIKET';
@@ -10376,7 +10386,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           if (data.status === 'success' && data.data) {
             currentRequest = data.data;
             renderDetail(data.data);
-            showSuccess('Tiket #' + data.data.id + ' Ditemukan!');
+            showSuccess('✅ Tiket #' + data.data.id + ' Ditemukan!');
           } else {
             showError(data.message || 'Tiket tidak ditemukan di sistem.');
             resultCard.style.display = 'none';
@@ -10412,12 +10422,12 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       });
 
       tokenInput.addEventListener('input', function() {
-        var val = tokenInput.value.trim();
+        var val = extractQrToken(tokenInput.value);
         if (val.length >= 4 && val !== lastScannedVal && (val.indexOf('REQ-') === 0 || val.indexOf('http') === 0)) {
           lastScannedVal = val;
           setTimeout(function() {
             lookupToken(val);
-          }, 300);
+          }, 200);
         }
       });
 
