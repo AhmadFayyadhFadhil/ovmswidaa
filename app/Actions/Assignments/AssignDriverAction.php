@@ -118,14 +118,13 @@ class AssignDriverAction
                 RequestStatus::WAITING_DRIVER,
                 RequestStatus::DRIVER_ASSIGNED,
                 RequestStatus::ON_GOING,
-                RequestStatus::COMPLETED,
             ])
             ->whereDate('start_time', $reqDate)
             ->get();
 
         if ($conflictingRequests->isNotEmpty()) {
             throw new Exception(
-                "Driver {$driverName} sudah memiliki assignment pada tanggal yang sama. Silakan pilih driver lain yang tersedia."
+                "Driver {$driverName} sudah memiliki assignment aktif pada tanggal yang sama. Silakan pilih driver lain yang tersedia."
             );
         }
     }
@@ -145,7 +144,6 @@ class AssignDriverAction
                 RequestStatus::WAITING_DRIVER,
                 RequestStatus::DRIVER_ASSIGNED,
                 RequestStatus::ON_GOING,
-                RequestStatus::COMPLETED,
             ])
             ->whereDate('start_time', $reqDate)
             ->get();

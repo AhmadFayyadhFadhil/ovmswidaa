@@ -28,8 +28,8 @@ class UpdateAssignmentRequest extends FormRequest
             'response' => 'required|in:accepted,rejected',
             'vehicle_id' => 'nullable|exists:vehicles,id',
             'reject_reason' => 'required_if:response,rejected|string|max:1000',
-            'start_photo' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
-            'end_photo' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
+            'start_photo' => 'nullable|file|max:10240',
+            'end_photo' => 'nullable|file|max:10240',
         ];
     }
 
