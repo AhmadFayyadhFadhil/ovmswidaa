@@ -14,7 +14,7 @@ class SecurityController extends Controller
     {
         $validated = $request->validate([
             'qr_code_token' => 'required|string',
-            'security_name' => 'required|string|exists:security_guards,name',
+            'security_name' => 'required|string|max:255',
             'type'          => 'required|in:checkout,checkin',
             'notes'         => 'nullable|string|max:1000',
             'trip_id'       => 'nullable|integer',

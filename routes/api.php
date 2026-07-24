@@ -17,8 +17,9 @@ Route::post('/register', [AuthController::class, 'register'])->middleware('throt
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:3,1');
 Route::get('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
-Route::get('/public-stats', [\App\Http\Controllers\Api\SettingController::class, 'getPublicStats']);
-Route::get('/assets/settings/{filename}', [\App\Http\Controllers\Api\SettingController::class, 'serveLogo']);
+// ===== PUBLIC SECURITY SCAN ENDPOINTS =====
+Route::get('/security/lookup', [SecurityController::class, 'lookup']);
+Route::post('/security/scan', [SecurityController::class, 'scan']);
 
 // Protected API routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -61,9 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/requests/{vehicleRequest}/adjust-driver', [RequestController::class, 'adjustDriver']);
     Route::post('/requests/{vehicleRequest}/daily-assignments', [AssignmentController::class, 'storeDailyAssignments']);
 
-    // ===== SECURITY SCAN ENDPOINTS =====
-    Route::get('/security/lookup', [SecurityController::class, 'lookup']);
-    Route::post('/security/scan', [SecurityController::class, 'scan']);
+    // ===== SECURITY GUARDS ENDPOINTS =====
     Route::get('/security-guards', [SecurityGuardController::class, 'index']);
     Route::post('/security-guards', [SecurityGuardController::class, 'store']);
     Route::delete('/security-guards/{securityGuard}', [SecurityGuardController::class, 'destroy']);
