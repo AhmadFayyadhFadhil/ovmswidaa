@@ -4,14 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OVMS Security Pos - Pemindai Zebra</title>
-
-  <!-- Auto Redirect HTTPS IP to HTTP IP to bypass Chrome SSL Fetch Block -->
-  <script>
-    if (window.location.protocol === 'https:' && (window.location.hostname === '172.16.4.24' || window.location.hostname.indexOf('172.') === 0)) {
-      window.location.href = 'http://' + window.location.hostname + window.location.pathname + window.location.search;
-    }
-  </script>
-
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     body { background-color: #0f172a; color: #ffffff; padding: 12px; font-size: 14px; line-height: 1.4; }
@@ -10327,24 +10319,26 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         return str;
       }
 
-      // Robust API Fetch supporting relative URLs & fallback HTTP endpoints
+      // Robust API Fetch supporting relative URLs & matching HTTPS/HTTP protocols
       function fetchApiWithFallback(path, options, callback) {
         var host = window.location.hostname || '172.16.4.24';
+        var proto = window.location.protocol || 'https:';
 
         var endpoints = [
           '/api' + path,
+          proto + '//' + host + '/api' + path,
+          'https://ovms.widatra.com/api' + path,
+          'https://172.16.4.24/api' + path,
           'http://172.16.4.24/api' + path,
-          'http://' + host + '/api' + path,
           'http://172.16.4.24:8080/api' + path,
-          'http://122.248.33.66/api' + path,
-          'https://ovms.widatra.com/api' + path
+          'http://122.248.33.66/api' + path
         ];
 
         var index = 0;
 
         function tryNext() {
           if (index >= endpoints.length) {
-            callback(new Error('Buka via http://172.16.4.24/security-lite.html (Gunakan HTTP bukan HTTPS)'));
+            callback(new Error('Gagal terhubung ke API server. Periksa koneksi jaringan.'));
             return;
           }
 
