@@ -85,6 +85,7 @@ class StoreRequest extends FormRequest
             'passengers.*.name' => 'required_with:passengers|string|max:255',
             'passengers.*.department_id' => 'nullable|integer|exists:departments,id',
             'passengers.*.user_id' => 'nullable|integer|exists:users,id',
+            'passengers.*.is_pic' => 'nullable|boolean',
             // Optional driver/vehicle for GA urgent request
             'driver_id' => 'nullable|integer|exists:users,id',
             'vehicle_id' => 'nullable|integer|exists:vehicles,id',
@@ -98,7 +99,7 @@ class StoreRequest extends FormRequest
             'external_departure_cost' => 'nullable|numeric',
             'external_return_cost' => 'nullable|numeric',
             // Multi-Day Itinerary fields
-            'itinerary_file' => 'nullable|file|mimes:jpeg,jpg,png,pdf|max:10240',
+            'itinerary_file' => 'nullable|file|max:10240',
             'itineraries' => 'nullable|array',
             'itineraries.*.date' => 'required_with:itineraries|date',
             'itineraries.*.morning_time' => 'nullable|string',
