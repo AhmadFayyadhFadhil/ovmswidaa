@@ -202,8 +202,8 @@ class SecurityController extends Controller
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated, $targetTrip, &$customMessage) {
             $scanTime = !empty($validated['scanned_at'])
-                ? \Carbon\Carbon::parse($validated['scanned_at'])->timezone('Asia/Jakarta')
-                : now('Asia/Jakarta');
+                ? \Carbon\Carbon::parse($validated['scanned_at'], 'Asia/Jakarta')->format('Y-m-d H:i:s')
+                : now('Asia/Jakarta')->format('Y-m-d H:i:s');
 
             $todayItinerary = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)
                 ->where('date', $scanTime->format('Y-m-d'))
