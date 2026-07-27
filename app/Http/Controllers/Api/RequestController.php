@@ -41,6 +41,7 @@ class RequestController extends Controller
             'operationalTrips.vehicle',
             'assignments.driver',
             'passengers.department',
+            'passengers.user',
             'driver',
             'vehicle',
             'itineraries.driver',
