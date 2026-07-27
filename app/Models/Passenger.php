@@ -14,6 +14,7 @@ class Passenger extends Model
         'name',
         'department_id',
         'user_id',
+        'is_pic',
     ];
 
     /**

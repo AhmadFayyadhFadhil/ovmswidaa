@@ -60,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/requests/{vehicleRequest}/start', [RequestController::class, 'start']);
     Route::post('/requests/{vehicleRequest}/complete', [RequestController::class, 'complete']);
     Route::post('/requests/{vehicleRequest}/adjust-driver', [RequestController::class, 'adjustDriver']);
+    Route::post('/requests/{vehicleRequest}/rate-driver', [RequestController::class, 'rateDriver']);
     Route::post('/requests/{vehicleRequest}/daily-assignments', [AssignmentController::class, 'storeDailyAssignments']);
 
     // ===== SECURITY GUARDS ENDPOINTS =====

@@ -188,10 +188,15 @@ class RequestResource extends JsonResource
             'external_return_photo_url_2'  => $this->external_return_photo_path_2 ? asset('storage/' . $this->external_return_photo_path_2) : null,
             'third_party_cost_2'           => $this->third_party_cost_2 ?? 0,
 
+            'rating'                  => $this->rating,
+            'rating_notes'            => $this->rating_notes,
+            'rated_at'                => $this->rated_at,
+
             'requested_by'      => [
                 'id'    => $this->user?->id,
                 'name'  => $this->user?->name,
                 'email' => $this->user?->email,
+                'phone' => $this->user?->phone,
             ],
             'approvals' => $this->whenLoaded('approvals', fn() =>
                 $this->approvals->map(fn($a) => [
@@ -212,6 +217,7 @@ class RequestResource extends JsonResource
                     'id' => $this->operationalTrip->driver?->id,
                     'name' => $this->operationalTrip->driver?->name,
                     'email' => $this->operationalTrip->driver?->email,
+                    'phone' => $this->operationalTrip->driver?->phone,
                 ],
                 'vehicle' => [
                     'id' => $this->operationalTrip->vehicle?->id,
@@ -227,6 +233,7 @@ class RequestResource extends JsonResource
                     'id' => $t->driver?->id,
                     'name' => $t->driver?->name,
                     'email' => $t->driver?->email,
+                    'phone' => $t->driver?->phone,
                 ],
                 'vehicle' => [
                     'id' => $t->vehicle?->id,

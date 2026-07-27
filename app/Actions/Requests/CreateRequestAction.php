@@ -153,7 +153,15 @@ class CreateRequestAction
 
             // Create passengers if provided
             if (!empty($data['passengers'])) {
+                $anyPicSpecified = false;
                 foreach ($data['passengers'] as $passengerData) {
+                    if (!empty($passengerData['is_pic'])) {
+                        $anyPicSpecified = true;
+                        break;
+                    }
+                }
+
+                foreach ($data['passengers'] as $idx => $passengerData) {
                     $userId = $passengerData['user_id'] ?? null;
                     if (!$userId && !empty($passengerData['name'])) {
                         $resolved = \App\Models\User::where('name', trim($passengerData['name']))->first();
@@ -161,11 +169,14 @@ class CreateRequestAction
                             $userId = $resolved->id;
                         }
                     }
+                    $isPic = !empty($passengerData['is_pic']) || (!$anyPicSpecified && $idx === 0);
+
                     Passenger::create([
                         'request_id' => $request->id,
                         'name' => $passengerData['name'],
                         'department_id' => $passengerData['department_id'] ?? null,
                         'user_id' => $userId,
+                        'is_pic' => $isPic,
                     ]);
                 }
             }

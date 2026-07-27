@@ -20,6 +20,7 @@ class PassengerResource extends JsonResource
             'name' => $this->name,
             'department_id' => $this->department_id,
             'department_name' => $this->department?->name,
+            'is_pic' => (bool)$this->is_pic,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

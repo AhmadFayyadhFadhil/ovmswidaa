@@ -739,4 +739,33 @@ class RequestController extends Controller
             'data'    => new RequestResource($vehicleRequest->fresh(['user', 'approvals.approver', 'operationalTrip.vehicle', 'operationalTrip.driver', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'passengers.department', 'driver', 'vehicle', 'itineraries.driver', 'itineraries.vehicle'])),
         ], 200);
     }
+
+    public function rateDriver(Request $request, VehicleRequest $vehicleRequest): JsonResponse
+    {
+        $user = Auth::user();
+        if ($vehicleRequest->user_id !== $user->id && !$user->hasRoleDirect(['Admin', 'GA']) && !$user->isHrGaHead()) {
+            return response()->json(['status' => 'error', 'message' => 'Hanya pemohon request yang dapat memberikan rating driver.'], 403);
+        }
+
+        if ($vehicleRequest->status !== RequestStatus::COMPLETED) {
+            return response()->json(['status' => 'error', 'message' => 'Rating driver hanya dapat diberikan pada perjalanan yang telah selesai (COMPLETED).'], 422);
+        }
+
+        $validated = $request->validate([
+            'rating'       => 'required|integer|min:1|max:5',
+            'rating_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $vehicleRequest->update([
+            'rating'       => $validated['rating'],
+            'rating_notes' => $validated['rating_notes'] ?? null,
+            'rated_at'     => now(),
+        ]);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Terima kasih! Rating & ulasan driver berhasil disimpan.',
+            'data'    => new RequestResource($vehicleRequest->fresh(['user', 'driver', 'vehicle'])),
+        ], 200);
+    }
 }
