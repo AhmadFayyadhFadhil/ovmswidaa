@@ -145,36 +145,43 @@ class RequestController extends Controller
 
     public function store(StoreRequestRequest $request, CreateRequestAction $action): JsonResponse
     {
-        $data = $request->validated();
+        try {
+            $data = $request->validated();
 
-        if ($request->hasFile('itinerary_file')) {
-            $data['itinerary_file_path'] = $request->file('itinerary_file')->store('itinerary_files', 'public');
+            if ($request->hasFile('itinerary_file')) {
+                $data['itinerary_file_path'] = $request->file('itinerary_file')->store('itinerary_files', 'public');
+            }
+
+            if (isset($data['itineraries']) && is_string($data['itineraries'])) {
+                $data['itineraries'] = json_decode($data['itineraries'], true);
+            }
+
+            $newRequest = $action->execute($data);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Permintaan berhasil diajukan',
+                'data'    => new RequestResource($newRequest->load([
+                    'user',
+                    'passengers.department',
+                    'itineraries.driver',
+                    'itineraries.vehicle',
+                    'operationalTrips.driver',
+                    'operationalTrips.vehicle',
+                    'assignments.driver',
+                    'approvals.approver',
+                    'driver',
+                    'vehicle',
+                    'operationalTrip.driver',
+                    'operationalTrip.vehicle',
+                ])),
+            ], 201);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
         }
-
-        if (isset($data['itineraries']) && is_string($data['itineraries'])) {
-            $data['itineraries'] = json_decode($data['itineraries'], true);
-        }
-
-        $newRequest = $action->execute($data);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Permintaan berhasil diajukan',
-            'data'    => new RequestResource($newRequest->load([
-                'user',
-                'passengers.department',
-                'itineraries.driver',
-                'itineraries.vehicle',
-                'operationalTrips.driver',
-                'operationalTrips.vehicle',
-                'assignments.driver',
-                'approvals.approver',
-                'driver',
-                'vehicle',
-                'operationalTrip.driver',
-                'operationalTrip.vehicle',
-            ])),
-        ], 201);
     }
 
     public function show(VehicleRequest $vehicleRequest): JsonResponse

@@ -61,10 +61,14 @@ class StoreRequest extends FormRequest
                 'required',
                 'date',
                 function ($attribute, $value, $fail) use ($minTime, $minLeadTime) {
-                    $dateTime = \Carbon\Carbon::parse($value);
-                    if ($dateTime->lt($minTime)) {
-                        $formattedMin = $minTime->format('d-m-Y H:i');
-                        $fail("Waktu keberangkatan minimal {$minLeadTime} jam dari waktu pengajuan saat ini (keberangkatan tercepat yang diizinkan: {$formattedMin}).");
+                    try {
+                        $dateTime = \Carbon\Carbon::parse($value);
+                        if ($dateTime->lt($minTime)) {
+                            $formattedMin = $minTime->format('d-m-Y H:i');
+                            $fail("Waktu keberangkatan minimal {$minLeadTime} jam dari waktu pengajuan saat ini (keberangkatan tercepat yang diizinkan: {$formattedMin}).");
+                        }
+                    } catch (\Throwable $e) {
+                        $fail("Format waktu keberangkatan tidak valid.");
                     }
                 }
             ];
