@@ -325,8 +325,8 @@ class SecurityController extends Controller
                 if ($targetTrip) {
                     $targetTrip->update([
                         'status' => 'completed',
-                        'end_datetime' => $targetTrip->end_datetime ?? now(),
-                        'security_checked_in_at' => now(),
+                        'end_datetime' => $targetTrip->end_datetime ?? $scanTime,
+                        'security_checked_in_at' => $scanTime,
                         'security_checkin_by' => $validated['security_name'],
                         'security_checkin_notes' => $validated['notes'] ?? null,
                     ]);
@@ -344,8 +344,8 @@ class SecurityController extends Controller
                     if ($completedTripsCount >= $allTripsCount) {
                         $vehicleRequest->update([
                             'status'                 => RequestStatus::COMPLETED,
-                            'completed_at'           => $vehicleRequest->completed_at ?? now(),
-                            'security_checked_in_at' => now(),
+                            'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
+                            'security_checked_in_at' => $scanTime,
                             'security_checkin_by'    => $validated['security_name'],
                             'security_checkin_notes' => $validated['notes'] ?? null,
                         ]);
@@ -357,7 +357,7 @@ class SecurityController extends Controller
                     if ($todayItinerary->morning_status === 'on_going') {
                         $todayItinerary->update([
                             'morning_status' => 'completed',
-                            'morning_checked_in_at' => now(),
+                            'morning_checked_in_at' => $scanTime,
                             'morning_checkin_by' => $validated['security_name'],
                             'morning_checkin_notes' => $validated['notes'] ?? null,
                         ]);
@@ -373,7 +373,7 @@ class SecurityController extends Controller
                         if (empty($todayItinerary->afternoon_destination)) {
                             $todayItinerary->update([
                                 'status' => 'completed',
-                                'security_checked_in_at' => now(),
+                                'security_checked_in_at' => $scanTime,
                             ]);
                         }
 
@@ -382,8 +382,8 @@ class SecurityController extends Controller
                         if ($doneCount >= $allCount) {
                             $vehicleRequest->update([
                                 'status'                 => RequestStatus::COMPLETED,
-                                'completed_at'           => $vehicleRequest->completed_at ?? now(),
-                                'security_checked_in_at' => now(),
+                                'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
+                                'security_checked_in_at' => $scanTime,
                                 'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                             ]);
@@ -393,11 +393,11 @@ class SecurityController extends Controller
                     } else if ($todayItinerary->afternoon_status === 'on_going') {
                         $todayItinerary->update([
                             'afternoon_status' => 'completed',
-                            'afternoon_checked_in_at' => now(),
+                            'afternoon_checked_in_at' => $scanTime,
                             'afternoon_checkin_by' => $validated['security_name'],
                             'afternoon_checkin_notes' => $validated['notes'] ?? null,
                             'status' => 'completed',
-                            'security_checked_in_at' => now(),
+                            'security_checked_in_at' => $scanTime,
                         ]);
 
                         if ($driver) {
@@ -412,8 +412,8 @@ class SecurityController extends Controller
                         if ($doneCount >= $allCount) {
                             $vehicleRequest->update([
                                 'status'                 => RequestStatus::COMPLETED,
-                                'completed_at'           => $vehicleRequest->completed_at ?? now(),
-                                'security_checked_in_at' => now(),
+                                'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
+                                'security_checked_in_at' => $scanTime,
                                 'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                             ]);
@@ -424,8 +424,8 @@ class SecurityController extends Controller
                 } else {
                     $vehicleRequest->update([
                         'status'                 => RequestStatus::COMPLETED,
-                        'completed_at'           => $vehicleRequest->completed_at ?? now(),
-                        'security_checked_in_at' => now(),
+                        'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
+                        'security_checked_in_at' => $scanTime,
                         'security_checkin_by'    => $validated['security_name'],
                         'security_checkin_notes' => $validated['notes'] ?? null,
                     ]);
@@ -435,8 +435,8 @@ class SecurityController extends Controller
                         foreach ($trips as $trip) {
                             $trip->update([
                                 'status' => 'completed',
-                                'end_datetime' => $trip->end_datetime ?? now(),
-                                'security_checked_in_at' => now(),
+                                'end_datetime' => $trip->end_datetime ?? $scanTime,
+                                'security_checked_in_at' => $scanTime,
                                 'security_checkin_by' => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                             ]);
