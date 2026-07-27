@@ -202,8 +202,8 @@ class SecurityController extends Controller
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated, $targetTrip, &$customMessage) {
             $scanTime = !empty($validated['scanned_at'])
-                ? \Carbon\Carbon::parse($validated['scanned_at'], 'Asia/Jakarta')->format('Y-m-d H:i:s')
-                : now('Asia/Jakarta')->format('Y-m-d H:i:s');
+                ? \Carbon\Carbon::parse($validated['scanned_at'], 'Asia/Jakarta')
+                : now('Asia/Jakarta');
 
             $todayItinerary = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)
                 ->where('date', $scanTime->format('Y-m-d'))
@@ -233,8 +233,8 @@ class SecurityController extends Controller
                     if ($vehicleRequest->status !== RequestStatus::ON_GOING) {
                         $vehicleRequest->update([
                             'status' => RequestStatus::ON_GOING,
-                            'started_at' => $vehicleRequest->started_at ?? now(),
-                            'security_checked_out_at' => $vehicleRequest->security_checked_out_at ?? now(),
+                            'started_at' => $vehicleRequest->started_at ?? $scanTime,
+                            'security_checked_out_at' => $vehicleRequest->security_checked_out_at ?? $scanTime,
                             'security_checkout_by' => $vehicleRequest->security_checkout_by ?? $validated['security_name'],
                             'security_checkout_notes' => $vehicleRequest->security_checkout_notes ?? $validated['notes'] ?? null,
                         ]);
@@ -247,11 +247,11 @@ class SecurityController extends Controller
                         // Checkout Sesi 1
                         $todayItinerary->update([
                             'morning_status' => 'on_going',
-                            'morning_checked_out_at' => now(),
+                            'morning_checked_out_at' => $scanTime,
                             'morning_checkout_by' => $validated['security_name'],
                             'morning_checkout_notes' => $validated['notes'] ?? null,
                             'status' => 'on_going',
-                            'security_checked_out_at' => $todayItinerary->security_checked_out_at ?? now(),
+                            'security_checked_out_at' => $todayItinerary->security_checked_out_at ?? $scanTime,
                         ]);
 
                         if ($driver) {
@@ -263,8 +263,8 @@ class SecurityController extends Controller
 
                         $vehicleRequest->update([
                             'status' => RequestStatus::ON_GOING,
-                            'started_at' => $vehicleRequest->started_at ?? now(),
-                            'security_checked_out_at' => $vehicleRequest->security_checked_out_at ?? now(),
+                            'started_at' => $vehicleRequest->started_at ?? $scanTime,
+                            'security_checked_out_at' => $vehicleRequest->security_checked_out_at ?? $scanTime,
                             'security_checkout_by' => $vehicleRequest->security_checkout_by ?? $validated['security_name'],
                             'security_checkout_notes' => $vehicleRequest->security_checkout_notes ?? $validated['notes'] ?? null,
                         ]);
@@ -274,7 +274,7 @@ class SecurityController extends Controller
                         // Checkout Sesi 2
                         $todayItinerary->update([
                             'afternoon_status' => 'on_going',
-                            'afternoon_checked_out_at' => now(),
+                            'afternoon_checked_out_at' => $scanTime,
                             'afternoon_checkout_by' => $validated['security_name'],
                             'afternoon_checkout_notes' => $validated['notes'] ?? null,
                             'status' => 'on_going',
@@ -296,8 +296,8 @@ class SecurityController extends Controller
                 } else {
                     $vehicleRequest->update([
                         'status'                  => RequestStatus::ON_GOING,
-                        'started_at'              => $vehicleRequest->started_at ?? now(),
-                        'security_checked_out_at' => now(),
+                        'started_at'              => $vehicleRequest->started_at ?? $scanTime,
+                        'security_checked_out_at' => $scanTime,
                         'security_checkout_by'    => $validated['security_name'],
                         'security_checkout_notes' => $validated['notes'] ?? null,
                     ]);
@@ -307,8 +307,8 @@ class SecurityController extends Controller
                         foreach ($trips as $trip) {
                             $trip->update([
                                 'status' => 'on_going',
-                                'start_datetime' => $trip->start_datetime ?? now(),
-                                'security_checked_out_at' => now(),
+                                'start_datetime' => $trip->start_datetime ?? $scanTime,
+                                'security_checked_out_at' => $scanTime,
                                 'security_checkout_by' => $validated['security_name'],
                                 'security_checkout_notes' => $validated['notes'] ?? null,
                             ]);
