@@ -20,6 +20,7 @@ class SecurityController extends Controller
             'trip_id'       => 'nullable|integer',
             'itinerary_id'  => 'nullable|integer',
             'session'       => 'nullable|string|in:morning,afternoon',
+            'scanned_at'    => 'nullable|string',
         ]);
 
         $vehicleRequest = VehicleRequest::where('qr_code_token', $validated['qr_code_token'])->first();
@@ -200,8 +201,12 @@ class SecurityController extends Controller
         $customMessage = null;
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated, $targetTrip, &$customMessage) {
+            $scanTime = !empty($validated['scanned_at'])
+                ? \Carbon\Carbon::parse($validated['scanned_at'])->timezone('Asia/Jakarta')
+                : now('Asia/Jakarta');
+
             $todayItinerary = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)
-                ->where('date', now()->format('Y-m-d'))
+                ->where('date', $scanTime->format('Y-m-d'))
                 ->first()
                 ?? \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)
                     ->whereIn('status', ['pending', 'assigned', 'on_going'])
@@ -212,8 +217,8 @@ class SecurityController extends Controller
                 if ($targetTrip) {
                     $targetTrip->update([
                         'status' => 'on_going',
-                        'start_datetime' => $targetTrip->start_datetime ?? now(),
-                        'security_checked_out_at' => now(),
+                        'start_datetime' => $targetTrip->start_datetime ?? $scanTime,
+                        'security_checked_out_at' => $scanTime,
                         'security_checkout_by' => $validated['security_name'],
                         'security_checkout_notes' => $validated['notes'] ?? null,
                     ]);
