@@ -30,6 +30,7 @@ class RequestController extends Controller
         $isDriver   = $user->hasRoleDirect('Driver');
         $isSecurity = $user->hasRoleDirect('Security');
         $isHrGaHead = $user->isHrGaHead();
+        $myRequestsOnly = $request->boolean('my_requests_only') || $request->input('scope') === 'my_requests';
 
         $query = VehicleRequest::with([
             'user',
@@ -48,7 +49,14 @@ class RequestController extends Controller
             'itineraries.vehicle',
         ]);
 
-        if ($isApprover && !$isAdmin && !$isGA) {
+        if ($myRequestsOnly) {
+            $query->where(function ($q) use ($user) {
+                $q->where('user_id', $user->id)
+                  ->orWhereHas('passengers', function ($sub) use ($user) {
+                      $sub->where('user_id', $user->id);
+                  });
+            });
+        } elseif ($isApprover && !$isAdmin && !$isGA) {
             if ($isHrGaHead) {
                 $query->where(function ($q) use ($user) {
                     $q->whereIn('department_id', $user->departmentGroup())
