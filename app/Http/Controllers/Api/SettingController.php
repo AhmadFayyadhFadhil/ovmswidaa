@@ -291,11 +291,15 @@ class SettingController extends Controller
     {
         $activeVehicles = Vehicle::count();
         $dailyRequests = \App\Models\Request::whereDate('created_at', today())->count();
+        if ($dailyRequests === 0) {
+            $dailyRequests = \App\Models\Request::count();
+        }
         $activeDrivers = User::whereHas('roles', function($q) {
             $q->where('name', 'Driver');
         })->count();
 
         $systemName = Setting::getValue('system_name', 'OVMS');
+        $companyName = Setting::getValue('company_name', 'Enterprise Fleet');
         $logo = Setting::getValue('company_logo');
         $logoUrl = null;
         if ($logo) {
@@ -313,6 +317,7 @@ class SettingController extends Controller
                 'daily_requests' => $dailyRequests,
                 'active_drivers' => $activeDrivers,
                 'system_name' => $systemName,
+                'company_name' => $companyName,
                 'company_logo' => $logoUrl,
             ]
         ]);
