@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use App\Enums\RequestStatus;
 use Illuminate\Validation\Rules\Password;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -178,71 +179,114 @@ class UserController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (!$this->isAdmin()) {
-            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
-        }
+        try {
+            $currentUser = Auth::user();
+            $isAuthorized = $currentUser && (
+                $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
+                $currentUser->isHrGaHead() ||
+                ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
+            );
 
-        $request->merge([
-            'is_department_head' => $request->boolean('is_department_head'),
-        ]);
+            if (!$isAuthorized) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+            }
 
-        $validated = $request->validate([
-            'nik'      => ['nullable', 'string', 'max:50', 'unique:users,nik'],
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users,email',
-            'password' => ['required', Password::min(6)],
-            'role'     => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver'])],
-            'rank'     => 'required_if:role,Approver|nullable|string|max:255',
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'is_department_head' => 'boolean',
-            'sim_a_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
-        ]);
+            // Normalize department input
+            $deptInput = $request->input('department_id') ?? $request->input('department') ?? $request->input('department_name');
+            if ($deptInput !== null && $deptInput !== '') {
+                if (is_numeric($deptInput)) {
+                    $request->merge(['department_id' => (int) $deptInput]);
+                } else {
+                    $deptId = \App\Models\Department::where('name', trim($deptInput))->value('id');
+                    if ($deptId) {
+                        $request->merge(['department_id' => $deptId]);
+                    }
+                }
+            }
 
-        if ($validated['role'] === 'Approver' && empty($validated['rank'] ?? null)) {
+            $request->merge([
+                'is_department_head' => $request->boolean('is_department_head'),
+            ]);
+
+            $validated = $request->validate([
+                'nik'      => ['nullable', 'string', 'max:50', 'unique:users,nik'],
+                'name'     => 'required|string|max:255',
+                'email'    => 'required|email|unique:users,email',
+                'password' => ['required', Password::min(6)],
+                'role'     => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
+                'rank'     => 'required_if:role,Approver|nullable|string|max:255',
+                'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+                'is_department_head' => 'boolean',
+                'sim_a_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
+            ]);
+
+            $role = ucfirst(strtolower($validated['role']));
+            if ($role === 'Ga') {
+                $role = 'GA';
+            }
+
+            if ($role === 'Approver' && empty($validated['rank'] ?? null)) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Rank wajib diisi untuk role Approver',
+                ], 422);
+            }
+
+            if ($role === 'Driver' && !$request->hasFile('sim_a_photo')) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Foto SIM A wajib untuk role Driver',
+                ], 422);
+            }
+
+            if (in_array($role, ['Approver', 'GA']) && !empty($validated['is_department_head'] ?? false) && empty($validated['department_id'] ?? null)) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Department wajib dipilih jika menjadi Kepala Departemen',
+                ], 422);
+            }
+
+            $data = [
+                'nik'                => $validated['nik'] ?? null,
+                'name'               => $validated['name'],
+                'email'              => $validated['email'],
+                'password'           => Hash::make($validated['password']),
+                'rank'               => $validated['rank'] ?? null,
+                'department_id'      => $validated['department_id'] ?? null,
+                'is_department_head' => $validated['is_department_head'] ?? false,
+                'is_active'          => true,
+                'can_request'        => true,
+            ];
+
+            if ($request->hasFile('sim_a_photo')) {
+                $simPath = $this->storePublicFileSafely($request->file('sim_a_photo'), 'users/sim');
+                if ($simPath) {
+                    $data['sim_a_photo'] = $simPath;
+                }
+            }
+
+            $user = User::create($data);
+
+            $this->assignRoleSafely($user, $role);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'User berhasil dibuat',
+                'data'    => $this->formatUser($user->load('roles')),
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Rank wajib diisi untuk role Approver',
+                'message' => collect($e->errors())->flatten()->first() ?? 'Data yang dimasukkan tidak valid.',
+                'errors'  => $e->errors(),
             ], 422);
-        }
-
-        if ($validated['role'] === 'Driver' && !$request->hasFile('sim_a_photo')) {
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Create User Error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Foto SIM A wajib untuk role Driver',
-            ], 422);
+                'message' => 'Gagal membuat user: ' . $e->getMessage(),
+            ], 500);
         }
-
-        // If Approver or GA and marked as department head, department must be provided
-        if (in_array($validated['role'], ['Approver', 'GA']) && !empty($validated['is_department_head'] ?? false) && empty($validated['department_id'] ?? null)) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Department wajib dipilih jika menjadi Kepala Departemen',
-            ], 422);
-        }
-
-        $data = [
-            'nik'                => $validated['nik'] ?? null,
-            'name'               => $validated['name'],
-            'email'              => $validated['email'],
-            'password'           => Hash::make($validated['password']),   // ← di-hash
-            'rank'               => $validated['rank'] ?? null,
-            'department_id'      => $validated['department_id'] ?? null,
-            'is_department_head' => $validated['is_department_head'] ?? false,
-        ];
-
-        if ($request->hasFile('sim_a_photo')) {
-            $data['sim_a_photo'] = $request->file('sim_a_photo')->store('users/sim', 'public');
-        }
-
-        $user = User::create($data);
-
-        $user->assignRole($validated['role']);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'User berhasil dibuat',
-            'data'    => $this->formatUser($user->load('roles')),
-        ], 201);
     }
 
     public function show(User $user): JsonResponse
@@ -259,89 +303,119 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): JsonResponse
     {
-        $currentUser = Auth::user();
-        $isGaOrHrHead = $currentUser && (
-            $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
-            $currentUser->isHrGaHead() ||
-            ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
-        );
+        try {
+            $currentUser = Auth::user();
+            $isGaOrHrHead = $currentUser && (
+                $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
+                $currentUser->isHrGaHead() ||
+                ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
+            );
 
-        $isDutyStatusOnly = ($request->has('availability_status') || $request->has('status')) &&
-            !$request->hasAny(['name', 'email', 'password', 'role', 'nik', 'rank', 'department_id', 'sim_a_photo']);
+            $isDutyStatusOnly = ($request->has('availability_status') || $request->has('status')) &&
+                !$request->hasAny(['name', 'email', 'password', 'role', 'nik', 'rank', 'department_id', 'sim_a_photo']);
 
-        if (!$this->isAdmin() && !($isGaOrHrHead && $isDutyStatusOnly)) {
-            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
-        }
+            if (!$isGaOrHrHead && !$this->isAdmin()) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+            }
 
-        if ($isDutyStatusOnly) {
-            return $this->updateDriverDuty($user, $request);
-        }
+            if ($isDutyStatusOnly) {
+                return $this->updateDriverDuty($user, $request);
+            }
 
-        $request->merge([
-            'is_department_head' => $request->boolean('is_department_head'),
-        ]);
+            // Normalize department input
+            $deptInput = $request->input('department_id') ?? $request->input('department') ?? $request->input('department_name');
+            if ($deptInput !== null && $deptInput !== '') {
+                if (is_numeric($deptInput)) {
+                    $request->merge(['department_id' => (int) $deptInput]);
+                } else {
+                    $deptId = \App\Models\Department::where('name', trim($deptInput))->value('id');
+                    if ($deptId) {
+                        $request->merge(['department_id' => $deptId]);
+                    }
+                }
+            }
 
-        $validated = $request->validate([
-            'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)],
-            'name'     => 'sometimes|required|string|max:255',
-            'email'    => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($user->id)],
-            'password' => ['sometimes', Password::min(6)],
-            'role'     => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver'])],
-            'rank'     => 'required_if:role,Approver|nullable|string|max:255',
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'is_department_head' => 'boolean',
-            'sim_a_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
-        ]);
+            $request->merge([
+                'is_department_head' => $request->boolean('is_department_head'),
+            ]);
 
-        $role = $validated['role'] ?? null;
-        $targetRole = $role ?? ($user->getRoleNames()[0] ?? null);
+            $validated = $request->validate([
+                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)],
+                'name'     => 'sometimes|required|string|max:255',
+                'email'    => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($user->id)],
+                'password' => ['sometimes', Password::min(6)],
+                'role'     => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
+                'rank'     => 'required_if:role,Approver|nullable|string|max:255',
+                'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+                'is_department_head' => 'boolean',
+                'sim_a_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
+            ]);
 
-        if ($targetRole === 'Driver' && !$request->hasFile('sim_a_photo') && !$user->sim_a_photo) {
+            $role = isset($validated['role']) ? ucfirst(strtolower($validated['role'])) : null;
+            if ($role === 'Ga') {
+                $role = 'GA';
+            }
+            $targetRole = $role ?? ($user->getRoleNames()[0] ?? null);
+
+            if ($targetRole === 'Driver' && !$request->hasFile('sim_a_photo') && !$user->sim_a_photo) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Foto SIM A wajib untuk role Driver',
+                ], 422);
+            }
+
+            if ($role === 'Approver' && empty($validated['rank'] ?? null)) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Rank wajib diisi untuk role Approver',
+                ], 422);
+            }
+
+            $currentRole = $role ?? ($user->getRoleNames()[0] ?? null);
+            if (in_array($currentRole, ['Approver', 'GA']) && !empty($validated['is_department_head'] ?? false) && empty($validated['department_id'] ?? ($user->department_id ?? null))) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Department wajib dipilih jika menjadi Kepala Departemen',
+                ], 422);
+            }
+
+            unset($validated['role']);
+
+            if (!empty($validated['password'])) {
+                $validated['password'] = Hash::make($validated['password']);
+            }
+
+            if ($request->hasFile('sim_a_photo')) {
+                $simPath = $this->storePublicFileSafely($request->file('sim_a_photo'), 'users/sim');
+                if ($simPath) {
+                    $validated['sim_a_photo'] = $simPath;
+                }
+            }
+
+            $user->update($validated);
+
+            if ($role) {
+                $this->assignRoleSafely($user, $role);
+            }
+
             return response()->json([
-                'status' => 'error',
-                'message' => 'Foto SIM A wajib untuk role Driver',
-            ], 422);
-        }
-        
-        // Check if changing to Approver role without rank
-        if ($role === 'Approver' && empty($validated['rank'] ?? null)) {
+                'status'  => 'success',
+                'message' => 'User berhasil diperbarui',
+                'data'    => $this->formatUser($user->fresh('roles')),
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Rank wajib diisi untuk role Approver',
+                'message' => collect($e->errors())->flatten()->first() ?? 'Data yang dimasukkan tidak valid.',
+                'errors'  => $e->errors(),
             ], 422);
-        }
-
-        // If Approver or GA and marked as department head, ensure department selected
-        $currentRole = $role ?? ($user->getRoleNames()[0] ?? null);
-        if (in_array($currentRole, ['Approver', 'GA']) && !empty($validated['is_department_head'] ?? false) && empty($validated['department_id'] ?? ($user->department_id ?? null))) {
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Update User Error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Department wajib dipilih jika menjadi Kepala Departemen',
-            ], 422);
+                'message' => 'Gagal memperbarui user: ' . $e->getMessage(),
+            ], 500);
         }
-
-        unset($validated['role']);
-
-        // Hash password jika ada perubahan
-        if (!empty($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);   // ← di-hash
-        }
-
-        if ($request->hasFile('sim_a_photo')) {
-            $validated['sim_a_photo'] = $request->file('sim_a_photo')->store('users/sim', 'public');
-        }
-
-        $user->update($validated);
-
-        if ($role) {
-            $user->syncRoles([$role]);
-        }
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'User berhasil diperbarui',
-            'data'    => $this->formatUser($user->fresh('roles')),
-        ], 200);
     }
 
     public function destroy(User $user): JsonResponse
@@ -519,5 +593,75 @@ class UserController extends Controller
                 'department_name' => $u->department?->name,
             ]),
         ]);
+    }
+
+    private function assignRoleSafely(User $user, string $roleName): void
+    {
+        $roleName = ucfirst(strtolower($roleName));
+        if ($roleName === 'Ga') {
+            $roleName = 'GA';
+        }
+
+        $allowedRoles = [
+            'Admin'    => 'Admin',
+            'GA'       => 'GA',
+            'Approver' => 'Approver',
+            'Employee' => 'Employee',
+            'Driver'   => 'Driver',
+        ];
+        $standardName = $allowedRoles[$roleName] ?? $roleName;
+
+        Role::firstOrCreate([
+            'name'       => $standardName,
+            'guard_name' => 'sanctum',
+        ]);
+
+        Role::firstOrCreate([
+            'name'       => $standardName,
+            'guard_name' => 'web',
+        ]);
+
+        $user->syncRoles([$standardName]);
+    }
+
+    private function storePublicFileSafely(\Illuminate\Http\UploadedFile $file, string $folder): ?string
+    {
+        try {
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'])) {
+                $ext = 'jpg';
+            }
+
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $relativeDir = trim($folder, '/');
+            $targetDir = storage_path('app/public/' . $relativeDir);
+
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0777, true);
+            }
+
+            $targetPath = $targetDir . '/' . $filename;
+
+            $success = false;
+            if ($file->getRealPath()) {
+                $success = @move_uploaded_file($file->getRealPath(), $targetPath) || @copy($file->getRealPath(), $targetPath);
+            }
+
+            if (!$success) {
+                $storedPath = $file->store($relativeDir, 'public');
+                return $storedPath ?: null;
+            }
+
+            return $relativeDir . '/' . $filename;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("File Storage Error ({$folder}): " . $e->getMessage());
+            try {
+                return $file->store($folder, 'public');
+            } catch (\Throwable $ex) {
+                \Illuminate\Support\Facades\Log::error("Laravel store fallback failed: " . $ex->getMessage());
+                return null;
+            }
+        }
     }
 }
