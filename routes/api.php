@@ -49,6 +49,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/users/{user}/toggle-active', [UserController::class, 'toggleActive']);
     Route::post('/users/{user}/toggle-request', [UserController::class, 'toggleRequest']);
     Route::post('/users/{user}/driver-duty', [UserController::class, 'updateDriverDuty']);
+    Route::put('/users/{user}/driver-duty', [UserController::class, 'updateDriverDuty']);
+    Route::post('/users/{user}/status', [UserController::class, 'updateDriverDuty']);
+    Route::put('/users/{user}/status', [UserController::class, 'updateDriverDuty']);
 
     // ===== REQUEST ENDPOINTS =====
     Route::get('/requests', [RequestController::class, 'index']);

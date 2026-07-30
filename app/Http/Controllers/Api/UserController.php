@@ -259,8 +259,22 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): JsonResponse
     {
-        if (!$this->isAdmin()) {
+        $currentUser = Auth::user();
+        $isGaOrHrHead = $currentUser && (
+            $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
+            $currentUser->isHrGaHead() ||
+            ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
+        );
+
+        $isDutyStatusOnly = ($request->has('availability_status') || $request->has('status')) &&
+            !$request->hasAny(['name', 'email', 'password', 'role', 'nik', 'rank', 'department_id', 'sim_a_photo']);
+
+        if (!$this->isAdmin() && !($isGaOrHrHead && $isDutyStatusOnly)) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        if ($isDutyStatusOnly) {
+            return $this->updateDriverDuty($user, $request);
         }
 
         $request->merge([
@@ -390,12 +404,25 @@ class UserController extends Controller
     public function updateDriverDuty(User $user, Request $request): JsonResponse
     {
         $currentUser = Auth::user();
-        if (!$currentUser->hasRoleDirect(['Admin', 'GA']) && !$currentUser->isHrGaHead()) {
+        if (!$currentUser) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        if (!$user->hasRoleDirect('Driver')) {
+        $hasAccess = $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga'])
+            || $currentUser->isHrGaHead()
+            || ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'));
+
+        if (!$hasAccess) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        if (!$user->hasRoleDirect(['Driver', 'driver'])) {
             return response()->json(['status' => 'error', 'message' => 'User ini bukan merupakan Driver.'], 422);
+        }
+
+        $statusInput = $request->input('availability_status') ?? $request->input('status');
+        if ($statusInput) {
+            $request->merge(['availability_status' => $statusInput]);
         }
 
         $validated = $request->validate([
