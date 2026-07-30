@@ -72,22 +72,22 @@ class AssignmentController extends Controller
 
             $photoPath = null;
             if ($request->hasFile('external_photo')) {
-                $photoPath = $request->file('external_photo')->store('external_photos', 'public');
+                $photoPath = $this->storePublicFileSafely($request->file('external_photo'), 'external_photos');
             }
 
             $returnPhotoPath = null;
             if ($request->hasFile('external_return_photo')) {
-                $returnPhotoPath = $request->file('external_return_photo')->store('external_photos', 'public');
+                $returnPhotoPath = $this->storePublicFileSafely($request->file('external_return_photo'), 'external_photos');
             }
 
             $photoPath2 = null;
             if ($request->hasFile('external_photo_2')) {
-                $photoPath2 = $request->file('external_photo_2')->store('external_photos', 'public');
+                $photoPath2 = $this->storePublicFileSafely($request->file('external_photo_2'), 'external_photos');
             }
 
             $returnPhotoPath2 = null;
             if ($request->hasFile('external_return_photo_2')) {
-                $returnPhotoPath2 = $request->file('external_return_photo_2')->store('external_photos', 'public');
+                $returnPhotoPath2 = $this->storePublicFileSafely($request->file('external_return_photo_2'), 'external_photos');
             }
 
             $newStatus = \App\Enums\RequestStatus::DRIVER_ASSIGNED;
@@ -245,11 +245,11 @@ class AssignmentController extends Controller
             $endPhotoPath = null;
             
             if ($request->hasFile('start_photo')) {
-                $startPhotoPath = $request->file('start_photo')->store('assignments/photos', 'public');
+                $startPhotoPath = $this->storePublicFileSafely($request->file('start_photo'), 'assignments/photos');
             }
             
             if ($request->hasFile('end_photo')) {
-                $endPhotoPath = $request->file('end_photo')->store('assignments/photos', 'public');
+                $endPhotoPath = $this->storePublicFileSafely($request->file('end_photo'), 'assignments/photos');
             }
 
             $action->execute(
@@ -418,5 +418,45 @@ class AssignmentController extends Controller
             'message' => 'Penugasan harian berhasil disimpan',
             'data' => new RequestResource($vehicleRequest->fresh(['user', 'passengers.department', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'approvals.approver', 'driver', 'vehicle', 'operationalTrip.driver', 'operationalTrip.vehicle'])),
         ], 200);
+    }
+
+    private function storePublicFileSafely(\Illuminate\Http\UploadedFile $file, string $folder): ?string
+    {
+        try {
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'])) {
+                $ext = 'jpg';
+            }
+
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $relativeDir = trim($folder, '/');
+            $targetDir = storage_path('app/public/' . $relativeDir);
+
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0777, true);
+            }
+
+            $targetPath = $targetDir . '/' . $filename;
+
+            $success = false;
+            if ($file->getRealPath()) {
+                $success = @move_uploaded_file($file->getRealPath(), $targetPath) || @copy($file->getRealPath(), $targetPath);
+            }
+
+            if (!$success) {
+                $storedPath = $file->store($relativeDir, 'public');
+                return $storedPath ?: null;
+            }
+
+            return $relativeDir . '/' . $filename;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Assignment File Storage Error ({$folder}): " . $e->getMessage());
+            try {
+                return $file->store($folder, 'public');
+            } catch (\Throwable $ex) {
+                return null;
+            }
+        }
     }
 }

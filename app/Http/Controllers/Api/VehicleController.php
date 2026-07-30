@@ -113,31 +113,49 @@ class VehicleController extends Controller
 
     public function store(StoreVehicleRequest $request): JsonResponse
     {
-        if (!Auth::user()->hasRoleDirect('Admin') && !Auth::user()->isHrGaHead()) {
+        $user = Auth::user();
+        $isAuthorized = $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
+
+        if (!$isAuthorized) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $validated = $request->validated();
-        if ($request->hasFile('photo')) {
-            $validated['photo'] = $request->file('photo')->store('vehicles/photos', 'public');
-        }
-        if ($request->hasFile('stnk_photo')) {
-            $validated['stnk_photo'] = $request->file('stnk_photo')->store('vehicles/stnk', 'public');
-        }
+        try {
+            $validated = $request->validated();
+            if ($request->hasFile('photo')) {
+                $photoPath = $this->storePublicFileSafely($request->file('photo'), 'vehicles/photos');
+                if ($photoPath) {
+                    $validated['photo'] = $photoPath;
+                }
+            }
+            if ($request->hasFile('stnk_photo')) {
+                $stnkPath = $this->storePublicFileSafely($request->file('stnk_photo'), 'vehicles/stnk');
+                if ($stnkPath) {
+                    $validated['stnk_photo'] = $stnkPath;
+                }
+            }
 
-        $vehicle = Vehicle::create($validated);
+            $vehicle = Vehicle::create($validated);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Kendaraan berhasil ditambahkan',
-            'data'    => new VehicleResource($vehicle),
-        ], 201);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Kendaraan berhasil ditambahkan',
+                'data'    => new VehicleResource($vehicle),
+            ], 201);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Create Vehicle Error: ' . $e->getMessage());
+            return response()->json(['status' => 'error', 'message' => 'Gagal menambahkan kendaraan: ' . $e->getMessage()], 500);
+        }
     }
 
     public function show(Vehicle $vehicle): JsonResponse
     {
         $authUser = Auth::user();
-        if (!$authUser->hasRoleDirect(['Admin', 'GA', 'HRHead', 'Approver', 'Driver', 'Security'])) {
+        if (!$authUser || !$authUser->hasRoleDirect(['Admin', 'admin', 'GA', 'ga', 'HRHead', 'Approver', 'approver', 'Driver', 'driver', 'Security', 'security'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -149,30 +167,55 @@ class VehicleController extends Controller
 
     public function update(UpdateVehicleRequest $request, Vehicle $vehicle): JsonResponse
     {
-        if (!Auth::user()->hasRoleDirect('Admin') && !Auth::user()->isHrGaHead()) {
+        $user = Auth::user();
+        $isAuthorized = $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
+
+        if (!$isAuthorized) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $validated = $request->validated();
-        if ($request->hasFile('photo')) {
-            $validated['photo'] = $request->file('photo')->store('vehicles/photos', 'public');
-        }
-        if ($request->hasFile('stnk_photo')) {
-            $validated['stnk_photo'] = $request->file('stnk_photo')->store('vehicles/stnk', 'public');
-        }
+        try {
+            $validated = $request->validated();
+            if ($request->hasFile('photo')) {
+                $photoPath = $this->storePublicFileSafely($request->file('photo'), 'vehicles/photos');
+                if ($photoPath) {
+                    $validated['photo'] = $photoPath;
+                }
+            }
+            if ($request->hasFile('stnk_photo')) {
+                $stnkPath = $this->storePublicFileSafely($request->file('stnk_photo'), 'vehicles/stnk');
+                if ($stnkPath) {
+                    $validated['stnk_photo'] = $stnkPath;
+                }
+            }
 
-        $vehicle->update($validated);
+            $vehicle->update($validated);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Kendaraan berhasil diperbarui',
-            'data'    => new VehicleResource($vehicle),
-        ], 200);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Kendaraan berhasil diperbarui',
+                'data'    => new VehicleResource($vehicle),
+            ], 200);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Update Vehicle Error: ' . $e->getMessage());
+            return response()->json(['status' => 'error', 'message' => 'Gagal memperbarui kendaraan: ' . $e->getMessage()], 500);
+        }
     }
 
     public function destroy(Vehicle $vehicle): JsonResponse
     {
-        if (!Auth::user()->hasRoleDirect('Admin') && !Auth::user()->isHrGaHead()) {
+        $user = Auth::user();
+        $isAuthorized = $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
+
+        if (!$isAuthorized) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -189,5 +232,45 @@ class VehicleController extends Controller
             'status'  => 'success',
             'message' => 'Kendaraan berhasil dihapus',
         ], 200);
+    }
+
+    private function storePublicFileSafely(\Illuminate\Http\UploadedFile $file, string $folder): ?string
+    {
+        try {
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'])) {
+                $ext = 'jpg';
+            }
+
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $relativeDir = trim($folder, '/');
+            $targetDir = storage_path('app/public/' . $relativeDir);
+
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0777, true);
+            }
+
+            $targetPath = $targetDir . '/' . $filename;
+
+            $success = false;
+            if ($file->getRealPath()) {
+                $success = @move_uploaded_file($file->getRealPath(), $targetPath) || @copy($file->getRealPath(), $targetPath);
+            }
+
+            if (!$success) {
+                $storedPath = $file->store($relativeDir, 'public');
+                return $storedPath ?: null;
+            }
+
+            return $relativeDir . '/' . $filename;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Vehicle File Storage Error ({$folder}): " . $e->getMessage());
+            try {
+                return $file->store($folder, 'public');
+            } catch (\Throwable $ex) {
+                return null;
+            }
+        }
     }
 }

@@ -12,7 +12,12 @@ class UpdateVehicleRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->hasRoleDirect('Admin') || $this->user()->isHrGaHead();
+        $user = $this->user();
+        return $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
     }
 
     /**

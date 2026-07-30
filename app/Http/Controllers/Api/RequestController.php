@@ -158,7 +158,10 @@ class RequestController extends Controller
             $data = $request->validated();
 
             if ($request->hasFile('itinerary_file')) {
-                $data['itinerary_file_path'] = $request->file('itinerary_file')->store('itinerary_files', 'public');
+                $filePath = $this->storePublicFileSafely($request->file('itinerary_file'), 'itinerary_files');
+                if ($filePath) {
+                    $data['itinerary_file_path'] = $filePath;
+                }
             }
 
             if (isset($data['itineraries']) && is_string($data['itineraries'])) {
@@ -721,7 +724,13 @@ class RequestController extends Controller
     public function adjustDriver(Request $request, VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
-        if (!$user->hasRoleDirect(['Admin', 'GA']) && !$user->isHrGaHead()) {
+        $isAuthorized = $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
+
+        if (!$isAuthorized) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -731,7 +740,7 @@ class RequestController extends Controller
         ]);
 
         $driver = \App\Models\User::findOrFail($validated['driver_id']);
-        if (!$driver->hasRoleDirect('Driver')) {
+        if (!$driver->hasRoleDirect(['Driver', 'driver'])) {
             return response()->json(['status' => 'error', 'message' => 'User yang ditunjuk bukan Driver.'], 422);
         }
 
@@ -759,7 +768,13 @@ class RequestController extends Controller
     public function rateDriver(Request $request, VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
-        if ($vehicleRequest->user_id !== $user->id && !$user->hasRoleDirect(['Admin', 'GA']) && !$user->isHrGaHead()) {
+        $isGaOrAdmin = $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
+
+        if ($vehicleRequest->user_id !== $user->id && !$isGaOrAdmin) {
             return response()->json(['status' => 'error', 'message' => 'Hanya pemohon request yang dapat memberikan rating driver.'], 403);
         }
 
@@ -783,5 +798,45 @@ class RequestController extends Controller
             'message' => 'Terima kasih! Rating & ulasan driver berhasil disimpan.',
             'data'    => new RequestResource($vehicleRequest->fresh(['user', 'driver', 'vehicle'])),
         ], 200);
+    }
+
+    private function storePublicFileSafely(\Illuminate\Http\UploadedFile $file, string $folder): ?string
+    {
+        try {
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'xlsx', 'xls', 'doc', 'docx'])) {
+                $ext = 'pdf';
+            }
+
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $relativeDir = trim($folder, '/');
+            $targetDir = storage_path('app/public/' . $relativeDir);
+
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0777, true);
+            }
+
+            $targetPath = $targetDir . '/' . $filename;
+
+            $success = false;
+            if ($file->getRealPath()) {
+                $success = @move_uploaded_file($file->getRealPath(), $targetPath) || @copy($file->getRealPath(), $targetPath);
+            }
+
+            if (!$success) {
+                $storedPath = $file->store($relativeDir, 'public');
+                return $storedPath ?: null;
+            }
+
+            return $relativeDir . '/' . $filename;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Request File Storage Error ({$folder}): " . $e->getMessage());
+            try {
+                return $file->store($folder, 'public');
+            } catch (\Throwable $ex) {
+                return null;
+            }
+        }
     }
 }

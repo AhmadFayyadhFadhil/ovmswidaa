@@ -22,7 +22,7 @@ class SecurityGuardController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (!Auth::user()->hasRoleDirect(['Admin', 'GA'])) {
+        if (!Auth::user()->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -44,7 +44,7 @@ class SecurityGuardController extends Controller
 
     public function destroy(SecurityGuard $securityGuard): JsonResponse
     {
-        if (!Auth::user()->hasRoleDirect(['Admin', 'GA'])) {
+        if (!Auth::user()->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) && !Auth::user()->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
