@@ -232,12 +232,8 @@ class UserController extends Controller
                 ], 422);
             }
 
-            if ($role === 'Driver' && !$request->hasFile('sim_a_photo')) {
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Foto SIM A wajib untuk role Driver',
-                ], 422);
-            }
+            // SIM A photo is optional for Driver role
+            // Photo will be stored if provided
 
             if (in_array($role, ['Approver', 'GA']) && !empty($validated['is_department_head'] ?? false) && empty($validated['department_id'] ?? null)) {
                 return response()->json([
@@ -357,12 +353,8 @@ class UserController extends Controller
             }
             $targetRole = $role ?? ($user->getRoleNames()[0] ?? null);
 
-            if ($targetRole === 'Driver' && !$request->hasFile('sim_a_photo') && !$user->sim_a_photo) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Foto SIM A wajib untuk role Driver',
-                ], 422);
-            }
+            // SIM A photo is optional for Driver role
+            // Photo will be stored if provided, existing photo preserved if not
 
             if ($role === 'Approver' && empty($validated['rank'] ?? null)) {
                 return response()->json([
