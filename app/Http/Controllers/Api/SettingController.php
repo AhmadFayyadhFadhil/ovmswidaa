@@ -21,7 +21,7 @@ class SettingController extends Controller
     private function checkAdmin(): bool
     {
         $user = Auth::user();
-        return $user && $user->hasRoleDirect('Admin');
+        return $user && ($user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) || $user->isHrGaHead());
     }
 
     /**

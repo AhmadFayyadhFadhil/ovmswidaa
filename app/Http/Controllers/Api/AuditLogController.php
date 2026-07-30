@@ -139,7 +139,7 @@ class AuditLogController extends Controller
     public function show(Request $request, string $type, int $id): JsonResponse
     {
         $user = Auth::user();
-        if (!$user->hasRoleDirect(['Admin', 'GA', 'Approver'])) {
+        if (!$user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'Security', 'security']) && !$user->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
