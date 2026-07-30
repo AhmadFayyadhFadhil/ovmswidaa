@@ -217,7 +217,7 @@ class UserController extends Controller
                 'rank'     => 'required_if:role,Approver|nullable|string|max:255',
                 'department_id' => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
-                'sim_a_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
+                'sim_a_photo' => ['nullable'],
             ]);
 
             $role = ucfirst(strtolower($validated['role']));
@@ -254,8 +254,9 @@ class UserController extends Controller
                 'can_request'        => true,
             ];
 
-            if ($request->hasFile('sim_a_photo')) {
-                $simPath = $this->storePublicFileSafely($request->file('sim_a_photo'), 'users/sim');
+            $simFile = $request->file('sim_a_photo') ?? $request->file('sim_photo') ?? $request->file('photo');
+            if ($simFile) {
+                $simPath = $this->storePublicFileSafely($simFile, 'users/sim');
                 if ($simPath) {
                     $data['sim_a_photo'] = $simPath;
                 }
@@ -344,7 +345,7 @@ class UserController extends Controller
                 'rank'     => 'required_if:role,Approver|nullable|string|max:255',
                 'department_id' => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
-                'sim_a_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:5120'],
+                'sim_a_photo' => ['nullable'],
             ]);
 
             $role = isset($validated['role']) ? ucfirst(strtolower($validated['role'])) : null;
@@ -377,8 +378,9 @@ class UserController extends Controller
                 $validated['password'] = Hash::make($validated['password']);
             }
 
-            if ($request->hasFile('sim_a_photo')) {
-                $simPath = $this->storePublicFileSafely($request->file('sim_a_photo'), 'users/sim');
+            $simFile = $request->file('sim_a_photo') ?? $request->file('sim_photo') ?? $request->file('photo');
+            if ($simFile) {
+                $simPath = $this->storePublicFileSafely($simFile, 'users/sim');
                 if ($simPath) {
                     $validated['sim_a_photo'] = $simPath;
                 }
