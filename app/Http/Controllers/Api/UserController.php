@@ -209,9 +209,9 @@ class UserController extends Controller
             ]);
 
             $validated = $request->validate([
-                'nik'      => ['nullable', 'string', 'max:50', 'unique:users,nik'],
+                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->whereNull('deleted_at')],
                 'name'     => 'required|string|max:255',
-                'email'    => 'required|email|unique:users,email',
+                'email'    => ['required', 'email', Rule::unique('users', 'email')->whereNull('deleted_at')],
                 'password' => ['required', Password::min(6)],
                 'role'     => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
                 'rank'     => 'required_if:role,Approver|nullable|string|max:255',
@@ -337,9 +337,9 @@ class UserController extends Controller
             ]);
 
             $validated = $request->validate([
-                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)],
+                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)->whereNull('deleted_at')],
                 'name'     => 'sometimes|required|string|max:255',
-                'email'    => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($user->id)],
+                'email'    => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)->whereNull('deleted_at')],
                 'password' => ['sometimes', Password::min(6)],
                 'role'     => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
                 'rank'     => 'required_if:role,Approver|nullable|string|max:255',
@@ -424,6 +424,15 @@ class UserController extends Controller
                 'message' => 'Tidak dapat menghapus akun sendiri',
             ], 422);
         }
+
+        $timestamp = time();
+        if ($user->nik && !str_contains($user->nik, '_del_')) {
+            $user->nik = $user->nik . '_del_' . $timestamp;
+        }
+        if ($user->email && !str_contains($user->email, '_del_')) {
+            $user->email = $user->email . '_del_' . $timestamp;
+        }
+        $user->save();
 
         $user->delete();
 
