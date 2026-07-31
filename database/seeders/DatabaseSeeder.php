@@ -427,5 +427,14 @@ class DatabaseSeeder extends Seeder
             'is_active' => true,
         ]);
         $security->assignRole('Security');
+
+        // Seed default company info settings
+        \App\Models\Setting::firstOrCreate(['key' => 'system_name'], ['value' => 'OVMS PT Widatra Bhakti', 'type' => 'string']);
+        \App\Models\Setting::firstOrCreate(['key' => 'company_name'], ['value' => 'PT Widatra Bhakti', 'type' => 'string']);
+        \App\Models\Setting::firstOrCreate(['key' => 'support_email'], ['value' => 'support@widatra.com', 'type' => 'string']);
+        \App\Models\Setting::updateOrCreate(
+            ['key' => 'hq_address'],
+            ['value' => 'Jl. Stadion / Jl. Sidomukti No. 1, Sidomukti, Pandaan, Pasuruan, Jawa Timur 67156', 'type' => 'string']
+        );
     }
 }
