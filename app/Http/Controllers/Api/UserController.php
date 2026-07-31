@@ -7,7 +7,8 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use App\Enums\RequestStatus;
 use Illuminate\Validation\Rules\Password;
@@ -70,7 +71,13 @@ class UserController extends Controller
         $role     = $request->query('role');
         $category = $request->query('category');
 
-        $query = User::with(['roles', 'department']);
+        $query = User::with(['roles', 'department'])
+            ->where(function ($q) {
+                $q->whereNull('nik')->orWhere('nik', 'not like', '%_del_%');
+            })
+            ->where(function ($q) {
+                $q->whereNull('email')->orWhere('email', 'not like', '%_del_%');
+            });
 
         if ($search) {
             $query->where(function ($q) use ($search) {
@@ -426,20 +433,52 @@ class UserController extends Controller
         }
 
         try {
-            $timestamp = time();
-            if ($user->nik && !str_contains($user->nik, '_del_')) {
-                $user->nik = $user->nik . '_del_' . $timestamp;
-            }
-            if ($user->email && !str_contains($user->email, '_del_')) {
-                $user->email = $user->email . '_del_' . $timestamp;
-            }
-            $user->save();
+            DB::transaction(function () use ($user) {
+                $targetId = $user->id;
 
-            $user->delete();
+                // Delete or nullify all foreign key constraints before deleting user
+                if (Schema::hasTable('assignments')) {
+                    DB::table('assignments')->where('driver_id', $targetId)->delete();
+                    DB::table('assignments')->where('assigned_by', $targetId)->update(['assigned_by' => null]);
+                }
+
+                if (Schema::hasTable('driver_assignments')) {
+                    DB::table('driver_assignments')->where('driver_id', $targetId)->delete();
+                }
+
+                if (Schema::hasTable('vehicle_requests')) {
+                    DB::table('vehicle_requests')->where('user_id', $targetId)->update(['user_id' => null]);
+                    DB::table('vehicle_requests')->where('driver_id', $targetId)->update(['driver_id' => null]);
+                    DB::table('vehicle_requests')->where('approver_id', $targetId)->update(['approver_id' => null]);
+                }
+
+                if (Schema::hasTable('passengers')) {
+                    DB::table('passengers')->where('user_id', $targetId)->delete();
+                }
+
+                if (Schema::hasTable('notifications')) {
+                    DB::table('notifications')->where('user_id', $targetId)->delete();
+                }
+
+                if (Schema::hasTable('audit_logs')) {
+                    DB::table('audit_logs')->where('user_id', $targetId)->delete();
+                }
+
+                if (Schema::hasTable('model_has_roles')) {
+                    DB::table('model_has_roles')->where('model_id', $targetId)->delete();
+                }
+
+                if (Schema::hasTable('model_has_permissions')) {
+                    DB::table('model_has_permissions')->where('model_id', $targetId)->delete();
+                }
+
+                // Hard delete user from users table
+                DB::table('users')->where('id', $targetId)->delete();
+            });
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'User berhasil dihapus dari sistem',
+                'message' => 'User berhasil dihapus permanen dari sistem',
             ], 200);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('User Delete Error: ' . $e->getMessage());
