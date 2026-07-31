@@ -34,7 +34,7 @@ class AuditLogController extends Controller
         $action = $request->query('action');
         $user_id = $request->query('user_id');
 
-        $query = AuditLog::with('user');
+        $query = AuditLog::with(['user.department']);
 
         if ($isApprover && !$isAdmin && !$isGA && !$user->isHrGaHead()) {
             $query->whereHas('user', function ($q) use ($user) {
