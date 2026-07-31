@@ -434,7 +434,12 @@ class DatabaseSeeder extends Seeder
         \App\Models\Setting::firstOrCreate(['key' => 'support_email'], ['value' => 'support@widatra.com', 'type' => 'string']);
         \App\Models\Setting::updateOrCreate(
             ['key' => 'hq_address'],
-            ['value' => 'Jl. Stadion / Jl. Sidomukti No. 1, Sidomukti, Pandaan, Pasuruan, Jawa Timur 67156', 'type' => 'string']
+            ['value' => 'Jl. Stadion / Jl. Sidomukti No. 1, Sidomukti, Kecamatan Pandaan, Kabupaten Pasuruan, Jawa Timur 67156', 'type' => 'string']
         );
+
+        // Update location field for all user accounts
+        \App\Models\User::query()->update([
+            'location' => 'Kecamatan Pandaan, Kabupaten Pasuruan, Jawa Timur'
+        ]);
     }
 }

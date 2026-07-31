@@ -70,7 +70,13 @@ class AuditLogController extends Controller
         $department = $request->query('department');
         if ($department && $department !== 'All') {
             $query->whereHas('user', function ($q) use ($department) {
-                $q->where('department_id', $department);
+                if (is_numeric($department)) {
+                    $q->where('department_id', $department);
+                } else {
+                    $q->whereHas('department', function ($dq) use ($department) {
+                        $dq->where('name', 'like', '%' . $department . '%');
+                    });
+                }
             });
         }
 
