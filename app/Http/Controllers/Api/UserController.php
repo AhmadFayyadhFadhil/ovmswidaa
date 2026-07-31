@@ -426,30 +426,6 @@ class UserController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($user) {
-                // Safely nullify or clean foreign key dependencies
-                DB::table('vehicle_requests')->where('user_id', $user->id)->update(['user_id' => null]);
-                DB::table('vehicle_requests')->where('driver_id', $user->id)->update(['driver_id' => null]);
-                DB::table('driver_assignments')->where('driver_id', $user->id)->delete();
-                DB::table('notifications')->where('user_id', $user->id)->delete();
-
-                // Remove spatie roles
-                if (method_exists($user, 'syncRoles')) {
-                    $user->syncRoles([]);
-                }
-
-                // Hard delete from database
-                $user->forceDelete();
-            });
-
-            return response()->json([
-                'status'  => 'success',
-                'message' => 'User berhasil dihapus permanen dari sistem',
-            ], 200);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Hard Delete Error: ' . $e->getMessage());
-
-            // Fallback soft delete if forceDelete fails
             $timestamp = time();
             if ($user->nik && !str_contains($user->nik, '_del_')) {
                 $user->nik = $user->nik . '_del_' . $timestamp;
@@ -458,12 +434,19 @@ class UserController extends Controller
                 $user->email = $user->email . '_del_' . $timestamp;
             }
             $user->save();
+
             $user->delete();
 
             return response()->json([
                 'status'  => 'success',
                 'message' => 'User berhasil dihapus dari sistem',
             ], 200);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('User Delete Error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal menghapus user: ' . $e->getMessage(),
+            ], 500);
         }
     }
 
