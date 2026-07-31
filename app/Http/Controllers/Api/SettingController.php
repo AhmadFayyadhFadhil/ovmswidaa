@@ -61,8 +61,15 @@ class SettingController extends Controller
             $formatted[$frontendKey] = $value;
         }
 
-        if (empty($formatted['hqAddress']) || str_contains($formatted['hqAddress'], 'Sudirman') || str_contains($formatted['hqAddress'], 'Semarang') || str_contains($formatted['hqAddress'], 'Demak')) {
-            $formatted['hqAddress'] = 'Jl. Stadion / Jl. Sidomukti No. 1, Sidomukti, Kecamatan Pandaan, Kabupaten Pasuruan, Jawa Timur 67156';
+        if (empty($formatted['hqAddress']) || !str_contains($formatted['hqAddress'], 'Kecamatan Pandaan')) {
+            $officialAddress = 'Jl. Stadion / Jl. Sidomukti No. 1, Sidomukti, Kecamatan Pandaan, Kabupaten Pasuruan, Jawa Timur 67156';
+            $formatted['hqAddress'] = $officialAddress;
+            try {
+                Setting::updateOrCreate(
+                    ['key' => 'hq_address'],
+                    ['value' => $officialAddress, 'type' => 'string']
+                );
+            } catch (\Exception $e) {}
         }
 
         $dbStatus = 'Connected';
