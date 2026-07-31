@@ -425,21 +425,46 @@ class UserController extends Controller
             ], 422);
         }
 
-        $timestamp = time();
-        if ($user->nik && !str_contains($user->nik, '_del_')) {
-            $user->nik = $user->nik . '_del_' . $timestamp;
-        }
-        if ($user->email && !str_contains($user->email, '_del_')) {
-            $user->email = $user->email . '_del_' . $timestamp;
-        }
-        $user->save();
+        try {
+            DB::transaction(function () use ($user) {
+                // Safely nullify or clean foreign key dependencies
+                DB::table('vehicle_requests')->where('user_id', $user->id)->update(['user_id' => null]);
+                DB::table('vehicle_requests')->where('driver_id', $user->id)->update(['driver_id' => null]);
+                DB::table('driver_assignments')->where('driver_id', $user->id)->delete();
+                DB::table('notifications')->where('user_id', $user->id)->delete();
 
-        $user->delete();
+                // Remove spatie roles
+                if (method_exists($user, 'syncRoles')) {
+                    $user->syncRoles([]);
+                }
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'User berhasil dihapus',
-        ], 200);
+                // Hard delete from database
+                $user->forceDelete();
+            });
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'User berhasil dihapus permanen dari sistem',
+            ], 200);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Hard Delete Error: ' . $e->getMessage());
+
+            // Fallback soft delete if forceDelete fails
+            $timestamp = time();
+            if ($user->nik && !str_contains($user->nik, '_del_')) {
+                $user->nik = $user->nik . '_del_' . $timestamp;
+            }
+            if ($user->email && !str_contains($user->email, '_del_')) {
+                $user->email = $user->email . '_del_' . $timestamp;
+            }
+            $user->save();
+            $user->delete();
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'User berhasil dihapus dari sistem',
+            ], 200);
+        }
     }
 
     public function toggleActive(User $user): JsonResponse
