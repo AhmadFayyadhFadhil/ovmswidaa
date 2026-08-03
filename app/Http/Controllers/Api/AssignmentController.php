@@ -362,7 +362,7 @@ class AssignmentController extends Controller
                         $driverName = $driver ? $driver->name : 'Driver';
                         $itDateStr = $itinerary->date ? $itinerary->date->format('Y-m-d') : null;
 
-                        $conflictingDriver = \App\Models\RequestItinerary::where('driver_id', $driverId)
+                        $conflictingDriverItinerary = \App\Models\RequestItinerary::where('driver_id', $driverId)
                             ->where('request_id', '!=', $vehicleRequest->id)
                             ->where('date', $itDateStr)
                             ->whereIn('status', ['assigned', 'on_going'])
@@ -375,7 +375,20 @@ class AssignmentController extends Controller
                             })
                             ->exists();
 
-                        if ($conflictingDriver) {
+                        $conflictingDriverSingleRequest = \App\Models\Request::where('driver_id', $driverId)
+                            ->where('id', '!=', $vehicleRequest->id)
+                            ->whereIn('status', [
+                                RequestStatus::WAITING_DRIVER->value,
+                                RequestStatus::DRIVER_ASSIGNED->value,
+                                RequestStatus::ON_GOING->value,
+                            ])
+                            ->where(function ($q) use ($itDateStr) {
+                                $q->whereDate('start_time', $itDateStr)
+                                  ->orWhereDate('end_time', $itDateStr);
+                            })
+                            ->exists();
+
+                        if ($conflictingDriverItinerary || $conflictingDriverSingleRequest) {
                             throw new \Exception("Driver {$driverName} sudah memiliki tugas pada tanggal {$itDateStr}. Silakan pilih driver lain.");
                         }
                     }
@@ -386,7 +399,7 @@ class AssignmentController extends Controller
                         $vehicleName = $vehicle ? "{$vehicle->name} ({$vehicle->plate_number})" : 'Kendaraan';
                         $itDateStr = $itinerary->date ? $itinerary->date->format('Y-m-d') : null;
 
-                        $conflictingVehicle = \App\Models\RequestItinerary::where('vehicle_id', $vehicleId)
+                        $conflictingVehicleItinerary = \App\Models\RequestItinerary::where('vehicle_id', $vehicleId)
                             ->where('request_id', '!=', $vehicleRequest->id)
                             ->where('date', $itDateStr)
                             ->whereIn('status', ['assigned', 'on_going'])
@@ -399,7 +412,20 @@ class AssignmentController extends Controller
                             })
                             ->exists();
 
-                        if ($conflictingVehicle) {
+                        $conflictingVehicleSingleRequest = \App\Models\Request::where('vehicle_id', $vehicleId)
+                            ->where('id', '!=', $vehicleRequest->id)
+                            ->whereIn('status', [
+                                RequestStatus::WAITING_DRIVER->value,
+                                RequestStatus::DRIVER_ASSIGNED->value,
+                                RequestStatus::ON_GOING->value,
+                            ])
+                            ->where(function ($q) use ($itDateStr) {
+                                $q->whereDate('start_time', $itDateStr)
+                                  ->orWhereDate('end_time', $itDateStr);
+                            })
+                            ->exists();
+
+                        if ($conflictingVehicleItinerary || $conflictingVehicleSingleRequest) {
                             throw new \Exception("Kendaraan {$vehicleName} sudah ditugaskan pada tanggal {$itDateStr}. Silakan pilih kendaraan lain.");
                         }
                     }

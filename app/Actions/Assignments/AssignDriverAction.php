@@ -132,13 +132,25 @@ class AssignDriverAction
                 RequestStatus::ON_GOING->value,
             ])
             ->where(function ($q) use ($request, $reqDate) {
-                // Check for time overlap, not just same date
                 $q->whereDate('start_time', $reqDate)
                   ->orWhereDate('end_time', $reqDate);
             })
-            ->get();
+            ->exists();
 
-        if ($conflictingRequests->isNotEmpty()) {
+        $conflictingItinerary = \App\Models\RequestItinerary::where('driver_id', $driverId)
+            ->where('request_id', '!=', $request->id)
+            ->where('date', $reqDate)
+            ->whereIn('status', ['assigned', 'on_going'])
+            ->whereHas('request', function ($q) {
+                $q->whereNotIn('status', [
+                    RequestStatus::REJECTED->value,
+                    RequestStatus::CANCELLED->value,
+                    RequestStatus::COMPLETED->value,
+                ]);
+            })
+            ->exists();
+
+        if ($conflictingRequests || $conflictingItinerary) {
             throw new Exception(
                 "Driver {$driverName} sudah memiliki assignment aktif pada tanggal yang sama. Silakan pilih driver lain yang tersedia."
             );
@@ -165,9 +177,22 @@ class AssignDriverAction
                 $q->whereDate('start_time', $reqDate)
                   ->orWhereDate('end_time', $reqDate);
             })
-            ->get();
+            ->exists();
 
-        if ($conflictingRequests->isNotEmpty()) {
+        $conflictingItinerary = \App\Models\RequestItinerary::where('vehicle_id', $vehicleId)
+            ->where('request_id', '!=', $request->id)
+            ->where('date', $reqDate)
+            ->whereIn('status', ['assigned', 'on_going'])
+            ->whereHas('request', function ($q) {
+                $q->whereNotIn('status', [
+                    RequestStatus::REJECTED->value,
+                    RequestStatus::CANCELLED->value,
+                    RequestStatus::COMPLETED->value,
+                ]);
+            })
+            ->exists();
+
+        if ($conflictingRequests || $conflictingItinerary) {
             throw new Exception(
                 "Kendaraan {$vehiclePlate} sudah memiliki assignment pada tanggal yang sama. Silakan pilih kendaraan lain yang tersedia."
             );

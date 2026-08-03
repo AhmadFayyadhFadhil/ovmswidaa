@@ -209,6 +209,31 @@ class Request extends Model
         }
     }
 
+    public function ensureItinerariesExist(): void
+    {
+        if ($this->itineraries()->count() > 0) {
+            return;
+        }
+
+        if (!$this->start_time || !$this->end_time) {
+            return;
+        }
+
+        $startDate = \Carbon\Carbon::parse($this->start_time)->startOfDay();
+        $endDate = \Carbon\Carbon::parse($this->end_time)->startOfDay();
+
+        if ($startDate->lessThanOrEqualTo($endDate)) {
+            $period = \Carbon\CarbonPeriod::create($startDate, $endDate);
+            foreach ($period as $date) {
+                RequestItinerary::create([
+                    'request_id' => $this->id,
+                    'date' => $date->format('Y-m-d'),
+                    'status' => 'pending',
+                ]);
+            }
+        }
+    }
+
     // Scopes
     public function scopePending($query)
     {

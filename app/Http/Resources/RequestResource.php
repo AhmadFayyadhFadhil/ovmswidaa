@@ -11,6 +11,7 @@ class RequestResource extends JsonResource
     public function toArray(Request $request): array
     {
         $this->resource->syncStatus();
+        $this->resource->ensureItinerariesExist();
         $user = $request->user();
 
         $canApprove = false;
@@ -98,7 +99,7 @@ class RequestResource extends JsonResource
             'status'            => $this->status?->value,
             'notes'             => $this->notes,
             'itinerary_file_url' => $this->itinerary_file_path ? asset('storage/' . $this->itinerary_file_path) : null,
-            'itineraries'       => ($this->relationLoaded('itineraries') ? $this->itineraries : $this->itineraries()->with(['driver', 'vehicle'])->get())->map(function ($it) {
+            'itineraries'       => ($this->relationLoaded('itineraries') && $this->itineraries->count() > 0 ? $this->itineraries : $this->itineraries()->with(['driver', 'vehicle'])->get())->map(function ($it) {
                 return [
                     'id'                   => $it->id,
                     'date'                 => $it->date ? $it->date->format('Y-m-d') : null,
