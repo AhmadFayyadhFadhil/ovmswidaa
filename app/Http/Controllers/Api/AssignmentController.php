@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use App\Actions\Assignments\AssignDriverAction;
 use App\Actions\Assignments\DriverRespondAction;
+use App\Enums\RequestStatus;
 
 class AssignmentController extends Controller
 {
