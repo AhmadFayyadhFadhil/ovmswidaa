@@ -20,7 +20,18 @@ class AssignmentController extends Controller
     private function hasRoleDirect($user, array $roles): bool
     {
         if (!$user) return false;
-        return $user->roles()->whereIn('name', $roles)->exists();
+        if ($user->isHrGaHead()) return true;
+
+        $userRoles = $user->roles()->pluck('name')->map(fn($r) => strtolower($r))->toArray();
+        foreach ($roles as $role) {
+            $target = strtolower($role);
+            foreach ($userRoles as $ur) {
+                if ($ur === $target || str_contains($ur, $target)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public function index(Request $request): JsonResponse

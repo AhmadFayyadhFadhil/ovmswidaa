@@ -31,8 +31,9 @@ class AssignDriverAction
 
             // Validate driver availability status
             $driver = \App\Models\User::findOrFail($driverId);
-            if (($driver->availability_status ?? 'available') !== 'available') {
-                throw new Exception("Driver {$driver->name} sedang tidak tersedia atau sedang bertugas.");
+            $unavailStatuses = ['off', 'sick', 'leave', 'maintenance', 'inactive'];
+            if (in_array(strtolower($driver->availability_status ?? ''), $unavailStatuses, true)) {
+                throw new Exception("Driver {$driver->name} sedang tidak bertugas ({$driver->availability_status}).");
             }
 
             // Validate driver shift/work hours (status available dari jam sekian sampai sekian)
