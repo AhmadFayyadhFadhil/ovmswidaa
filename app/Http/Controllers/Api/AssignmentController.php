@@ -403,16 +403,29 @@ class AssignmentController extends Controller
                         'status' => 'assigned',
                     ]);
 
-                    // Create Assignment row for driver if internal
+                    // Create or update Assignment row for driver if internal
                     if (!$isExternal && $driverId) {
-                        Assignment::create([
-                            'request_id' => $vehicleRequest->id,
-                            'driver_id' => $driverId,
-                            'assigned_by' => $user->id,
-                            'assigned_at' => now(),
-                            'notes' => "Assignment per tanggal " . ($itinerary->date ? $itinerary->date->format('d-m-Y') : ''),
-                            'status' => 'accepted',
-                        ]);
+                        Assignment::updateOrCreate(
+                            [
+                                'request_id' => $vehicleRequest->id,
+                                'driver_id'  => $driverId,
+                            ],
+                            [
+                                'assigned_by' => $user->id,
+                                'assigned_at' => now(),
+                                'notes' => "Assignment per tanggal " . ($itinerary->date ? $itinerary->date->format('d-m-Y') : ''),
+                                'status' => 'accepted',
+                            ]
+                        );
+                    }
+                }
+
+                $firstInternalDriver = null;
+                $firstInternalVehicle = null;
+                foreach ($validated['daily_assignments'] as $asg) {
+                    if (empty($asg['is_external']) && !empty($asg['driver_id'])) {
+                        if (!$firstInternalDriver) $firstInternalDriver = $asg['driver_id'];
+                        if (!$firstInternalVehicle && !empty($asg['vehicle_id'])) $firstInternalVehicle = $asg['vehicle_id'];
                     }
                 }
 
@@ -425,6 +438,8 @@ class AssignmentController extends Controller
                     'qr_code_token' => $qrToken,
                     'assigned_by' => $user->id,
                     'assigned_at' => now(),
+                    'driver_id' => $firstInternalDriver ?? $vehicleRequest->driver_id,
+                    'vehicle_id' => $firstInternalVehicle ?? $vehicleRequest->vehicle_id,
                 ]);
             });
 
