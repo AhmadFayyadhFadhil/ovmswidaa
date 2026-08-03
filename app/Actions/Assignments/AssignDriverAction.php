@@ -119,7 +119,11 @@ class AssignDriverAction
                 RequestStatus::DRIVER_ASSIGNED,
                 RequestStatus::ON_GOING,
             ])
-            ->whereDate('start_time', $reqDate)
+            ->where(function ($q) use ($request, $reqDate) {
+                // Check for time overlap, not just same date
+                $q->whereDate('start_time', $reqDate)
+                  ->orWhereDate('end_time', $reqDate);
+            })
             ->get();
 
         if ($conflictingRequests->isNotEmpty()) {
@@ -145,7 +149,10 @@ class AssignDriverAction
                 RequestStatus::DRIVER_ASSIGNED,
                 RequestStatus::ON_GOING,
             ])
-            ->whereDate('start_time', $reqDate)
+            ->where(function ($q) use ($request, $reqDate) {
+                $q->whereDate('start_time', $reqDate)
+                  ->orWhereDate('end_time', $reqDate);
+            })
             ->get();
 
         if ($conflictingRequests->isNotEmpty()) {
