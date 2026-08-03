@@ -122,6 +122,12 @@ class AuthController extends Controller
     public function profile(Request $request): JsonResponse
     {
         $user = $request->user();
+        if (empty($user->location) || str_contains($user->location, 'Jakarta')) {
+            try {
+                $user->location = 'Pandaan Head Office';
+                $user->save();
+            } catch (\Exception $e) {}
+        }
 
         return response()->json([
             'status' => 'success',
@@ -131,7 +137,7 @@ class AuthController extends Controller
                 'name'               => $user->name,
                 'email'              => $user->email,
                 'phone'              => $user->phone,
-                'location'           => $user->location,
+                'location'           => $user->location ?: 'Pandaan Head Office',
                 'avatar_url'         => $user->avatar ? url('storage/' . $user->avatar) : null,
                 'sim_a_photo_url'    => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
                 'department_id'      => $user->department_id,

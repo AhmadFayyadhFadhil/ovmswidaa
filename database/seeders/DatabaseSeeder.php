@@ -439,7 +439,7 @@ class DatabaseSeeder extends Seeder
 
         // Update location field for all user accounts
         \App\Models\User::query()->update([
-            'location' => 'Kecamatan Pandaan, Kabupaten Pasuruan, Jawa Timur'
+            'location' => 'Pandaan Head Office'
         ]);
     }
 }

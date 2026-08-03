@@ -71,6 +71,14 @@ class User extends Authenticatable
     }
 
     // Relationships
+    public function getLocationAttribute($value)
+    {
+        if (empty($value) || str_contains($value, 'Jakarta')) {
+            return 'Pandaan Head Office';
+        }
+        return $value;
+    }
+
     public function department()
     {
         return $this->belongsTo(Department::class, 'department_id');
