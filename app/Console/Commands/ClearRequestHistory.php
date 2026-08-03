@@ -83,16 +83,14 @@ class ClearRequestHistory extends Command
             DB::table('passengers')->whereIn('request_id', $requestIds)->delete();
             $this->line('  ✓ Passengers deleted');
 
-            // Also reset vehicle status to AVAILABLE if any were tied to these requests
-            DB::table('vehicles')
-                ->whereIn('id', function ($q) use ($requestIds) {
-                    $q->select('vehicle_id')->from('requests')
-                      ->whereIn('id', $requestIds)
-                      ->whereNotNull('vehicle_id');
-                })
-                ->where('status', 'in_use')
-                ->update(['status' => 'available', 'updated_at' => now()]);
-            $this->line('  ✓ Vehicle statuses reset to available');
+            // Reset driver and vehicle status to available
+            DB::table('users')->whereNotNull('id')->update(['availability_status' => 'available']);
+            $this->line('  ✓ Driver availability statuses reset to available');
+
+            if (DB::getSchemaBuilder()->hasTable('vehicles')) {
+                DB::table('vehicles')->whereNotNull('id')->update(['status' => 'Available']);
+                $this->line('  ✓ Vehicle statuses reset to available');
+            }
 
             // Finally delete the requests themselves
             DB::table('requests')->whereIn('id', $requestIds)->delete();
