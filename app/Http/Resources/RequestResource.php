@@ -98,7 +98,7 @@ class RequestResource extends JsonResource
             'status'            => $this->status?->value,
             'notes'             => $this->notes,
             'itinerary_file_url' => $this->itinerary_file_path ? asset('storage/' . $this->itinerary_file_path) : null,
-            'itineraries'       => $this->relationLoaded('itineraries') ? $this->itineraries->map(function ($it) {
+            'itineraries'       => ($this->relationLoaded('itineraries') ? $this->itineraries : $this->itineraries()->with(['driver', 'vehicle'])->get())->map(function ($it) {
                 return [
                     'id'                   => $it->id,
                     'date'                 => $it->date ? $it->date->format('Y-m-d') : null,
@@ -139,7 +139,7 @@ class RequestResource extends JsonResource
                     'overtime_formatted'   => $it->overtime_formatted,
                     'updated_at'           => $it->updated_at,
                 ];
-            }) : [],
+            }),
             'can_approve'       => $canApprove,
             'can_reject'        => $canReject,
             'next_approval_role' => match ($this->status) {

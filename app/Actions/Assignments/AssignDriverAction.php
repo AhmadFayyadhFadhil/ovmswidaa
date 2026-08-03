@@ -100,6 +100,17 @@ class AssignDriverAction
                 ]);
             }
 
+            // Also update any existing request_itineraries for this request
+            \App\Models\RequestItinerary::where('request_id', $request->id)
+                ->where(function ($q) {
+                    $q->whereNull('driver_id')->orWhereNull('vehicle_id');
+                })
+                ->update([
+                    'driver_id' => $driverId,
+                    'vehicle_id' => $vehicleId,
+                    'status' => 'assigned',
+                ]);
+
             return $assignment;
         });
     }
