@@ -211,10 +211,6 @@ class Request extends Model
 
     public function ensureItinerariesExist(): void
     {
-        if ($this->itineraries()->count() > 0) {
-            return;
-        }
-
         if (!$this->start_time || !$this->end_time) {
             return;
         }
@@ -222,7 +218,22 @@ class Request extends Model
         $startDate = \Carbon\Carbon::parse($this->start_time)->startOfDay();
         $endDate = \Carbon\Carbon::parse($this->end_time)->startOfDay();
 
-        if ($startDate->lessThanOrEqualTo($endDate)) {
+        // Single-day request: clean up any empty auto-generated itinerary rows so normal assignment form is used
+        if ($startDate->equalTo($endDate)) {
+            $this->itineraries()
+                ->whereNull('morning_destination')
+                ->whereNull('afternoon_destination')
+                ->whereNull('driver_id')
+                ->delete();
+            return;
+        }
+
+        if ($this->itineraries()->count() > 0) {
+            return;
+        }
+
+        // Multi-day request: auto-generate itinerary rows for each date in range
+        if ($startDate->lessThan($endDate)) {
             $period = \Carbon\CarbonPeriod::create($startDate, $endDate);
             foreach ($period as $date) {
                 RequestItinerary::create([
