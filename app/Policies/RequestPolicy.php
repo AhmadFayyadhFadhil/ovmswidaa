@@ -78,22 +78,20 @@ class RequestPolicy
      */
     public function approve(User $user, Request $request): bool
     {
-        // Only Admin can always approve
+        // Admin can always approve
         if ($user->hasRoleDirect('Admin')) {
             return true;
         }
 
-        // Approver can approve if they have the permission AND same department AND are department head
-        // HR&GA head can also approve any request at HRD stage.
         if ($user->hasRoleDirect('Approver')) {
             if ($user->isHrGaHead() && $request->status === RequestStatus::ASSIGNED_BY_GA) {
                 return true;
             }
 
             if ($request->status === RequestStatus::SUBMITTED) {
-                return $user->hasPermissionDirect('approve-request') &&
-                       $user->is_department_head &&
-                       in_array($request->department_id, $user->departmentGroup(), true);
+                $userDeptGroup = array_map('strval', $user->departmentGroup());
+                $reqDeptId = (string) $request->department_id;
+                return in_array($reqDeptId, $userDeptGroup, false);
             }
         }
 
@@ -105,7 +103,7 @@ class RequestPolicy
      */
     public function reject(User $user, Request $request): bool
     {
-        // Only Admin can always reject
+        // Admin can always reject
         if ($user->hasRoleDirect('Admin')) {
             return true;
         }
@@ -120,9 +118,9 @@ class RequestPolicy
             }
 
             if ($request->status === RequestStatus::SUBMITTED) {
-                return $user->hasPermissionDirect('reject-request') &&
-                       $user->is_department_head &&
-                       in_array($request->department_id, $user->departmentGroup(), true);
+                $userDeptGroup = array_map('strval', $user->departmentGroup());
+                $reqDeptId = (string) $request->department_id;
+                return in_array($reqDeptId, $userDeptGroup, false);
             }
         }
 
