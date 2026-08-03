@@ -139,7 +139,7 @@ class AssignDriverAction
     private function validateVehicleTimeConflict(int $vehicleId, Request $request): void
     {
         $vehicle = \App\Models\Vehicle::find($vehicleId);
-        $vehiclePlate = $vehicle ? "{$vehicle->model} ({$vehicle->plate})" : 'yang bersangkutan';
+        $vehiclePlate = $vehicle ? "{$vehicle->name} ({$vehicle->plate_number})" : 'yang bersangkutan';
         $reqDate = date('Y-m-d', strtotime($request->start_time));
 
         $conflictingRequests = Request::where('vehicle_id', $vehicleId)

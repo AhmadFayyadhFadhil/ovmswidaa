@@ -352,7 +352,7 @@ class AssignmentController extends Controller
                         $itDateStr = $itinerary->date ? $itinerary->date->format('Y-m-d') : null;
 
                         $conflictingDriver = \App\Models\RequestItinerary::where('driver_id', $driverId)
-                            ->where('id', '!=', $itinerary->id)
+                            ->where('request_id', '!=', $vehicleRequest->id)
                             ->where('date', $itDateStr)
                             ->whereIn('status', ['assigned', 'on_going'])
                             ->whereHas('request', function ($q) {
@@ -372,11 +372,11 @@ class AssignmentController extends Controller
                     if (!$isExternal && $vehicleId) {
                         // Check vehicle conflict on this itinerary's date
                         $vehicle = \App\Models\Vehicle::find($vehicleId);
-                        $vehicleName = $vehicle ? "{$vehicle->model} ({$vehicle->plate})" : 'Kendaraan';
+                        $vehicleName = $vehicle ? "{$vehicle->name} ({$vehicle->plate_number})" : 'Kendaraan';
                         $itDateStr = $itinerary->date ? $itinerary->date->format('Y-m-d') : null;
 
                         $conflictingVehicle = \App\Models\RequestItinerary::where('vehicle_id', $vehicleId)
-                            ->where('id', '!=', $itinerary->id)
+                            ->where('request_id', '!=', $vehicleRequest->id)
                             ->where('date', $itDateStr)
                             ->whereIn('status', ['assigned', 'on_going'])
                             ->whereHas('request', function ($q) {
