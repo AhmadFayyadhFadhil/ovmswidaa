@@ -115,9 +115,9 @@ class AssignDriverAction
         $conflictingRequests = Request::where('driver_id', $driverId)
             ->where('id', '!=', $request->id)
             ->whereIn('status', [
-                RequestStatus::WAITING_DRIVER,
-                RequestStatus::DRIVER_ASSIGNED,
-                RequestStatus::ON_GOING,
+                RequestStatus::WAITING_DRIVER->value,
+                RequestStatus::DRIVER_ASSIGNED->value,
+                RequestStatus::ON_GOING->value,
             ])
             ->where(function ($q) use ($request, $reqDate) {
                 // Check for time overlap, not just same date
@@ -145,9 +145,9 @@ class AssignDriverAction
         $conflictingRequests = Request::where('vehicle_id', $vehicleId)
             ->where('id', '!=', $request->id)
             ->whereIn('status', [
-                RequestStatus::WAITING_DRIVER,
-                RequestStatus::DRIVER_ASSIGNED,
-                RequestStatus::ON_GOING,
+                RequestStatus::WAITING_DRIVER->value,
+                RequestStatus::DRIVER_ASSIGNED->value,
+                RequestStatus::ON_GOING->value,
             ])
             ->where(function ($q) use ($request, $reqDate) {
                 $q->whereDate('start_time', $reqDate)

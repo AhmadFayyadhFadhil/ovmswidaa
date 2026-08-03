@@ -356,9 +356,9 @@ class AssignmentController extends Controller
                             ->whereIn('status', ['assigned', 'on_going'])
                             ->whereHas('request', function ($q) {
                                 $q->whereNotIn('status', [
-                                    RequestStatus::REJECTED,
-                                    RequestStatus::CANCELLED,
-                                    RequestStatus::COMPLETED,
+                                    RequestStatus::REJECTED->value,
+                                    RequestStatus::CANCELLED->value,
+                                    RequestStatus::COMPLETED->value,
                                 ]);
                             })
                             ->exists();
@@ -380,9 +380,9 @@ class AssignmentController extends Controller
                             ->whereIn('status', ['assigned', 'on_going'])
                             ->whereHas('request', function ($q) {
                                 $q->whereNotIn('status', [
-                                    RequestStatus::REJECTED,
-                                    RequestStatus::CANCELLED,
-                                    RequestStatus::COMPLETED,
+                                    RequestStatus::REJECTED->value,
+                                    RequestStatus::CANCELLED->value,
+                                    RequestStatus::COMPLETED->value,
                                 ]);
                             })
                             ->exists();
