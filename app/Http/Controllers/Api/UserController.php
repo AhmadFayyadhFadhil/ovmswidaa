@@ -559,9 +559,9 @@ class UserController extends Controller
         if (isset($validated['availability_status']) && $validated['availability_status'] === 'unavailable') {
             $conflict = \App\Models\Request::where('driver_id', $user->id)
                 ->whereIn('status', [
-                    RequestStatus::WAITING_DRIVER,
-                    RequestStatus::DRIVER_ASSIGNED,
-                    RequestStatus::ON_GOING,
+                    RequestStatus::WAITING_DRIVER->value,
+                    RequestStatus::DRIVER_ASSIGNED->value,
+                    RequestStatus::ON_GOING->value,
                 ])
                 ->whereDate('start_time', '>=', now()->toDateString())
                 ->orderBy('start_time', 'asc')

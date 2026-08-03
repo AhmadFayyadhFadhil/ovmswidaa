@@ -17,15 +17,15 @@ class CreateRequestAction
         
         $count = Request::whereDate('start_time', $date)
             ->whereIn('status', [
-                RequestStatus::SUBMITTED,
-                RequestStatus::APPROVED_DEPARTMENT,
-                RequestStatus::ASSIGNED_BY_GA,
-                RequestStatus::APPROVED_HRD,
-                RequestStatus::APPROVED_HRD_GA,
-                RequestStatus::WAITING_DRIVER,
-                RequestStatus::DRIVER_ASSIGNED,
-                RequestStatus::ON_GOING,
-                RequestStatus::COMPLETED
+                RequestStatus::SUBMITTED->value,
+                RequestStatus::APPROVED_DEPARTMENT->value,
+                RequestStatus::ASSIGNED_BY_GA->value,
+                RequestStatus::APPROVED_HRD->value,
+                RequestStatus::APPROVED_HRD_GA->value,
+                RequestStatus::WAITING_DRIVER->value,
+                RequestStatus::DRIVER_ASSIGNED->value,
+                RequestStatus::ON_GOING->value,
+                RequestStatus::COMPLETED->value,
             ])->count();
 
         if ($count >= $maxRequests) {
@@ -50,14 +50,14 @@ class CreateRequestAction
                     ->whereHas('request', function ($q) use ($date) {
                         $q->whereDate('start_time', $date)
                           ->whereIn('status', [
-                              RequestStatus::SUBMITTED,
-                              RequestStatus::APPROVED_DEPARTMENT,
-                              RequestStatus::ASSIGNED_BY_GA,
-                              RequestStatus::APPROVED_HRD,
-                              RequestStatus::APPROVED_HRD_GA,
-                              RequestStatus::WAITING_DRIVER,
-                              RequestStatus::DRIVER_ASSIGNED,
-                              RequestStatus::ON_GOING,
+                              RequestStatus::SUBMITTED->value,
+                              RequestStatus::APPROVED_DEPARTMENT->value,
+                              RequestStatus::ASSIGNED_BY_GA->value,
+                              RequestStatus::APPROVED_HRD->value,
+                              RequestStatus::APPROVED_HRD_GA->value,
+                              RequestStatus::WAITING_DRIVER->value,
+                              RequestStatus::DRIVER_ASSIGNED->value,
+                              RequestStatus::ON_GOING->value,
                           ]);
                     })
                     ->exists();

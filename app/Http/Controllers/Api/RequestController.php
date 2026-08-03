@@ -62,16 +62,16 @@ class RequestController extends Controller
                     $q->whereIn('department_id', $user->departmentGroup())
                       ->orWhere(function ($q) {
                           $q->whereIn('status', [
-                              RequestStatus::APPROVED_DEPARTMENT,
-                              RequestStatus::ASSIGNED_BY_GA,
-                              RequestStatus::APPROVED_HRD,
-                              RequestStatus::APPROVED_HRD_GA,
-                              RequestStatus::WAITING_DRIVER,
-                              RequestStatus::DRIVER_ASSIGNED,
-                              RequestStatus::ON_GOING,
-                              RequestStatus::COMPLETED,
+                              RequestStatus::APPROVED_DEPARTMENT->value,
+                              RequestStatus::ASSIGNED_BY_GA->value,
+                              RequestStatus::APPROVED_HRD->value,
+                              RequestStatus::APPROVED_HRD_GA->value,
+                              RequestStatus::WAITING_DRIVER->value,
+                              RequestStatus::DRIVER_ASSIGNED->value,
+                              RequestStatus::ON_GOING->value,
+                              RequestStatus::COMPLETED->value,
                           ])->orWhere(function ($q2) {
-                              $q2->where('status', RequestStatus::REJECTED)
+                              $q2->where('status', RequestStatus::REJECTED->value)
                                  ->whereHas('approvals', function ($q3) {
                                      $q3->where('role', 'hrd_head');
                                  });
@@ -110,19 +110,23 @@ class RequestController extends Controller
             $upperStatus = strtoupper($status);
             if ($upperStatus === 'PENDING') {
                 $query->whereIn('status', [
-                    RequestStatus::SUBMITTED,
-                    RequestStatus::APPROVED_DEPARTMENT,
-                    RequestStatus::ASSIGNED_BY_GA,
-                    RequestStatus::WAITING_DRIVER
+                    RequestStatus::SUBMITTED->value,
+                    RequestStatus::APPROVED_DEPARTMENT->value,
+                    RequestStatus::ASSIGNED_BY_GA->value,
+                    RequestStatus::WAITING_DRIVER->value,
                 ]);
             } elseif ($upperStatus === 'APPROVED') {
-                $query->whereIn('status', [RequestStatus::DRIVER_ASSIGNED, RequestStatus::APPROVED_HRD, RequestStatus::APPROVED_HRD_GA]);
+                $query->whereIn('status', [
+                    RequestStatus::DRIVER_ASSIGNED->value,
+                    RequestStatus::APPROVED_HRD->value,
+                    RequestStatus::APPROVED_HRD_GA->value,
+                ]);
             } elseif ($upperStatus === 'ONGOING') {
-                $query->where('status', RequestStatus::ON_GOING);
+                $query->where('status', RequestStatus::ON_GOING->value);
             } elseif ($upperStatus === 'COMPLETED') {
-                $query->where('status', RequestStatus::COMPLETED);
+                $query->where('status', RequestStatus::COMPLETED->value);
             } elseif ($upperStatus === 'REJECTED') {
-                $query->where('status', RequestStatus::REJECTED);
+                $query->where('status', RequestStatus::REJECTED->value);
             } else {
                 $query->where('status', $status);
             }
@@ -276,14 +280,14 @@ class RequestController extends Controller
                          $q->whereDate('start_time', $date)
                            ->where('id', '!=', $vehicleRequest->id)
                            ->whereIn('status', [
-                               RequestStatus::SUBMITTED,
-                               RequestStatus::APPROVED_DEPARTMENT,
-                               RequestStatus::ASSIGNED_BY_GA,
-                               RequestStatus::APPROVED_HRD,
-                               RequestStatus::APPROVED_HRD_GA,
-                               RequestStatus::WAITING_DRIVER,
-                               RequestStatus::DRIVER_ASSIGNED,
-                               RequestStatus::ON_GOING,
+                               RequestStatus::SUBMITTED->value,
+                               RequestStatus::APPROVED_DEPARTMENT->value,
+                               RequestStatus::ASSIGNED_BY_GA->value,
+                               RequestStatus::APPROVED_HRD->value,
+                               RequestStatus::APPROVED_HRD_GA->value,
+                               RequestStatus::WAITING_DRIVER->value,
+                               RequestStatus::DRIVER_ASSIGNED->value,
+                               RequestStatus::ON_GOING->value,
                            ]);
                      })
                      ->exists();
