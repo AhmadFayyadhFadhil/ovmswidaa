@@ -257,6 +257,7 @@ class UserController extends Controller
                 'rank'               => $validated['rank'] ?? null,
                 'department_id'      => $validated['department_id'] ?? null,
                 'is_department_head' => $validated['is_department_head'] ?? false,
+                'location'           => 'Pandaan Head Office',
                 'is_active'          => true,
                 'can_request'        => true,
             ];

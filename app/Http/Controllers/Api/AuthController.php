@@ -87,6 +87,7 @@ class AuthController extends Controller
             'email'    => $validated['email'],
             'password' => $validated['password'],
             'department_id' => $validated['department_id'] ?? null,
+            'location' => 'Pandaan Head Office',
         ]);
 
         // Ensure the Employee role exists for the sanctum guard before assigning (avoid runtime errors)
