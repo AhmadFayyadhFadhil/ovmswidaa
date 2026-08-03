@@ -430,7 +430,7 @@ class RequestController extends Controller
                 'message' => 'Permintaan berhasil disetujui',
                 'data'    => new RequestResource($updatedRequest->fresh(['user', 'approvals.approver', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'passengers.department', 'driver', 'vehicle', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrip.driver', 'operationalTrip.vehicle'])),
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
         }
     }
@@ -469,7 +469,7 @@ class RequestController extends Controller
                 'message' => 'Permintaan berhasil ditolak',
                 'data'    => new RequestResource($updatedRequest->fresh(['user', 'approvals.approver', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'passengers.department', 'driver', 'vehicle', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrip.driver', 'operationalTrip.vehicle'])),
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
         }
     }

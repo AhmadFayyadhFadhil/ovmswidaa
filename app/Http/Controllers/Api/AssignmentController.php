@@ -204,7 +204,7 @@ class AssignmentController extends Controller
                 'message' => 'Kendaraan berhasil di-assign ke driver',
                 'data'    => new AssignmentResource($assignment->load(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy'])),
             ], 201);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Assignment creation error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
@@ -267,7 +267,7 @@ class AssignmentController extends Controller
                 'message' => 'Respon driver berhasil disimpan',
                 'data'    => new AssignmentResource($assignment->fresh(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy'])),
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
         }
     }
@@ -449,7 +449,7 @@ class AssignmentController extends Controller
                 'message' => 'Penugasan harian berhasil disimpan',
                 'data' => new RequestResource($vehicleRequest->fresh(['user', 'passengers.department', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'approvals.approver', 'driver', 'vehicle', 'operationalTrip.driver', 'operationalTrip.vehicle'])),
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Daily assignment error:', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
