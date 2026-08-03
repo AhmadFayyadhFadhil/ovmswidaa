@@ -63,9 +63,9 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'nik'      => ['required', 'string', Rule::unique('users', 'nik')->whereNull('deleted_at')],
+            'nik'      => ['required', 'string', Rule::unique('users', 'nik')],
             'name'     => 'required|string|max:255',
-            'email'    => ['required', 'email', Rule::unique('users', 'email')->whereNull('deleted_at')],
+            'email'    => ['required', 'email', Rule::unique('users', 'email')],
             'password' => 'required|string|min:6|confirmed',
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
         ], [

@@ -217,9 +217,9 @@ class UserController extends Controller
             ]);
 
             $validated = $request->validate([
-                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->whereNull('deleted_at')],
+                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')],
                 'name'     => 'required|string|max:255',
-                'email'    => ['required', 'email', Rule::unique('users', 'email')->whereNull('deleted_at')],
+                'email'    => ['required', 'email', Rule::unique('users', 'email')],
                 'password' => ['required', Password::min(6)],
                 'role'     => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
                 'rank'     => 'required_if:role,Approver|nullable|string|max:255',
@@ -254,7 +254,7 @@ class UserController extends Controller
                 'nik'                => $validated['nik'] ?? null,
                 'name'               => $validated['name'],
                 'email'              => $validated['email'],
-                'password'           => Hash::make($validated['password']),
+                'password'           => $validated['password'],
                 'rank'               => $validated['rank'] ?? null,
                 'department_id'      => $validated['department_id'] ?? null,
                 'is_department_head' => $validated['is_department_head'] ?? false,
@@ -346,9 +346,9 @@ class UserController extends Controller
             ]);
 
             $validated = $request->validate([
-                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)->whereNull('deleted_at')],
+                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)],
                 'name'     => 'sometimes|required|string|max:255',
-                'email'    => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)->whereNull('deleted_at')],
+                'email'    => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
                 'password' => ['sometimes', Password::min(6)],
                 'role'     => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
                 'rank'     => 'required_if:role,Approver|nullable|string|max:255',
@@ -383,9 +383,8 @@ class UserController extends Controller
 
             unset($validated['role']);
 
-            if (!empty($validated['password'])) {
-                $validated['password'] = Hash::make($validated['password']);
-            }
+            // Password hashing is handled by User model's 'hashed' cast
+            // No need to call Hash::make() here
 
             $simFile = $request->file('sim_a_photo') ?? $request->file('sim_photo') ?? $request->file('photo');
             if ($simFile) {
