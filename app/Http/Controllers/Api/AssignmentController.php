@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAssignmentRequest;
 use App\Http\Requests\UpdateAssignmentRequest;
 use App\Http\Resources\AssignmentResource;
+use App\Http\Resources\RequestResource;
 use App\Models\Assignment;
 use App\Models\Request as VehicleRequest;
 use Illuminate\Http\Request;
