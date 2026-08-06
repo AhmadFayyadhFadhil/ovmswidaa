@@ -117,11 +117,18 @@ class StoreRequest extends FormRequest
 
     protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
     {
-        \Log::error('StoreRequest validation failed:', [
-            'errors' => $validator->errors()->all(),
-            'input' => $this->except(['passengers', 'purpose', 'destination', 'destination_city', 'destination_place'])
+        $firstError = $validator->errors()->first();
+        \Log::error('StoreRequest validation failed: ' . $firstError, [
+            'errors' => $validator->errors()->all()
         ]);
-        parent::failedValidation($validator);
+
+        throw new \Illuminate\Http\Exceptions\HttpResponseException(
+            response()->json([
+                'status'  => 'error',
+                'message' => $firstError ?: 'Data pengajuan belum sesuai format.',
+                'errors'  => $validator->errors(),
+            ], 422)
+        );
     }
 
     /**
