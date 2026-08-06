@@ -96,6 +96,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/audit-logs/{type}/{id}', [AuditLogController::class, 'show']);
     Route::get('/my-activities', [AuditLogController::class, 'myActivities']);
 
+    // ===== NOTIFICATION ENDPOINTS =====
+    Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+    Route::post('/notifications/mark-read', [\App\Http\Controllers\Api\NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/mark-all-read', [\App\Http\Controllers\Api\NotificationController::class, 'markAllAsRead']);
+    Route::delete('/notifications/{id}', [\App\Http\Controllers\Api\NotificationController::class, 'destroy']);
+
     // ===== SYSTEM CONFIG ENDPOINTS (Admin only) =====
     Route::get('/system-config', [\App\Http\Controllers\Api\SettingController::class, 'index']);
     Route::put('/system-config', [\App\Http\Controllers\Api\SettingController::class, 'update']);
