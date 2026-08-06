@@ -212,8 +212,13 @@ class UserController extends Controller
                 }
             }
 
+            $roleInput = ucfirst(strtolower($request->input('role', '')));
+            $isDeptHead = $request->has('is_department_head')
+                ? $request->boolean('is_department_head')
+                : (in_array($roleInput, ['Approver', 'Ga', 'GA']) ? true : false);
+
             $request->merge([
-                'is_department_head' => $request->boolean('is_department_head'),
+                'is_department_head' => $isDeptHead,
             ]);
 
             $validated = $request->validate([
@@ -341,8 +346,13 @@ class UserController extends Controller
                 }
             }
 
+            $roleInput = ucfirst(strtolower($request->input('role', $user->getRoleNames()[0] ?? '')));
+            $isDeptHead = $request->has('is_department_head')
+                ? $request->boolean('is_department_head')
+                : (in_array($roleInput, ['Approver', 'Ga', 'GA']) ? true : $user->is_department_head);
+
             $request->merge([
-                'is_department_head' => $request->boolean('is_department_head'),
+                'is_department_head' => $isDeptHead,
             ]);
 
             $validated = $request->validate([
