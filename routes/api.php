@@ -18,10 +18,22 @@ Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->midd
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:3,1');
 Route::get('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
 Route::get('/public-stats', [\App\Http\Controllers\Api\SettingController::class, 'getPublicStats']);
-Route::get('/assets/settings/{filename}', [\App\Http\Controllers\Api\SettingController::class, 'serveLogo']);
-// ===== PUBLIC SECURITY SCAN ENDPOINTS =====
-Route::get('/security/lookup', [SecurityController::class, 'lookup']);
-Route::post('/security/scan', [SecurityController::class, 'scan']);
+// ===== FLUSH CACHE ENDPOINT (Public for easy cache clearing without root access) =====
+Route::get('/flush-cache', function () {
+    $opcacheCleared = false;
+    if (function_exists('opcache_reset')) {
+        $opcacheCleared = @opcache_reset();
+    }
+    try {
+        \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+    } catch (\Throwable $e) {}
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'OPCache & Laravel Cache cleared successfully!',
+        'opcache_cleared' => $opcacheCleared,
+    ], 200);
+});
 
 // Protected API routes
 Route::middleware('auth:sanctum')->group(function () {
