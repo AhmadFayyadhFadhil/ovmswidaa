@@ -51,23 +51,21 @@ class StoreRequest extends FormRequest
     public function rules(): array
     {
         $user = $this->user();
-        $isGAOrApprover = $user->hasRoleDirect(['GA', 'ga', 'Admin', 'admin', 'Approver', 'approver']) || $user->isHrGaHead() || !empty($user->is_department_head);
-        $isUrgent = in_array($this->input('priority'), ['Urgent', 'Critical'], true);
+        $isGA = $user->hasRoleDirect(['GA', 'ga', 'Admin', 'admin']) || $user->isHrGaHead();
         $minLeadTime = (int)\App\Models\Setting::getValue('min_lead_time_hours', 24);
         
-        if ($isGAOrApprover || $isUrgent) {
+        if ($isGA) {
             $startTimeRule = 'required|date';
         } else {
             $minTime = now()->addHours($minLeadTime);
             $startTimeRule = [
                 'required',
                 'date',
-                function ($attribute, $value, $fail) use ($minTime, $minLeadTime) {
+                function ($attribute, $value, $fail) use ($minTime) {
                     try {
                         $dateTime = \Carbon\Carbon::parse($value);
                         if ($dateTime->lt($minTime)) {
-                            $formattedMin = $minTime->format('d-m-Y H:i');
-                            $fail("Waktu keberangkatan minimal {$minLeadTime} jam dari waktu pengajuan saat ini (keberangkatan tercepat yang diizinkan: {$formattedMin}). Silakan pilih prioritas 'Urgent' jika membutuhkan keberangkatan cepat.");
+                            $fail("Waktu keberangkatan kurang dari 24 jam. Silakan menghubungi GA KOORDINATOR (Bu Melodi) untuk pengajuan urgent.");
                         }
                     } catch (\Throwable $e) {
                         $fail("Format waktu keberangkatan tidak valid.");
