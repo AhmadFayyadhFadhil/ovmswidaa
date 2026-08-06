@@ -39,7 +39,8 @@ class StoreRequest extends FormRequest
     public function authorize(): bool
     {
         $user = $this->user();
-        return $user->hasRoleDirect(['Employee', 'Admin', 'GA', 'Approver', 'Driver']) && (!isset($user->can_request) || $user->can_request);
+        if (!$user) return false;
+        return !isset($user->can_request) || (bool)$user->can_request;
     }
 
     /**
@@ -50,7 +51,7 @@ class StoreRequest extends FormRequest
     public function rules(): array
     {
         $user = $this->user();
-        $isGA = $user->hasRoleDirect('GA') || $user->hasRoleDirect('Admin');
+        $isGA = $user->hasRoleDirect(['GA', 'ga', 'Admin', 'admin']);
         $minLeadTime = (int)\App\Models\Setting::getValue('min_lead_time_hours', 24);
         
         if ($isGA) {
@@ -75,7 +76,7 @@ class StoreRequest extends FormRequest
         }
 
         return [
-            'department_id' => 'nullable|integer|exists:departments,id',
+            'department_id' => 'nullable',
             'destination_city' => 'required|string|max:255',
             'destination_place' => 'required|string|max:255',
             'purpose' => 'required|string|max:255',
@@ -87,8 +88,8 @@ class StoreRequest extends FormRequest
             // Passengers validation (optional - can be provided or omitted)
             'passengers' => 'nullable|array|min:0',
             'passengers.*.name' => 'required_with:passengers|string|max:255',
-            'passengers.*.department_id' => 'nullable|integer|exists:departments,id',
-            'passengers.*.user_id' => 'nullable|integer|exists:users,id',
+            'passengers.*.department_id' => 'nullable',
+            'passengers.*.user_id' => 'nullable',
             'passengers.*.is_pic' => 'nullable|boolean',
             // Optional driver/vehicle for GA urgent request
             'driver_id' => 'nullable|integer|exists:users,id',
