@@ -549,10 +549,24 @@ class SecurityController extends Controller
         $req = VehicleRequest::where('qr_code_token', 'like', '%' . $token . '%')->first();
         if ($req) return $req;
 
-        // 3. Match numeric ID (e.g. "18", "#18", "REQ-18", "RQ-18")
-        $idStr = preg_replace('/[^0-9]/', '', $token);
-        if ($idStr && is_numeric($idStr)) {
-            $req = VehicleRequest::find((int)$idStr);
+        // 3. Match REQ-{ID} pattern (e.g. "REQ-17", "REQ-1786023277-86442c74")
+        if (preg_match('/REQ-(\d+)/i', $token, $m)) {
+            $id = (int)$m[1];
+            $req = VehicleRequest::find($id);
+            if ($req) return $req;
+        }
+
+        // 4. Match numeric ID (e.g. "17", "#17", "18")
+        if (preg_match('/^\s*#?\s*(\d+)\s*$/', $token, $m)) {
+            $id = (int)$m[1];
+            $req = VehicleRequest::find($id);
+            if ($req) return $req;
+        }
+
+        // 5. Fallback: first numeric sequence
+        if (preg_match('/(\d+)/', $token, $m)) {
+            $id = (int)$m[1];
+            $req = VehicleRequest::find($id);
             if ($req) return $req;
         }
 
