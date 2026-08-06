@@ -72,6 +72,29 @@ class CreateRequestAction
             $user = auth()->user();
             $isGA = $user->hasRoleDirect('GA') || $user->hasRoleDirect('Admin') || $user->isHrGaHead();
             
+            // Helper to safely resolve department_id to integer ID in departments table
+            $resolveDeptId = function ($input) use ($user) {
+                if (empty($input)) return $user->department_id;
+                if (is_numeric($input)) {
+                    $id = (int)$input;
+                    if (\App\Models\Department::where('id', $id)->exists()) return $id;
+                }
+                $mappedName = (string)$input;
+                if ($mappedName === 'IT') $mappedName = 'Information and Technology';
+                elseif ($mappedName === 'FA') $mappedName = 'Finance and Accounting';
+                elseif (in_array($mappedName, ['HRD', 'GA', 'HR&GA', 'HRD&GA', 'GAHRD'])) $mappedName = 'HRD & GA';
+                elseif ($mappedName === 'QA') $mappedName = 'Quality Assurance';
+                elseif ($mappedName === 'QC') $mappedName = 'Quality Control';
+
+                $dept = \App\Models\Department::where('name', $mappedName)
+                    ->orWhere('name', 'like', '%' . $input . '%')
+                    ->first();
+
+                return $dept ? $dept->id : $user->department_id;
+            };
+
+            $deptId = $resolveDeptId($data['department_id'] ?? null);
+
             $status = RequestStatus::SUBMITTED;
             $driverId = $data['driver_id'] ?? null;
             $vehicleId = $data['vehicle_id'] ?? null;
@@ -102,7 +125,7 @@ class CreateRequestAction
 
             $request = Request::create([
                 'user_id' => $user->id,
-                'department_id' => $data['department_id'] ?? $user->department_id,
+                'department_id' => $deptId,
                 'destination_city' => $data['destination_city'],
                 'destination_place' => $data['destination_place'],
                 'purpose' => $data['purpose'],
@@ -174,7 +197,7 @@ class CreateRequestAction
                     Passenger::create([
                         'request_id' => $request->id,
                         'name' => $passengerData['name'],
-                        'department_id' => $passengerData['department_id'] ?? null,
+                        'department_id' => $resolveDeptId($passengerData['department_id'] ?? null),
                         'user_id' => $userId,
                         'is_pic' => $isPic,
                     ]);
