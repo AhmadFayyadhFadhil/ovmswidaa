@@ -57,7 +57,7 @@ class StoreRequest extends FormRequest
         if ($isGA) {
             $startTimeRule = 'required|date';
         } else {
-            $minTime = now()->addHours($minLeadTime);
+            $minTime = now()->addHours($minLeadTime)->subMinutes(15);
             $startTimeRule = [
                 'required',
                 'date',
