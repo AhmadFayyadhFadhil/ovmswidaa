@@ -7,9 +7,21 @@ use App\Models\Request as VehicleRequest;
 use App\Models\UserNotificationState;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class NotificationController extends Controller
 {
+    /**
+     * Helper to return JSON response with no-cache headers.
+     */
+    private function jsonNoCache(array $data, int $code = 200): JsonResponse
+    {
+        return response()->json($data, $code)
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
+    }
+
     /**
      * Fetch user notifications with persistent read and deleted statuses.
      * 100% server-driven — uses ONLY user_notification_states table.
@@ -18,6 +30,15 @@ class NotificationController extends Controller
     {
         try {
             $user = $request->user();
+
+            if (!$user) {
+                return $this->jsonNoCache([
+                    'status'  => 'error',
+                    'message' => 'Unauthenticated',
+                    'data'    => [],
+                    'total'   => 0,
+                ], 401);
+            }
 
             // Get all notification states for this user from dedicated table
             $readIds = [];
@@ -35,7 +56,7 @@ class NotificationController extends Controller
                     }
                 }
             } catch (\Throwable $e) {
-                // Table might not exist yet — continue with empty arrays
+                Log::error('Notification index DB query failed: ' . $e->getMessage());
             }
 
             // Fetch requests for generating system notifications
@@ -98,19 +119,20 @@ class NotificationController extends Controller
                 ];
             }
 
-            return response()->json([
+            return $this->jsonNoCache([
                 'status' => 'success',
                 'data'   => $notifications,
                 'total'  => count($notifications),
-            ], 200);
+            ]);
 
         } catch (\Throwable $e) {
-            return response()->json([
+            Log::error('Notification index error: ' . $e->getMessage());
+            return $this->jsonNoCache([
                 'status'  => 'error',
                 'message' => 'Gagal memuat notifikasi: ' . $e->getMessage(),
                 'data'    => [],
                 'total'   => 0,
-            ], 200); // Return 200 so frontend doesn't crash
+            ]);
         }
     }
 
@@ -125,24 +147,37 @@ class NotificationController extends Controller
             ]);
 
             $user = $request->user();
+            if (!$user) {
+                return $this->jsonNoCache(['status' => 'error', 'message' => 'Unauthenticated'], 401);
+            }
+
             $notifId = (string) $validated['id'];
 
-            UserNotificationState::updateOrCreate(
-                ['user_id' => $user->id, 'notification_id' => $notifId],
-                ['is_read' => true]
-            );
+            $state = UserNotificationState::firstOrNew([
+                'user_id'         => $user->id,
+                'notification_id' => $notifId,
+            ]);
 
-            return response()->json([
+            $state->is_read = true;
+            if ($state->is_deleted === null) {
+                $state->is_deleted = false;
+            }
+            $state->save();
+
+            Log::info("Notification #{$notifId} marked as read for user {$user->id}");
+
+            return $this->jsonNoCache([
                 'status'  => 'success',
                 'message' => 'Notifikasi ditandai sebagai dibaca',
                 'data'    => ['id' => $notifId, 'isRead' => true],
-            ], 200);
+            ]);
 
         } catch (\Throwable $e) {
-            return response()->json([
+            Log::error('Notification markAsRead error: ' . $e->getMessage());
+            return $this->jsonNoCache([
                 'status'  => 'error',
                 'message' => 'Gagal menandai notifikasi: ' . $e->getMessage(),
-            ], 200);
+            ], 500);
         }
     }
 
@@ -153,6 +188,10 @@ class NotificationController extends Controller
     {
         try {
             $user = $request->user();
+            if (!$user) {
+                return $this->jsonNoCache(['status' => 'error', 'message' => 'Unauthenticated'], 401);
+            }
+
             $ids = $request->input('ids', []);
 
             if (empty($ids)) {
@@ -164,22 +203,30 @@ class NotificationController extends Controller
             }
 
             foreach ($ids as $notifId) {
-                UserNotificationState::updateOrCreate(
-                    ['user_id' => $user->id, 'notification_id' => (string) $notifId],
-                    ['is_read' => true]
-                );
+                $state = UserNotificationState::firstOrNew([
+                    'user_id'         => $user->id,
+                    'notification_id' => (string) $notifId,
+                ]);
+                $state->is_read = true;
+                if ($state->is_deleted === null) {
+                    $state->is_deleted = false;
+                }
+                $state->save();
             }
 
-            return response()->json([
+            Log::info("All notifications marked as read for user {$user->id}");
+
+            return $this->jsonNoCache([
                 'status'  => 'success',
                 'message' => 'Semua notifikasi ditandai sebagai dibaca',
-            ], 200);
+            ]);
 
         } catch (\Throwable $e) {
-            return response()->json([
+            Log::error('Notification markAllAsRead error: ' . $e->getMessage());
+            return $this->jsonNoCache([
                 'status'  => 'error',
                 'message' => 'Gagal menandai semua notifikasi: ' . $e->getMessage(),
-            ], 200);
+            ], 500);
         }
     }
 
@@ -190,24 +237,37 @@ class NotificationController extends Controller
     {
         try {
             $user = $request->user();
+            if (!$user) {
+                return $this->jsonNoCache(['status' => 'error', 'message' => 'Unauthenticated'], 401);
+            }
+
             $notifId = (string) $id;
 
-            UserNotificationState::updateOrCreate(
-                ['user_id' => $user->id, 'notification_id' => $notifId],
-                ['is_deleted' => true]
-            );
+            $state = UserNotificationState::firstOrNew([
+                'user_id'         => $user->id,
+                'notification_id' => $notifId,
+            ]);
 
-            return response()->json([
+            $state->is_deleted = true;
+            if ($state->is_read === null) {
+                $state->is_read = false;
+            }
+            $state->save();
+
+            Log::info("Notification #{$notifId} DELETED for user {$user->id} (Row ID: {$state->id})");
+
+            return $this->jsonNoCache([
                 'status'  => 'success',
                 'message' => 'Notifikasi berhasil dihapus',
                 'data'    => ['id' => $notifId, 'isDeleted' => true],
-            ], 200);
+            ]);
 
         } catch (\Throwable $e) {
-            return response()->json([
+            Log::error("Notification destroy error for ID {$id}: " . $e->getMessage());
+            return $this->jsonNoCache([
                 'status'  => 'error',
                 'message' => 'Gagal menghapus notifikasi: ' . $e->getMessage(),
-            ], 200);
+            ], 500);
         }
     }
 
@@ -232,10 +292,14 @@ class NotificationController extends Controller
         // 2. Try insert test row
         if ($user) {
             try {
-                $state = UserNotificationState::updateOrCreate(
-                    ['user_id' => $user->id, 'notification_id' => 'TEST_DIAGNOSTIC'],
-                    ['is_read' => true, 'is_deleted' => false]
-                );
+                $state = UserNotificationState::firstOrNew([
+                    'user_id' => $user->id,
+                    'notification_id' => 'TEST_DIAGNOSTIC',
+                ]);
+                $state->is_read = true;
+                $state->is_deleted = false;
+                $state->save();
+
                 $results['insert_test'] = 'SUCCESS, id=' . $state->id;
 
                 // Read it back
@@ -269,10 +333,10 @@ class NotificationController extends Controller
             }
         }
 
-        return response()->json([
+        return $this->jsonNoCache([
             'status' => 'success',
             'message' => 'Notification system diagnostic',
             'data' => $results,
-        ], 200);
+        ]);
     }
 }
