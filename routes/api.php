@@ -35,6 +35,10 @@ Route::get('/flush-cache', function () {
     ], 200);
 });
 
+// ===== SECURITY PORTAL ENDPOINTS (Public & Authenticated) =====
+Route::get('/security/lookup', [SecurityController::class, 'lookup']);
+Route::post('/security/scan', [SecurityController::class, 'scan']);
+
 // Protected API routes
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -80,6 +84,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/requests/{vehicleRequest}/adjust-driver', [RequestController::class, 'adjustDriver']);
     Route::post('/requests/{vehicleRequest}/rate-driver', [RequestController::class, 'rateDriver']);
     Route::post('/requests/{vehicleRequest}/daily-assignments', [AssignmentController::class, 'storeDailyAssignments']);
+
+    // ===== SECURITY PORTAL ENDPOINTS =====
+    Route::get('/security/lookup', [SecurityController::class, 'lookup']);
+    Route::post('/security/scan', [SecurityController::class, 'scan']);
 
     // ===== SECURITY GUARDS ENDPOINTS =====
     Route::get('/security-guards', [SecurityGuardController::class, 'index']);
