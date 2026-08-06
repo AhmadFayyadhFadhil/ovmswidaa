@@ -210,4 +210,69 @@ class NotificationController extends Controller
             ], 200);
         }
     }
+
+    /**
+     * Diagnostic test endpoint — verifies table exists, insert works, read works.
+     */
+    public function test(Request $request): JsonResponse
+    {
+        $results = [];
+        $user = $request->user();
+        $results['user_id'] = $user ? $user->id : 'NOT AUTHENTICATED';
+        $results['user_name'] = $user ? $user->name : 'N/A';
+
+        // 1. Check table
+        try {
+            $tableExists = \Illuminate\Support\Facades\Schema::hasTable('user_notification_states');
+            $results['table_exists'] = $tableExists;
+        } catch (\Throwable $e) {
+            $results['table_exists'] = 'ERROR: ' . $e->getMessage();
+        }
+
+        // 2. Try insert test row
+        if ($user) {
+            try {
+                $state = UserNotificationState::updateOrCreate(
+                    ['user_id' => $user->id, 'notification_id' => 'TEST_DIAGNOSTIC'],
+                    ['is_read' => true, 'is_deleted' => false]
+                );
+                $results['insert_test'] = 'SUCCESS, id=' . $state->id;
+
+                // Read it back
+                $readBack = UserNotificationState::where('user_id', $user->id)
+                    ->where('notification_id', 'TEST_DIAGNOSTIC')
+                    ->first();
+                $results['read_back'] = $readBack ? 'SUCCESS, is_read=' . ($readBack->is_read ? 'true' : 'false') : 'FAILED';
+
+                // Clean up
+                UserNotificationState::where('user_id', $user->id)
+                    ->where('notification_id', 'TEST_DIAGNOSTIC')
+                    ->delete();
+                $results['cleanup'] = 'SUCCESS';
+
+            } catch (\Throwable $e) {
+                $results['insert_test'] = 'ERROR: ' . $e->getMessage();
+            }
+        }
+
+        // 3. Count existing states for this user
+        if ($user) {
+            try {
+                $count = UserNotificationState::where('user_id', $user->id)->count();
+                $results['user_states_count'] = $count;
+                $deletedCount = UserNotificationState::where('user_id', $user->id)->where('is_deleted', true)->count();
+                $results['user_deleted_count'] = $deletedCount;
+                $readCount = UserNotificationState::where('user_id', $user->id)->where('is_read', true)->count();
+                $results['user_read_count'] = $readCount;
+            } catch (\Throwable $e) {
+                $results['user_states_count'] = 'ERROR: ' . $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Notification system diagnostic',
+            'data' => $results,
+        ], 200);
+    }
 }
