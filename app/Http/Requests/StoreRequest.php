@@ -57,15 +57,15 @@ class StoreRequest extends FormRequest
         if ($isGA) {
             $startTimeRule = 'required|date';
         } else {
-            $minTime = now()->addHours($minLeadTime)->subMinutes(15);
+            $todayStart = now()->startOfDay();
             $startTimeRule = [
                 'required',
                 'date',
-                function ($attribute, $value, $fail) use ($minTime) {
+                function ($attribute, $value, $fail) use ($todayStart) {
                     try {
                         $dateTime = \Carbon\Carbon::parse($value);
-                        if ($dateTime->lt($minTime)) {
-                            $fail("Waktu keberangkatan kurang dari 24 jam. Silakan menghubungi GA KOORDINATOR (Bu Melodi) untuk pengajuan urgent.");
+                        if ($dateTime->lt(now()) || $dateTime->lte($todayStart->copy()->endOfDay())) {
+                            $fail("Waktu keberangkatan untuk hari ini (kurang dari H-1). Silakan menghubungi GA KOORDINATOR (Bu Melodi) untuk pengajuan urgent.");
                         }
                     } catch (\Throwable $e) {
                         $fail("Format waktu keberangkatan tidak valid.");
