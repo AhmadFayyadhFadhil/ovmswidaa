@@ -65,7 +65,8 @@ class StoreRequest extends FormRequest
                     try {
                         $dateTime = \Carbon\Carbon::parse($value);
                         if ($dateTime->lt($minTime)) {
-                            $fail("Waktu keberangkatan kurang dari 24 jam. Silakan menghubungi GA KOORDINATOR (Bu Melodi) untuk pengajuan urgent.");
+                            $formattedMin = $minTime->format('d/m/Y H:i');
+                            $fail("Waktu keberangkatan kurang dari 24 jam (keberangkatan tercepat: {$formattedMin} WIB). Silakan menghubungi GA KOORDINATOR (Bu Melodi) untuk pengajuan urgent.");
                         }
                     } catch (\Throwable $e) {
                         $fail("Format waktu keberangkatan tidak valid.");
