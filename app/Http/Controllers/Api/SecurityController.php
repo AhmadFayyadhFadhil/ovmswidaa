@@ -23,15 +23,7 @@ class SecurityController extends Controller
             'scanned_at'    => 'nullable|string',
         ]);
 
-        $vehicleRequest = VehicleRequest::where('qr_code_token', $validated['qr_code_token'])->first();
-
-        if (!$vehicleRequest) {
-            // Fallback: try finding by request ID parsed from input
-            $idStr = preg_replace('/[^0-9]/', '', $validated['qr_code_token']);
-            if ($idStr) {
-                $vehicleRequest = VehicleRequest::find((int)$idStr);
-            }
-        }
+        $vehicleRequest = $this->findRequestByToken($validated['qr_code_token']);
 
         if (!$vehicleRequest) {
             return response()->json([
@@ -492,20 +484,12 @@ class SecurityController extends Controller
             ], 422);
         }
 
-        $vehicleRequest = VehicleRequest::where('qr_code_token', $token)->first();
-
-        if (!$vehicleRequest) {
-            // Fallback: try finding by request ID parsed from input
-            $idStr = preg_replace('/[^0-9]/', '', $token);
-            if ($idStr) {
-                $vehicleRequest = VehicleRequest::find((int)$idStr);
-            }
-        }
+        $vehicleRequest = $this->findRequestByToken($token);
 
         if (!$vehicleRequest) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Permintaan kendaraan tidak ditemukan.',
+                'message' => 'Permintaan kendaraan tidak ditemukan. Periksa kembali format kode atau ID Request.',
             ], 404);
         }
 
@@ -535,5 +519,43 @@ class SecurityController extends Controller
             'status' => 'success',
             'data'   => new \App\Http\Resources\RequestResource($vehicleRequest->load(['user', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver'])),
         ], 200);
+    }
+
+    private function findRequestByToken(string $token): ?VehicleRequest
+    {
+        $token = trim($token);
+        if (empty($token)) return null;
+
+        if (filter_var($token, FILTER_VALIDATE_URL) || str_contains($token, '?token=')) {
+            $parts = parse_url($token);
+            if (isset($parts['query'])) {
+                parse_str($parts['query'], $queryParts);
+                if (isset($queryParts['token'])) {
+                    $token = trim($queryParts['token']);
+                }
+            } else {
+                preg_match('/[?&]token=([^&]+)/', $token, $matches);
+                if (isset($matches[1])) {
+                    $token = trim($matches[1]);
+                }
+            }
+        }
+
+        // 1. Exact match by qr_code_token
+        $req = VehicleRequest::where('qr_code_token', $token)->first();
+        if ($req) return $req;
+
+        // 2. Partial match by qr_code_token
+        $req = VehicleRequest::where('qr_code_token', 'like', '%' . $token . '%')->first();
+        if ($req) return $req;
+
+        // 3. Match numeric ID (e.g. "18", "#18", "REQ-18", "RQ-18")
+        $idStr = preg_replace('/[^0-9]/', '', $token);
+        if ($idStr && is_numeric($idStr)) {
+            $req = VehicleRequest::find((int)$idStr);
+            if ($req) return $req;
+        }
+
+        return null;
     }
 }
