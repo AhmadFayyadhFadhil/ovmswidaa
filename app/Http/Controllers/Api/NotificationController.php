@@ -7,6 +7,7 @@ use App\Models\Request as VehicleRequest;
 use App\Models\UserNotificationState;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Schema;
 
 class NotificationController extends Controller
 {
@@ -17,10 +18,27 @@ class NotificationController extends Controller
     {
         $user = $request->user();
 
-        // Get notification states for current user
-        $states = UserNotificationState::where('user_id', $user->id)
-            ->get()
-            ->keyBy('notification_id');
+        // Get user notification state lists from User model
+        $userReadIds = is_array($user->read_notification_ids) ? array_map('strval', $user->read_notification_ids) : [];
+        $userDeletedIds = is_array($user->deleted_notification_ids) ? array_map('strval', $user->deleted_notification_ids) : [];
+
+        // Fallback/Merge with user_notification_states table if available
+        if (Schema::hasTable('user_notification_states')) {
+            try {
+                $states = UserNotificationState::where('user_id', $user->id)->get();
+                foreach ($states as $st) {
+                    $stId = (string)$st->notification_id;
+                    if ($st->is_deleted && !in_array($stId, $userDeletedIds, true)) {
+                        $userDeletedIds[] = $stId;
+                    }
+                    if ($st->is_read && !in_array($stId, $userReadIds, true)) {
+                        $userReadIds[] = $stId;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Ignore if table query fails
+            }
+        }
 
         // Fetch requests for generating system notifications
         $requests = VehicleRequest::with(['user', 'department'])
@@ -32,10 +50,9 @@ class NotificationController extends Controller
 
         foreach ($requests as $r) {
             $notifId = (string) $r->id;
-            $state = $states->get($notifId);
 
             // Skip deleted notifications for this user
-            if ($state && $state->is_deleted) {
+            if (in_array($notifId, $userDeletedIds, true)) {
                 continue;
             }
 
@@ -77,7 +94,7 @@ class NotificationController extends Controller
                 'timeAgo'     => $dateStr,
                 'severity'    => $severity,
                 'category'    => $category,
-                'isRead'      => $state ? (bool) $state->is_read : false,
+                'isRead'      => in_array($notifId, $userReadIds, true),
                 'metadata'    => "REQ ID: #{$r->id}",
                 'rawStatus'   => $rawStatus,
             ];
@@ -102,20 +119,30 @@ class NotificationController extends Controller
         $user = $request->user();
         $notifId = (string) $validated['id'];
 
-        $state = UserNotificationState::updateOrCreate(
-            [
-                'user_id'         => $user->id,
-                'notification_id' => $notifId,
-            ],
-            [
-                'is_read' => true,
-            ]
-        );
+        // Update User model JSON column
+        $readIds = is_array($user->read_notification_ids) ? array_map('strval', $user->read_notification_ids) : [];
+        if (!in_array($notifId, $readIds, true)) {
+            $readIds[] = $notifId;
+            $user->read_notification_ids = array_values(array_unique($readIds));
+            $user->save();
+        }
+
+        // Also update user_notification_states table if available
+        if (Schema::hasTable('user_notification_states')) {
+            try {
+                UserNotificationState::updateOrCreate(
+                    ['user_id' => $user->id, 'notification_id' => $notifId],
+                    ['is_read' => true]
+                );
+            } catch (\Throwable $e) {
+                // Ignore
+            }
+        }
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Notifikasi ditandai sebagai dibaca',
-            'data'    => $state,
+            'data'    => ['id' => $notifId, 'isRead' => true],
         ], 200);
     }
 
@@ -131,17 +158,27 @@ class NotificationController extends Controller
             $ids = VehicleRequest::orderBy('id', 'desc')->take(100)->pluck('id')->map(fn($id) => (string)$id)->toArray();
         }
 
+        $readIds = is_array($user->read_notification_ids) ? array_map('strval', $user->read_notification_ids) : [];
         foreach ($ids as $notifId) {
-            UserNotificationState::updateOrCreate(
-                [
-                    'user_id'         => $user->id,
-                    'notification_id' => (string) $notifId,
-                ],
-                [
-                    'is_read' => true,
-                ]
-            );
+            $notifId = (string) $notifId;
+            if (!in_array($notifId, $readIds, true)) {
+                $readIds[] = $notifId;
+            }
+
+            if (Schema::hasTable('user_notification_states')) {
+                try {
+                    UserNotificationState::updateOrCreate(
+                        ['user_id' => $user->id, 'notification_id' => $notifId],
+                        ['is_read' => true]
+                    );
+                } catch (\Throwable $e) {
+                    // Ignore
+                }
+            }
         }
+
+        $user->read_notification_ids = array_values(array_unique($readIds));
+        $user->save();
 
         return response()->json([
             'status'  => 'success',
@@ -155,21 +192,32 @@ class NotificationController extends Controller
     public function destroy(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
+        $notifId = (string) $id;
 
-        $state = UserNotificationState::updateOrCreate(
-            [
-                'user_id'         => $user->id,
-                'notification_id' => (string) $id,
-            ],
-            [
-                'is_deleted' => true,
-            ]
-        );
+        // Update User model JSON column
+        $deletedIds = is_array($user->deleted_notification_ids) ? array_map('strval', $user->deleted_notification_ids) : [];
+        if (!in_array($notifId, $deletedIds, true)) {
+            $deletedIds[] = $notifId;
+            $user->deleted_notification_ids = array_values(array_unique($deletedIds));
+            $user->save();
+        }
+
+        // Also update user_notification_states table if available
+        if (Schema::hasTable('user_notification_states')) {
+            try {
+                UserNotificationState::updateOrCreate(
+                    ['user_id' => $user->id, 'notification_id' => $notifId],
+                    ['is_deleted' => true]
+                );
+            } catch (\Throwable $e) {
+                // Ignore
+            }
+        }
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Notifikasi berhasil dihapus',
-            'data'    => $state,
+            'data'    => ['id' => $notifId, 'isDeleted' => true],
         ], 200);
     }
 }

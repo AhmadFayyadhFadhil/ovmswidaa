@@ -42,6 +42,8 @@ class User extends Authenticatable
         'can_request',
         'availability_start',
         'availability_end',
+        'read_notification_ids',
+        'deleted_notification_ids',
     ];
 
     /**
@@ -67,6 +69,8 @@ class User extends Authenticatable
             'is_department_head' => 'boolean',
             'is_active' => 'boolean',
             'can_request' => 'boolean',
+            'read_notification_ids' => 'array',
+            'deleted_notification_ids' => 'array',
         ];
     }
 
