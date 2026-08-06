@@ -53,7 +53,8 @@ class RequestController extends Controller
             $query->where(function ($q) use ($user) {
                 $q->where('user_id', $user->id)
                   ->orWhereHas('passengers', function ($sub) use ($user) {
-                      $sub->where('user_id', $user->id);
+                      $sub->where('user_id', $user->id)
+                          ->orWhere(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), strtolower(trim($user->name)));
                   });
             });
         } elseif ($isApprover && !$isAdmin && !$isGA) {

@@ -17,6 +17,7 @@ class PassengerResource extends JsonResource
         return [
             'id' => $this->id,
             'request_id' => $this->request_id,
+            'user_id' => $this->user_id,
             'name' => $this->name,
             'department_id' => $this->department_id,
             'department_name' => $this->department?->name,

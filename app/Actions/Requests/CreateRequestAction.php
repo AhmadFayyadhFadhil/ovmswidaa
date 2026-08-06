@@ -186,8 +186,11 @@ class CreateRequestAction
 
                 foreach ($data['passengers'] as $idx => $passengerData) {
                     $userId = $passengerData['user_id'] ?? null;
-                    if (!$userId && !empty($passengerData['name'])) {
-                        $resolved = \App\Models\User::where('name', trim($passengerData['name']))->first();
+                    if (!empty($passengerData['name'])) {
+                        $cleanName = trim($passengerData['name']);
+                        $resolved = \App\Models\User::where(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), strtolower($cleanName))
+                            ->orWhere('name', 'like', '%' . $cleanName . '%')
+                            ->first();
                         if ($resolved) {
                             $userId = $resolved->id;
                         }
