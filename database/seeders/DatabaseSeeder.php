@@ -3,10 +3,10 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Models\Department;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Role;
 
 class DatabaseSeeder extends Seeder
 {
@@ -14,421 +14,139 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(RolePermissionSeeder::class);
 
-        // Clear existing users and roles
-        Schema::disableForeignKeyConstraints();
-        DB::table('users')->truncate();
-        DB::table('model_has_roles')->truncate();
-        DB::table('model_has_permissions')->truncate();
-        Schema::enableForeignKeyConstraints();
+        // Helper to resolve department_id dynamically by name
+        $getDeptId = function (string $deptName): int {
+            return Department::firstOrCreate(['name' => trim($deptName)])->id;
+        };
 
-        // 38 Users from sheet
-        $usersData = [
-            [
-                'nik' => 'SA12345',
-                'name' => 'Super Admin User',
-                'email' => 'superadmin@example.com',
-                'department_id' => null,
-                'role' => 'Admin',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1393',
-                'name' => 'Khasanudin',
-                'email' => 'khasanudin@gmail.com',
-                'department_id' => 8,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '73250',
-                'name' => 'Dimas Subiyantoro',
-                'email' => 'it.factory.dimas@widatra.com',
-                'department_id' => 8,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1125',
-                'name' => 'Prind Widjaya Sena',
-                'email' => 'sena@widatra.com',
-                'department_id' => 1, // Information and Technology
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '1556',
-                'name' => 'Johny Santoso',
-                'email' => 'johny@widatra.com',
-                'department_id' => 2, // Finance and Accounting
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '1095',
-                'name' => 'Andaru Wana Perkasa',
-                'email' => 'andaru@widatra.com',
-                'department_id' => 3, // HRD & GA
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '834',
-                'name' => 'Hendri Hardian',
-                'email' => 'hardian@widatra.com',
-                'department_id' => 4, // Supply Chain
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '817',
-                'name' => 'Yogi Wicaksono',
-                'email' => 'yogi@widatra.com',
-                'department_id' => 5, // Technical and Development
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '1135',
-                'name' => 'Arfian Arianto',
-                'email' => 'arfian@widatra.com',
-                'department_id' => 6, // Quality Assurance
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '790',
-                'name' => 'Hendri Yanto Prabowo',
-                'email' => 'hendri@widatra.com',
-                'department_id' => 7, // Quality Control
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '786',
-                'name' => 'Rizky Bagus Kurniawan',
-                'email' => 'rizky@widatra.com',
-                'department_id' => 8, // Production
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '10319',
-                'name' => 'Gita Thessa Lonika Putri',
-                'email' => 'gita@widatra.com',
-                'department_id' => 9, // Regulatory Affairs & PV
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '10053',
-                'name' => 'Evalin Jayakusli',
-                'email' => 'evalin@widatra.com',
-                'department_id' => 10, // Legal & Compliance
-                'role' => 'Approver',
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '1430',
-                'name' => 'Melodi Bella Astria',
-                'email' => 'melody@widatra.com',
-                'department_id' => 11, // Plant Management
-                'role' => 'Approver_GA', // GA Koordinator & Kadep Plant Management
-                'is_department_head' => true,
-                'rank' => 'Kepala Departemen',
-            ],
-            [
-                'nik' => '2330',
-                'name' => 'Alvin Maulana',
-                'email' => 'accounting@widatra.com',
-                'department_id' => 9,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '392',
-                'name' => 'Deni Dwi Rosidi',
-                'email' => 'legal.admin@widatra.com',
-                'department_id' => 10,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '241',
-                'name' => 'Mulyani Lestari',
-                'email' => 'lestari@widatra.com',
-                'department_id' => 11,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1425',
-                'name' => 'Puput Wahyuni',
-                'email' => 'adminproc@widatra.com',
-                'department_id' => 11,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1104',
-                'name' => 'Murti Allahah Agustya',
-                'email' => 'mumu@widatra.com',
-                'department_id' => 12,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '685',
-                'name' => 'Ari Adi Tama',
-                'email' => 'adm.qa@widatra.com',
-                'department_id' => 13,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '905',
-                'name' => 'Dwi Puji Lestari',
-                'email' => 'dwi@widatra.com',
-                'department_id' => 14,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1086',
-                'name' => 'Sri Hidayati',
-                'email' => 'ida@widatra.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1390',
-                'name' => 'Nanang',
-                'email' => 'nanang@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1417',
-                'name' => 'Yogi',
-                'email' => 'yogi@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1562',
-                'name' => 'Mujahid',
-                'email' => 'mujahid@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '254',
-                'name' => 'Sugi',
-                'email' => 'sugi@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1374',
-                'name' => 'Hanafi',
-                'email' => 'hanafi@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1394',
-                'name' => 'Ageng',
-                'email' => 'ageng@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1376',
-                'name' => 'Muni',
-                'email' => 'muni@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1433',
-                'name' => 'Anang',
-                'email' => 'anang@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1568',
-                'name' => 'Ridho',
-                'email' => 'ridho@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '362',
-                'name' => 'Dwi',
-                'email' => 'dwi@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1931',
-                'name' => 'Farid',
-                'email' => 'farid@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1395',
-                'name' => 'Zainul',
-                'email' => 'zainul@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '81',
-                'name' => 'Prayitno',
-                'email' => 'prayitno@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '1591',
-                'name' => 'Aji',
-                'email' => 'aji@gmail.com',
-                'department_id' => 15,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '100626',
-                'name' => 'Utility',
-                'email' => 'utility@widatra.com',
-                'department_id' => 12,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
-            [
-                'nik' => '73331',
-                'name' => 'Muhammad Jihan Gumeular',
-                'email' => 'it.factory@widatra.com',
-                'department_id' => 8,
-                'role' => 'Employee',
-                'is_department_head' => false,
-                'rank' => null,
-            ],
+        // Ensure default departments exist
+        $standardDepts = [
+            'Information and Technology',
+            'Finance and Accounting',
+            'HRD & GA',
+            'Supply Chain',
+            'Technical and Development',
+            'Quality Assurance',
+            'Quality Control',
+            'Production',
+            'Regulatory Affairs & PV',
+            'Legal & Compliance',
+            'Plant Management',
         ];
-
-        foreach ($usersData as $ud) {
-            $user = User::create([
-                'nik' => $ud['nik'],
-                'name' => $ud['name'],
-                'email' => $ud['email'],
-                'password' => Hash::make('password'),
-                'department_id' => $ud['department_id'],
-                'is_department_head' => $ud['is_department_head'],
-                'rank' => $ud['rank'],
-                'is_active' => true,
-            ]);
-
-            if ($ud['role'] === 'Approver_GA') {
-                $user->assignRole('Approver');
-                $user->assignRole('GA');
-            } else {
-                $user->assignRole($ud['role']);
-            }
+        foreach ($standardDepts as $dName) {
+            $getDeptId($dName);
         }
 
-        // Seeding 2 drivers for testing
-        $driver1 = User::create([
-            'nik' => 'DRV001',
-            'name' => 'Driver Test 1',
-            'email' => 'driver1@widatra.com',
-            'password' => Hash::make('password'),
-            'department_id' => 18, // Plant Management
-            'is_department_head' => false,
-            'availability_status' => 'available',
-            'availability_start' => '07:30',
-            'availability_end' => '16:30',
-            'is_active' => true,
-        ]);
-        $driver1->assignRole('Driver');
+        // Official Approvers list matching official company structure
+        $officialApprovers = [
+            ['nik' => '10053', 'name' => 'Evalin Jayakusli',        'email' => 'evalin@widatra.com',  'dept' => 'Legal & Compliance',         'roles' => ['Approver']],
+            ['nik' => '1430',  'name' => 'Melodi Bella Astria',     'email' => 'melody@widatra.com',  'dept' => 'Plant Management',           'roles' => ['Approver', 'GA']],
+            ['nik' => '10319', 'name' => 'Gita Thessa Lonika Putri', 'email' => 'gita@widatra.com',    'dept' => 'Regulatory Affairs & PV',    'roles' => ['Approver']],
+            ['nik' => '790',   'name' => 'Hendri Yanto Prabowo',    'email' => 'hendri@widatra.com',  'dept' => 'Quality Control',            'roles' => ['Approver']],
+            ['nik' => '786',   'name' => 'Rizky Bagus Kurniawan',   'email' => 'rizky@widatra.com',   'dept' => 'Production',                 'roles' => ['Approver']],
+            ['nik' => '1135',  'name' => 'Arfian Arianto',          'email' => 'arfian@widatra.com',  'dept' => 'Quality Assurance',          'roles' => ['Approver']],
+            ['nik' => '834',   'name' => 'Hendri Hardian',          'email' => 'hardian@widatra.com', 'dept' => 'Supply Chain',               'roles' => ['Approver']],
+            ['nik' => '817',   'name' => 'Yogi Wicaksono',          'email' => 'yogi@widatra.com',    'dept' => 'Technical and Development',  'roles' => ['Approver']],
+            ['nik' => '1095',  'name' => 'Andaru Wana Perkasa',     'email' => 'andaru@widatra.com',  'dept' => 'HRD & GA',                   'roles' => ['Approver']],
+            ['nik' => '1556',  'name' => 'Johny Santoso',           'email' => 'johny@widatra.com',   'dept' => 'Finance and Accounting',     'roles' => ['Approver']],
+            ['nik' => '1125',  'name' => 'Prind Widjaya Sena',      'email' => 'sena@widatra.com',    'dept' => 'Information and Technology', 'roles' => ['Approver']],
+        ];
 
-        $driver2 = User::create([
-            'nik' => 'DRV002',
-            'name' => 'Driver Test 2',
-            'email' => 'driver2@widatra.com',
-            'password' => Hash::make('password'),
-            'department_id' => 18, // Plant Management
-            'is_department_head' => false,
-            'availability_status' => 'available',
-            'availability_start' => '07:30',
-            'availability_end' => '16:30',
-            'is_active' => true,
-        ]);
-        $driver2->assignRole('Driver');
+        foreach ($officialApprovers as $item) {
+            $deptId = $getDeptId($item['dept']);
+            $user = User::where('email', $item['email'])
+                ->orWhere('nik', $item['nik'])
+                ->first();
 
-        // Seeding 1 security guard for testing
-        $security = User::create([
-            'nik' => 'SEC001',
-            'name' => 'Security Guard Test',
-            'email' => 'security@widatra.com',
-            'password' => Hash::make('password'),
-            'department_id' => 17, // Legal & Compliance
-            'is_department_head' => false,
-            'is_active' => true,
-        ]);
-        $security->assignRole('Security');
+            if (!$user) {
+                $user = new User();
+                $user->password = Hash::make('password');
+            }
 
-        // Seed default company info settings
+            $user->nik = $item['nik'];
+            $user->name = $item['name'];
+            $user->email = $item['email'];
+            $user->department_id = $deptId;
+            $user->is_department_head = true;
+            $user->is_active = true;
+            $user->can_request = true;
+            $user->rank = 'Kepala Departemen';
+            $user->save();
+
+            $user->syncRoles($item['roles']);
+        }
+
+        // Additional employees
+        $employeesData = [
+            ['nik' => 'SA12345', 'name' => 'Super Admin User',      'email' => 'superadmin@example.com', 'dept' => null,                         'role' => 'Admin'],
+            ['nik' => '1393',    'name' => 'Khasanudin',           'email' => 'khasanudin@gmail.com',   'dept' => 'Production',                 'role' => 'Employee'],
+            ['nik' => '73250',   'name' => 'Dimas Subiyantoro',    'email' => 'it.factory.dimas@widatra.com', 'dept' => 'Information and Technology', 'role' => 'Employee'],
+            ['nik' => '73331',   'name' => 'Muhammad Jihan Gumeular', 'email' => 'it.factory@widatra.com', 'dept' => 'Information and Technology', 'role' => 'Employee'],
+        ];
+
+        foreach ($employeesData as $ed) {
+            $user = User::where('email', $ed['email'])->orWhere('nik', $ed['nik'])->first();
+            if (!$user) {
+                $user = new User();
+                $user->password = Hash::make('password');
+            }
+            $user->nik = $ed['nik'];
+            $user->name = $ed['name'];
+            $user->email = $ed['email'];
+            $user->department_id = $ed['dept'] ? $getDeptId($ed['dept']) : null;
+            $user->is_department_head = false;
+            $user->is_active = true;
+            $user->can_request = true;
+            $user->save();
+
+            $user->syncRoles([$ed['role']]);
+        }
+
+        // Seed drivers
+        $drivers = [
+            ['nik' => 'DRV001', 'name' => 'Driver Test 1', 'email' => 'driver1@widatra.com'],
+            ['nik' => 'DRV002', 'name' => 'Driver Test 2', 'email' => 'driver2@widatra.com'],
+        ];
+
+        $plantDeptId = $getDeptId('Plant Management');
+        foreach ($drivers as $d) {
+            $user = User::where('email', $d['email'])->orWhere('nik', $d['nik'])->first();
+            if (!$user) {
+                $user = new User();
+                $user->password = Hash::make('password');
+            }
+            $user->nik = $d['nik'];
+            $user->name = $d['name'];
+            $user->email = $d['email'];
+            $user->department_id = $plantDeptId;
+            $user->is_department_head = false;
+            $user->availability_status = 'available';
+            $user->availability_start = '07:30';
+            $user->availability_end = '16:30';
+            $user->is_active = true;
+            $user->save();
+
+            $user->syncRoles(['Driver']);
+        }
+
+        // Seed security guard
+        $secDeptId = $getDeptId('Legal & Compliance');
+        $security = User::where('email', 'security@widatra.com')->orWhere('nik', 'SEC001')->first();
+        if (!$security) {
+            $security = new User();
+            $security->password = Hash::make('password');
+        }
+        $security->nik = 'SEC001';
+        $security->name = 'Security Guard Test';
+        $security->email = 'security@widatra.com';
+        $security->department_id = $secDeptId;
+        $security->is_department_head = false;
+        $security->is_active = true;
+        $security->save();
+
+        $security->syncRoles(['Security']);
+
+        // Seed settings
         \App\Models\Setting::firstOrCreate(['key' => 'system_name'], ['value' => 'OVMS PT Widatra Bhakti', 'type' => 'string']);
         \App\Models\Setting::firstOrCreate(['key' => 'company_name'], ['value' => 'PT Widatra Bhakti', 'type' => 'string']);
         \App\Models\Setting::firstOrCreate(['key' => 'support_email'], ['value' => 'support@widatra.com', 'type' => 'string']);
@@ -437,8 +155,7 @@ class DatabaseSeeder extends Seeder
             ['value' => 'Jl. Stadion / Jl. Sidomukti No. 1, Sidomukti, Kecamatan Pandaan, Kabupaten Pasuruan, Jawa Timur 67156', 'type' => 'string']
         );
 
-        // Update location field for all user accounts
-        \App\Models\User::query()->update([
+        User::query()->update([
             'location' => 'Pandaan Head Office'
         ]);
     }
