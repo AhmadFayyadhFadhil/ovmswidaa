@@ -84,14 +84,16 @@ class RequestPolicy
         }
 
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && $request->status === RequestStatus::ASSIGNED_BY_GA) {
+            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::ASSIGNED_BY_GA, RequestStatus::APPROVED_DEPARTMENT])) {
                 return true;
             }
 
             if ($request->status === RequestStatus::SUBMITTED) {
                 $userDeptGroup = array_map('strval', $user->departmentGroup());
                 $reqDeptId = (string) $request->department_id;
-                return in_array($reqDeptId, $userDeptGroup, false);
+                $reqUserDeptId = (string) ($request->user?->department_id ?? '');
+
+                return in_array($reqDeptId, $userDeptGroup, false) || ($reqUserDeptId !== '' && in_array($reqUserDeptId, $userDeptGroup, false));
             }
         }
 
@@ -108,19 +110,17 @@ class RequestPolicy
             return true;
         }
 
-        if ($user->hasRoleDirect('GA') && $request->status === RequestStatus::APPROVED_DEPARTMENT) {
-            return true;
-        }
-
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && $request->status === RequestStatus::ASSIGNED_BY_GA) {
+            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::ASSIGNED_BY_GA])) {
                 return true;
             }
 
             if ($request->status === RequestStatus::SUBMITTED) {
                 $userDeptGroup = array_map('strval', $user->departmentGroup());
                 $reqDeptId = (string) $request->department_id;
-                return in_array($reqDeptId, $userDeptGroup, false);
+                $reqUserDeptId = (string) ($request->user?->department_id ?? '');
+
+                return in_array($reqDeptId, $userDeptGroup, false) || ($reqUserDeptId !== '' && in_array($reqUserDeptId, $userDeptGroup, false));
             }
         }
 

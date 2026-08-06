@@ -58,9 +58,13 @@ class RequestController extends Controller
                   });
             });
         } elseif ($isApprover && !$isAdmin && !$isGA) {
+            $deptIds = $user->departmentGroup();
             if ($isHrGaHead) {
-                $query->where(function ($q) use ($user) {
-                    $q->whereIn('department_id', $user->departmentGroup())
+                $query->where(function ($q) use ($user, $deptIds) {
+                    $q->whereIn('department_id', $deptIds)
+                      ->orWhereHas('user', function ($u) use ($deptIds) {
+                          $u->whereIn('department_id', $deptIds);
+                      })
                       ->orWhere(function ($q) {
                           $q->whereIn('status', [
                               RequestStatus::APPROVED_DEPARTMENT->value,
@@ -80,7 +84,12 @@ class RequestController extends Controller
                       });
                 });
             } else {
-                $query->whereIn('department_id', $user->departmentGroup());
+                $query->where(function ($q) use ($deptIds) {
+                    $q->whereIn('department_id', $deptIds)
+                      ->orWhereHas('user', function ($u) use ($deptIds) {
+                          $u->whereIn('department_id', $deptIds);
+                      });
+                });
             }
         } elseif (!$isAdmin && !$isApprover && !$isGA && !$isSecurity && !$isHrGaHead) {
             if ($isDriver) {

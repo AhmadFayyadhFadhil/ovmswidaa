@@ -54,7 +54,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '1125',
                 'name' => 'Prind Widjaya Sena',
                 'email' => 'sena@widatra.com',
-                'department_id' => 8,
+                'department_id' => 1, // Information and Technology
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -63,7 +63,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '1556',
                 'name' => 'Johny Santoso',
                 'email' => 'johny@widatra.com',
-                'department_id' => 9,
+                'department_id' => 2, // Finance and Accounting
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -72,7 +72,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '1095',
                 'name' => 'Andaru Wana Perkasa',
                 'email' => 'andaru@widatra.com',
-                'department_id' => 10,
+                'department_id' => 3, // HRD & GA
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -81,7 +81,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '834',
                 'name' => 'Hendri Hardian',
                 'email' => 'hardian@widatra.com',
-                'department_id' => 11,
+                'department_id' => 4, // Supply Chain
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -90,7 +90,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '817',
                 'name' => 'Yogi Wicaksono',
                 'email' => 'yogi@widatra.com',
-                'department_id' => 12,
+                'department_id' => 5, // Technical and Development
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -99,7 +99,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '1135',
                 'name' => 'Arfian Arianto',
                 'email' => 'arfian@widatra.com',
-                'department_id' => 13,
+                'department_id' => 6, // Quality Assurance
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -108,7 +108,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '790',
                 'name' => 'Hendri Yanto Prabowo',
                 'email' => 'hendri@widatra.com',
-                'department_id' => 14,
+                'department_id' => 7, // Quality Control
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -117,7 +117,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '786',
                 'name' => 'Rizky Bagus Kurniawan',
                 'email' => 'rizky@widatra.com',
-                'department_id' => 15,
+                'department_id' => 8, // Production
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -126,7 +126,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '10319',
                 'name' => 'Gita Thessa Lonika Putri',
                 'email' => 'gita@widatra.com',
-                'department_id' => 16,
+                'department_id' => 9, // Regulatory Affairs & PV
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -135,7 +135,7 @@ class DatabaseSeeder extends Seeder
                 'nik' => '10053',
                 'name' => 'Evalin Jayakusli',
                 'email' => 'evalin@widatra.com',
-                'department_id' => 17,
+                'department_id' => 10, // Legal & Compliance
                 'role' => 'Approver',
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
@@ -144,8 +144,8 @@ class DatabaseSeeder extends Seeder
                 'nik' => '1430',
                 'name' => 'Melodi Bella Astria',
                 'email' => 'melody@widatra.com',
-                'department_id' => 18,
-                'role' => 'Approver_GA',
+                'department_id' => 11, // Plant Management
+                'role' => 'Approver_GA', // GA Koordinator & Kadep Plant Management
                 'is_department_head' => true,
                 'rank' => 'Kepala Departemen',
             ],

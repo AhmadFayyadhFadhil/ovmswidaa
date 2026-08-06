@@ -93,7 +93,11 @@ class CreateRequestAction
                 return $dept ? $dept->id : $user->department_id;
             };
 
-            $deptId = $resolveDeptId($data['department_id'] ?? null);
+            $userDeptId = $user->department_id;
+            $deptId = !empty($data['department_id']) ? $resolveDeptId($data['department_id']) : $userDeptId;
+            if (!$deptId && $userDeptId) {
+                $deptId = $userDeptId;
+            }
 
             $status = RequestStatus::SUBMITTED;
             $driverId = $data['driver_id'] ?? null;
