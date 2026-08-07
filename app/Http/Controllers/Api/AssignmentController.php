@@ -158,8 +158,17 @@ class AssignmentController extends Controller
                 ], 201);
             }
 
-            $driverIds = $validated['driver_ids'] ?? [$validated['driver_id']];
-            $vehicleIds = $validated['vehicle_ids'] ?? [$validated['vehicle_id']];
+            $driverIds = !empty($validated['driver_ids']) 
+                ? array_values(array_filter($validated['driver_ids'])) 
+                : (!empty($validated['driver_id']) ? [$validated['driver_id']] : []);
+                
+            $vehicleIds = !empty($validated['vehicle_ids']) 
+                ? array_values(array_filter($validated['vehicle_ids'])) 
+                : (!empty($validated['vehicle_id']) ? [$validated['vehicle_id']] : []);
+
+            if (empty($driverIds) || empty($vehicleIds)) {
+                return response()->json(['status' => 'error', 'message' => 'Driver dan Kendaraan wajib dipilih.'], 422);
+            }
 
             if (count($driverIds) > 1 && count($driverIds) !== count(array_unique($driverIds))) {
                 return response()->json(['status' => 'error', 'message' => 'Driver 1 dan Driver 2 tidak boleh orang yang sama.'], 422);
@@ -167,20 +176,6 @@ class AssignmentController extends Controller
 
             if (count($vehicleIds) > 1 && count($vehicleIds) !== count(array_unique($vehicleIds))) {
                 return response()->json(['status' => 'error', 'message' => 'Kendaraan 1 dan Kendaraan 2 tidak boleh unit mobil yang sama.'], 422);
-            }
-
-            // Passenger capacity validation
-            $passengerCount = (int)($vehicleRequest->passenger_count ?: ($vehicleRequest->passengers()->count() ?: 1));
-            $vehicles = \App\Models\Vehicle::whereIn('id', $vehicleIds)->get();
-            $totalCapacity = $vehicles->sum(function ($v) {
-                return (int)($v->capacity > 0 ? $v->capacity : 7);
-            });
-
-            if ($passengerCount > $totalCapacity && count($vehicleIds) === 1) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "Kapasitas kendaraan yang dipilih ({$totalCapacity} kursi) kurang untuk {$passengerCount} penumpang. Silakan tambahkan Mobil Kedua atau pilih Sewa Eksternal."
-                ], 422);
             }
 
             \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest) {
