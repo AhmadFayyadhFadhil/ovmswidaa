@@ -51,11 +51,14 @@ class AssignDriverAction
             $this->validateVehicleTimeConflict($vehicleId, $request);
 
             // Create assignment
-            $priorityVal = $request->priority instanceof \App\Enums\RequestPriority 
-                ? $request->priority->value 
-                : ($request->priority->value ?? $request->priority);
+            $priorityVal = 'Normal';
+            if (!empty($data['priority'])) {
+                $priorityVal = is_object($data['priority']) ? ($data['priority']->value ?? (string)$data['priority']) : (string)$data['priority'];
+            } elseif (!empty($request->priority)) {
+                $priorityVal = is_object($request->priority) ? ($request->priority->value ?? (string)$request->priority) : (string)$request->priority;
+            }
 
-            $isUrgent = in_array($priorityVal, ['Urgent', 'Critical'], true);
+            $isUrgent = in_array(strtolower($priorityVal), ['urgent', 'critical'], true);
             $asgStatus = $isUrgent ? 'accepted' : 'pending_driver';
 
             $assignerId = auth()->id() ?? $request->user_id ?? 1;
@@ -70,7 +73,7 @@ class AssignDriverAction
                 'notes' => $notes,
             ]);
 
-            $reqStatus = $isUrgent ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::WAITING_DRIVER;
+            $reqStatus = $isUrgent ? RequestStatus::DRIVER_ASSIGNED->value : RequestStatus::WAITING_DRIVER->value;
             $qrCodeToken = $request->qr_code_token;
             if ($isUrgent && !$qrCodeToken) {
                 $qrCodeToken = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));
@@ -86,7 +89,7 @@ class AssignDriverAction
                 'is_external' => false,
                 'third_party_cost' => 0,
                 'estimated_duration' => $data['estimated_duration'] ?? $request->estimated_duration,
-                'priority' => $data['priority'] ?? $request->priority->value ?? 'Normal',
+                'priority' => $priorityVal,
                 'driver_response_status' => $asgStatus,
                 'qr_code_token' => $qrCodeToken,
             ]);
