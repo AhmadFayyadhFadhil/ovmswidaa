@@ -14,17 +14,19 @@ class AssignDriverAction
     public function execute(Request $request, int $driverId, int $vehicleId, ?string $notes = null, array $data = []): Assignment
     {
         return DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
+            $statusVal = $request->status instanceof \App\Enums\RequestStatus ? $request->status->value : (string)$request->status;
             $allowed = [
-                RequestStatus::SUBMITTED,
-                RequestStatus::APPROVED_DEPARTMENT,
-                RequestStatus::ASSIGNED_BY_GA,
-                RequestStatus::APPROVED_HRD,
-                RequestStatus::APPROVED_HRD_GA,
-                RequestStatus::WAITING_DRIVER,
-                RequestStatus::DRIVER_ASSIGNED,
+                'submitted',
+                'approved_department',
+                'assigned_by_ga',
+                'approved_hrd',
+                'approved_hrd_ga',
+                'waiting_driver',
+                'driver_assigned',
+                'approved',
             ];
-            if (!in_array($request->status, $allowed, true)) {
-                throw new Exception("Request tidak dapat dijadwalkan dalam status ini.");
+            if (!in_array(strtolower($statusVal), $allowed, true)) {
+                throw new Exception("Request tidak dapat dijadwalkan dalam status {$statusVal}.");
             }
 
             // Validate driver availability status
