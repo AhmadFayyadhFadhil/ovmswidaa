@@ -14,20 +14,7 @@ class AssignDriverAction
     public function execute(Request $request, int $driverId, int $vehicleId, ?string $notes = null, array $data = []): Assignment
     {
         return DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
-            $statusVal = $request->status instanceof \App\Enums\RequestStatus ? $request->status->value : (string)$request->status;
-            $allowed = [
-                'submitted',
-                'approved_department',
-                'assigned_by_ga',
-                'approved_hrd',
-                'approved_hrd_ga',
-                'waiting_driver',
-                'driver_assigned',
-                'approved',
-            ];
-            if (!in_array(strtolower($statusVal), $allowed, true)) {
-                throw new Exception("Request tidak dapat dijadwalkan dalam status {$statusVal}.");
-            }
+            // Allow assignment regardless of status to prevent blocking operational flow
 
             // Validate driver availability status
             $driver = \App\Models\User::find($driverId);

@@ -222,9 +222,9 @@ class AssignmentController extends Controller
                 $dInt = (int)$driverId;
                 $vInt = (int)$vId;
                 
-                $driver = \App\Models\User::findOrFail($dInt);
-                if (!$this->hasRoleDirect($driver, ['Driver', 'driver'])) {
-                    return response()->json(['status' => 'error', 'message' => 'User yang dipilih bukan merupakan Driver'], 422);
+                $driver = \App\Models\User::find($dInt);
+                if (!$driver) {
+                    return response()->json(['status' => 'error', 'message' => 'Driver yang dipilih tidak ditemukan'], 422);
                 }
 
                 $asg = $action->execute($vehicleRequest, $dInt, $vInt, $validated['notes'] ?? null, $validated);
