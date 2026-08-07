@@ -13,14 +13,18 @@ class AssignmentObserver
      */
     public function created(Assignment $assignment): void
     {
-        AuditLog::create([
-            'user_id' => Auth::id(),
-            'auditable_id' => $assignment->id,
-            'auditable_type' => Assignment::class,
-            'action' => 'created',
-            'new_values' => $assignment->toArray(),
-            'old_values' => null,
-        ]);
+        try {
+            AuditLog::create([
+                'user_id' => Auth::id(),
+                'auditable_id' => $assignment->id,
+                'auditable_type' => Assignment::class,
+                'action' => 'created',
+                'new_values' => $assignment->toArray(),
+                'old_values' => null,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('AssignmentObserver created audit log error: ' . $e->getMessage());
+        }
 
         // Mark driver as assigned to prevent double assignment until driver responds
         try {
@@ -41,14 +45,18 @@ class AssignmentObserver
         
         // Only log if there are actual changes (exclude timestamps)
         if (!empty(array_diff_key($changes, ['updated_at' => null]))) {
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'auditable_id' => $assignment->id,
-                'auditable_type' => Assignment::class,
-                'action' => 'updated',
-                'old_values' => $assignment->getOriginal(),
-                'new_values' => $assignment->toArray(),
-            ]);
+            try {
+                AuditLog::create([
+                    'user_id' => Auth::id(),
+                    'auditable_id' => $assignment->id,
+                    'auditable_type' => Assignment::class,
+                    'action' => 'updated',
+                    'old_values' => $assignment->getOriginal(),
+                    'new_values' => $assignment->toArray(),
+                ]);
+            } catch (\Throwable $e) {
+                \Log::error('AssignmentObserver updated audit log error: ' . $e->getMessage());
+            }
         }
 
         // React on status changes to keep driver availability in sync
@@ -73,14 +81,18 @@ class AssignmentObserver
      */
     public function deleted(Assignment $assignment): void
     {
-        AuditLog::create([
-            'user_id' => Auth::id(),
-            'auditable_id' => $assignment->id,
-            'auditable_type' => Assignment::class,
-            'action' => 'deleted',
-            'old_values' => $assignment->toArray(),
-            'new_values' => null,
-        ]);
+        try {
+            AuditLog::create([
+                'user_id' => Auth::id(),
+                'auditable_id' => $assignment->id,
+                'auditable_type' => Assignment::class,
+                'action' => 'deleted',
+                'old_values' => $assignment->toArray(),
+                'new_values' => null,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('AssignmentObserver deleted audit log error: ' . $e->getMessage());
+        }
 
         // Ensure driver availability is restored when assignment removed
         try {

@@ -17,15 +17,13 @@ class AssignDriverAction
             $allowed = [
                 RequestStatus::SUBMITTED,
                 RequestStatus::APPROVED_DEPARTMENT,
+                RequestStatus::ASSIGNED_BY_GA,
+                RequestStatus::APPROVED_HRD,
+                RequestStatus::APPROVED_HRD_GA,
                 RequestStatus::WAITING_DRIVER,
                 RequestStatus::DRIVER_ASSIGNED,
             ];
-            if ($request->status === RequestStatus::DRIVER_ASSIGNED) {
-                $hasAssignments = Assignment::where('request_id', $request->id)->exists();
-                if ($hasAssignments) {
-                    throw new Exception("Request tidak dapat dijadwalkan dalam status ini.");
-                }
-            } elseif (!in_array($request->status, $allowed, true)) {
+            if (!in_array($request->status, $allowed, true)) {
                 throw new Exception("Request tidak dapat dijadwalkan dalam status ini.");
             }
 
