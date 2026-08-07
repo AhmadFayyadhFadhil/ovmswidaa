@@ -203,13 +203,15 @@ class AssignmentController extends Controller
             $assignment = null;
             foreach ($driverIds as $index => $driverId) {
                 $vId = $vehicleIds[$index] ?? $vehicleIds[0];
+                $dInt = (int)$driverId;
+                $vInt = (int)$vId;
                 
-                $driver = \App\Models\User::findOrFail($driverId);
+                $driver = \App\Models\User::findOrFail($dInt);
                 if (!$this->hasRoleDirect($driver, ['Driver', 'driver'])) {
                     return response()->json(['status' => 'error', 'message' => 'User yang dipilih bukan merupakan Driver'], 422);
                 }
 
-                $asg = $action->execute($vehicleRequest, $driverId, $vId, $validated['notes'] ?? null, $validated);
+                $asg = $action->execute($vehicleRequest, $dInt, $vInt, $validated['notes'] ?? null, $validated);
                 if ($index === 0) {
                     $assignment = $asg;
                 }
