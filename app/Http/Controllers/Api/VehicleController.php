@@ -77,13 +77,13 @@ class VehicleController extends Controller
         if ($status) {
             $upperStatus = strtoupper($status);
             if ($upperStatus === 'AVAILABLE') {
-                $query->where('status', 'Available');
+                $query->whereIn('status', ['Available', 'available', 'AVAILABLE']);
             } elseif ($upperStatus === 'IN TRANSIT' || $upperStatus === 'IN_TRANSIT' || $upperStatus === 'IN USE') {
-                $query->where('status', 'In Use');
+                $query->whereIn('status', ['In Use', 'in use', 'IN USE', 'In Transit']);
             } elseif ($upperStatus === 'MAINTENANCE') {
-                $query->where('status', 'Maintenance');
+                $query->whereIn('status', ['Maintenance', 'maintenance', 'MAINTENANCE']);
             } elseif ($upperStatus === 'RETIRED') {
-                $query->where('status', 'Retired');
+                $query->whereIn('status', ['Retired', 'retired', 'RETIRED']);
             } else {
                 $query->where('status', $status);
             }
