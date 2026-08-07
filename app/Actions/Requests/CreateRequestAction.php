@@ -180,12 +180,15 @@ class CreateRequestAction
 
             // Create passengers if provided
             if (!empty($data['passengers'])) {
-                $anyPicSpecified = false;
-                foreach ($data['passengers'] as $passengerData) {
-                    if (!empty($passengerData['is_pic'])) {
-                        $anyPicSpecified = true;
+                $picIdx = -1;
+                foreach ($data['passengers'] as $idx => $passengerData) {
+                    if (!empty($passengerData['is_pic']) && filter_var($passengerData['is_pic'], FILTER_VALIDATE_BOOLEAN)) {
+                        $picIdx = $idx;
                         break;
                     }
+                }
+                if ($picIdx === -1) {
+                    $picIdx = 0;
                 }
 
                 foreach ($data['passengers'] as $idx => $passengerData) {
@@ -199,14 +202,13 @@ class CreateRequestAction
                             $userId = $resolved->id;
                         }
                     }
-                    $isPic = !empty($passengerData['is_pic']) || (!$anyPicSpecified && $idx === 0);
 
                     Passenger::create([
                         'request_id' => $request->id,
                         'name' => $passengerData['name'],
                         'department_id' => $resolveDeptId($passengerData['department_id'] ?? null),
                         'user_id' => $userId,
-                        'is_pic' => $isPic,
+                        'is_pic' => ($idx === $picIdx),
                     ]);
                 }
             }

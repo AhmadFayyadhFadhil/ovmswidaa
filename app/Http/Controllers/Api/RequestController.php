@@ -312,7 +312,18 @@ class RequestController extends Controller
 
              // Delete old passengers and create new ones
              $vehicleRequest->passengers()->delete();
-             foreach ($passengers as $passengerData) {
+             $picIdx = -1;
+             foreach ($passengers as $idx => $passengerData) {
+                 if (!empty($passengerData['is_pic']) && filter_var($passengerData['is_pic'], FILTER_VALIDATE_BOOLEAN)) {
+                     $picIdx = $idx;
+                     break;
+                 }
+             }
+             if ($picIdx === -1) {
+                 $picIdx = 0;
+             }
+
+             foreach ($passengers as $idx => $passengerData) {
                  $userId = $passengerData['user_id'] ?? null;
                  if (!$userId && !empty($passengerData['name'])) {
                      $resolved = \App\Models\User::where('name', trim($passengerData['name']))->first();
@@ -325,6 +336,7 @@ class RequestController extends Controller
                      'name' => $passengerData['name'],
                      'department_id' => $passengerData['department_id'] ?? null,
                      'user_id' => $userId,
+                     'is_pic' => ($idx === $picIdx),
                  ]);
              }
         }
