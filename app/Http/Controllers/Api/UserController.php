@@ -597,6 +597,25 @@ class UserController extends Controller
 
     private function formatUser(User $user): array
     {
+        $computedStatus = $user->availability_status;
+        if (in_array(strtolower((string)$computedStatus), ['assigned', 'on_trip', 'busy'])) {
+            $nowStr = now()->toDateTimeString();
+            $hasActiveOngoingTrip = \Illuminate\Support\Facades\DB::table('requests')
+                ->where('driver_id', $user->id)
+                ->whereIn('status', [\App\Enums\RequestStatus::DRIVER_ASSIGNED->value, \App\Enums\RequestStatus::ON_GOING->value])
+                ->where(function ($q) use ($nowStr) {
+                    $q->where('status', \App\Enums\RequestStatus::ON_GOING->value)
+                      ->orWhere(function ($q3) use ($nowStr) {
+                          $q3->where('start_time', '<=', $nowStr)
+                             ->where('end_time', '>=', $nowStr);
+                      });
+                })->exists();
+
+            if (!$hasActiveOngoingTrip) {
+                $computedStatus = 'available';
+            }
+        }
+
         return [
             'id'         => $user->id,
             'nik'        => $user->nik,
@@ -605,7 +624,7 @@ class UserController extends Controller
             'rank'       => $user->rank,
             'department_id' => $user->department_id,
             'department_name' => $user->department?->name,
-            'availability_status' => $user->availability_status,
+            'availability_status' => $computedStatus ?? 'available',
             'is_department_head' => $user->is_department_head ?? false,
             'avatar_url'     => $user->avatar ? url('storage/' . $user->avatar) : null,
             'sim_a_photo_url' => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
