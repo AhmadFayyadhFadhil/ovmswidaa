@@ -61,6 +61,7 @@ class AssignDriverAction
             $assignment = Assignment::create([
                 'request_id' => $request->id,
                 'driver_id' => $driverId,
+                'vehicle_id' => $vehicleId,
                 'assigned_by' => auth()->id(),
                 'assigned_at' => now(),
                 'status' => $asgStatus,
