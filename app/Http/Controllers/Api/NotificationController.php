@@ -23,6 +23,16 @@ class NotificationController extends Controller
     }
 
     /**
+     * Helper to extract clean numeric string ID from notification string (e.g. "#RQ-17" -> "17", "REQ-17" -> "17").
+     */
+    private function cleanId($id): string
+    {
+        $str = (string) $id;
+        $digits = preg_replace('/[^0-9]/', '', $str);
+        return $digits !== '' ? $digits : trim($str);
+    }
+
+    /**
      * Fetch user notifications with persistent read and deleted statuses.
      * 100% server-driven — uses ONLY user_notification_states table.
      */
@@ -47,7 +57,7 @@ class NotificationController extends Controller
             try {
                 $states = UserNotificationState::where('user_id', $user->id)->get();
                 foreach ($states as $st) {
-                    $stId = (string) $st->notification_id;
+                    $stId = $this->cleanId($st->notification_id);
                     if ($st->is_deleted) {
                         $deletedIds[] = $stId;
                     }
@@ -68,7 +78,7 @@ class NotificationController extends Controller
             $notifications = [];
 
             foreach ($requests as $r) {
-                $notifId = (string) $r->id;
+                $notifId = $this->cleanId($r->id);
 
                 // Skip deleted notifications for this user
                 if (in_array($notifId, $deletedIds, true)) {
@@ -151,7 +161,7 @@ class NotificationController extends Controller
                 return $this->jsonNoCache(['status' => 'error', 'message' => 'Unauthenticated'], 401);
             }
 
-            $notifId = (string) $validated['id'];
+            $notifId = $this->cleanId($validated['id']);
 
             $state = UserNotificationState::firstOrNew([
                 'user_id'         => $user->id,
@@ -202,10 +212,11 @@ class NotificationController extends Controller
                     ->toArray();
             }
 
-            foreach ($ids as $notifId) {
+            foreach ($ids as $rawId) {
+                $notifId = $this->cleanId($rawId);
                 $state = UserNotificationState::firstOrNew([
                     'user_id'         => $user->id,
-                    'notification_id' => (string) $notifId,
+                    'notification_id' => $notifId,
                 ]);
                 $state->is_read = true;
                 if ($state->is_deleted === null) {
@@ -241,7 +252,7 @@ class NotificationController extends Controller
                 return $this->jsonNoCache(['status' => 'error', 'message' => 'Unauthenticated'], 401);
             }
 
-            $notifId = (string) $id;
+            $notifId = $this->cleanId($id);
 
             $state = UserNotificationState::firstOrNew([
                 'user_id'         => $user->id,
