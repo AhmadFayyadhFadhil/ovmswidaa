@@ -30,19 +30,7 @@ class AssignDriverAction
             }
 
             // Validate driver availability status
-            $driver = \App\Models\User::findOrFail($driverId);
-            $unavailStatuses = ['off', 'sick', 'leave', 'maintenance', 'inactive'];
-            if (in_array(strtolower($driver->availability_status ?? ''), $unavailStatuses, true)) {
-                throw new Exception("Driver {$driver->name} sedang tidak bertugas ({$driver->availability_status}).");
-            }
-
-            // Validate driver shift/work hours (status available dari jam sekian sampai sekian)
-            if ($request->start_time && $driver->availability_start && $driver->availability_end) {
-                $reqTime = date('H:i:s', strtotime($request->start_time));
-                if ($reqTime < $driver->availability_start || $reqTime > $driver->availability_end) {
-                    throw new Exception("Waktu keberangkatan request ({$reqTime}) di luar jam kerja Driver {$driver->name} ({$driver->availability_start} - {$driver->availability_end}).");
-                }
-            }
+            $driver = \App\Models\User::find($driverId);
 
             // ===== VALIDATE DRIVER TIME CONFLICT =====
             $this->validateDriverTimeConflict($driverId, $request);
@@ -126,42 +114,8 @@ class AssignDriverAction
      */
     private function validateDriverTimeConflict(int $driverId, Request $request): void
     {
-        if (!$request->start_time) return;
-        $driver = \App\Models\User::find($driverId);
-        $driverName = $driver ? $driver->name : 'yang bersangkutan';
-        $reqDate = date('Y-m-d', strtotime($request->start_time));
-
-        $conflictingRequests = Request::where('driver_id', $driverId)
-            ->where('id', '!=', $request->id)
-            ->whereIn('status', [
-                RequestStatus::WAITING_DRIVER->value,
-                RequestStatus::DRIVER_ASSIGNED->value,
-                RequestStatus::ON_GOING->value,
-            ])
-            ->where(function ($q) use ($request, $reqDate) {
-                $q->whereDate('start_time', $reqDate)
-                  ->orWhereDate('end_time', $reqDate);
-            })
-            ->exists();
-
-        $conflictingItinerary = \App\Models\RequestItinerary::where('driver_id', $driverId)
-            ->where('request_id', '!=', $request->id)
-            ->where('date', $reqDate)
-            ->whereIn('status', ['assigned', 'on_going'])
-            ->whereHas('request', function ($q) {
-                $q->whereNotIn('status', [
-                    RequestStatus::REJECTED->value,
-                    RequestStatus::CANCELLED->value,
-                    RequestStatus::COMPLETED->value,
-                ]);
-            })
-            ->exists();
-
-        if ($conflictingRequests || $conflictingItinerary) {
-            throw new Exception(
-                "Driver {$driverName} sudah memiliki assignment aktif pada tanggal yang sama. Silakan pilih driver lain yang tersedia."
-            );
-        }
+        // Non-blocking for seamless operational assignments
+        return;
     }
 
     /**
@@ -169,41 +123,7 @@ class AssignDriverAction
      */
     private function validateVehicleTimeConflict(int $vehicleId, Request $request): void
     {
-        if (!$request->start_time) return;
-        $vehicle = \App\Models\Vehicle::find($vehicleId);
-        $vehiclePlate = $vehicle ? "{$vehicle->name} ({$vehicle->plate_number})" : 'yang bersangkutan';
-        $reqDate = date('Y-m-d', strtotime($request->start_time));
-
-        $conflictingRequests = Request::where('vehicle_id', $vehicleId)
-            ->where('id', '!=', $request->id)
-            ->whereIn('status', [
-                RequestStatus::WAITING_DRIVER->value,
-                RequestStatus::DRIVER_ASSIGNED->value,
-                RequestStatus::ON_GOING->value,
-            ])
-            ->where(function ($q) use ($request, $reqDate) {
-                $q->whereDate('start_time', $reqDate)
-                  ->orWhereDate('end_time', $reqDate);
-            })
-            ->exists();
-
-        $conflictingItinerary = \App\Models\RequestItinerary::where('vehicle_id', $vehicleId)
-            ->where('request_id', '!=', $request->id)
-            ->where('date', $reqDate)
-            ->whereIn('status', ['assigned', 'on_going'])
-            ->whereHas('request', function ($q) {
-                $q->whereNotIn('status', [
-                    RequestStatus::REJECTED->value,
-                    RequestStatus::CANCELLED->value,
-                    RequestStatus::COMPLETED->value,
-                ]);
-            })
-            ->exists();
-
-        if ($conflictingRequests || $conflictingItinerary) {
-            throw new Exception(
-                "Kendaraan {$vehiclePlate} sudah memiliki assignment pada tanggal yang sama. Silakan pilih kendaraan lain yang tersedia."
-            );
-        }
+        // Non-blocking for seamless operational assignments
+        return;
     }
 }
