@@ -35,6 +35,22 @@ Route::get('/flush-cache', function () {
     ], 200);
 });
 
+// ===== DEBUG: Check vehicles in database (temporary, remove after prelive) =====
+Route::get('/debug-vehicles', function () {
+    $vehicles = \App\Models\Vehicle::all();
+    return response()->json([
+        'total_vehicles' => $vehicles->count(),
+        'vehicles' => $vehicles->map(fn($v) => [
+            'id' => $v->id,
+            'name' => $v->name,
+            'plate_number' => $v->plate_number,
+            'status' => $v->status,
+            'type' => $v->type,
+            'capacity' => $v->capacity,
+        ]),
+    ]);
+});
+
 // ===== SECURITY PORTAL ENDPOINTS (Public & Authenticated) =====
 Route::get('/security/lookup', [SecurityController::class, 'lookup']);
 Route::post('/security/scan', [SecurityController::class, 'scan']);
