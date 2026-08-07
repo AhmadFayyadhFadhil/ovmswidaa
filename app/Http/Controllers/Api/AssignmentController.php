@@ -71,104 +71,104 @@ class AssignmentController extends Controller
 
     public function store(StoreAssignmentRequest $request, AssignDriverAction $action): JsonResponse
     {
-        $user = Auth::user();
-        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !$user->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
-            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
-        }
-
-        $validated = $request->validated();
-        $vehicleRequest = VehicleRequest::findOrFail($validated['request_id']);
-
-        if (!empty($validated['is_external'])) {
-            $priority = $validated['priority'] ?? $vehicleRequest->priority->value ?? 'Normal';
-            // Removed strict priority constraint: Urgent and Critical can now use third party fleet if needed
-
-            $photoPath = null;
-            if ($request->hasFile('external_photo')) {
-                $photoPath = $this->storePublicFileSafely($request->file('external_photo'), 'external_photos');
-            }
-
-            $returnPhotoPath = null;
-            if ($request->hasFile('external_return_photo')) {
-                $returnPhotoPath = $this->storePublicFileSafely($request->file('external_return_photo'), 'external_photos');
-            }
-
-            $photoPath2 = null;
-            if ($request->hasFile('external_photo_2')) {
-                $photoPath2 = $this->storePublicFileSafely($request->file('external_photo_2'), 'external_photos');
-            }
-
-            $returnPhotoPath2 = null;
-            if ($request->hasFile('external_return_photo_2')) {
-                $returnPhotoPath2 = $this->storePublicFileSafely($request->file('external_return_photo_2'), 'external_photos');
-            }
-
-            $newStatus = \App\Enums\RequestStatus::DRIVER_ASSIGNED;
-
-            // Generate QR token if not yet set (handles both null AND empty string cases)
-            $qrToken = !empty($vehicleRequest->qr_code_token)
-                ? $vehicleRequest->qr_code_token
-                : ('REQ-' . time() . '-' . bin2hex(random_bytes(4)));
-
-            $vehicleRequest->update([
-                'status' => $newStatus,
-                'qr_code_token' => $qrToken,
-                'is_external' => true,
-                'third_party_cost' => $validated['third_party_cost'] ?? 0,
-                'estimated_duration' => $validated['estimated_duration'] ?? null,
-                'priority' => $priority,
-                'notes' => $validated['notes'] ?? $vehicleRequest->notes,
-                'assigned_by' => auth()->id(),
-                'assigned_at' => now(),
-                'external_fleet_info' => $validated['external_fleet_info'] ?? null,
-                'external_photo_path' => $photoPath ?? $vehicleRequest->external_photo_path,
-                'external_trip_type' => $validated['external_trip_type'] ?? 'round_trip',
-                'external_departure_cost' => $validated['external_departure_cost'] ?? 0,
-                'external_return_cost'    => $validated['external_return_cost'] ?? 0,
-                'external_return_fleet_info' => $validated['external_return_fleet_info'] ?? null,
-                'external_return_photo_path' => $returnPhotoPath ?? $vehicleRequest->external_return_photo_path,
-                'external_driver_name'       => $validated['external_driver_name'] ?? null,
-                'external_license_plate'      => $validated['external_license_plate'] ?? null,
-                'external_return_driver_name' => $validated['external_return_driver_name'] ?? null,
-                'external_return_license_plate'=> $validated['external_return_license_plate'] ?? null,
-                'external_provider'           => $validated['external_provider'] ?? null,
-
-                // Second external vehicle:
-                'external_driver_name_2'       => $validated['external_driver_name_2'] ?? null,
-                'external_license_plate_2'      => $validated['external_license_plate_2'] ?? null,
-                'external_fleet_info_2'        => $validated['external_fleet_info_2'] ?? null,
-                'external_photo_path_2'        => $photoPath2 ?? $vehicleRequest->external_photo_path_2,
-                'external_departure_cost_2'    => $validated['external_departure_cost_2'] ?? 0,
-                'external_return_cost_2'       => $validated['external_return_cost_2'] ?? 0,
-                'external_return_driver_name_2' => $validated['external_return_driver_name_2'] ?? null,
-                'external_return_license_plate_2'=> $validated['external_return_license_plate_2'] ?? null,
-                'external_return_fleet_info_2' => $validated['external_return_fleet_info_2'] ?? null,
-                'external_return_photo_path_2' => $returnPhotoPath2 ?? $vehicleRequest->external_return_photo_path_2,
-                'third_party_cost_2'           => $validated['third_party_cost_2'] ?? 0,
-            ]);
-
-            return response()->json([
-                'status'  => 'success',
-                'message' => 'Request berhasil ditugaskan ke Pihak Ketiga',
-                'data'    => [
-                    'id' => null,
-                    'request' => $vehicleRequest->fresh(['user', 'passengers']),
-                ],
-            ], 201);
-        }
-
-        $driverIds = $validated['driver_ids'] ?? [$validated['driver_id']];
-        $vehicleIds = $validated['vehicle_ids'] ?? [$validated['vehicle_id']];
-
-        if (count($driverIds) > 1 && count($driverIds) !== count(array_unique($driverIds))) {
-            return response()->json(['status' => 'error', 'message' => 'Driver 1 dan Driver 2 tidak boleh orang yang sama.'], 422);
-        }
-
-        if (count($vehicleIds) > 1 && count($vehicleIds) !== count(array_unique($vehicleIds))) {
-            return response()->json(['status' => 'error', 'message' => 'Kendaraan 1 dan Kendaraan 2 tidak boleh unit mobil yang sama.'], 422);
-        }
-
         try {
+            $user = Auth::user();
+            if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !$user->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+            }
+
+            $validated = $request->validated();
+            $vehicleRequest = VehicleRequest::findOrFail($validated['request_id']);
+
+            if (!empty($validated['is_external'])) {
+                $priority = $validated['priority'] ?? $vehicleRequest->priority->value ?? 'Normal';
+                // Removed strict priority constraint: Urgent and Critical can now use third party fleet if needed
+
+                $photoPath = null;
+                if ($request->hasFile('external_photo')) {
+                    $photoPath = $this->storePublicFileSafely($request->file('external_photo'), 'external_photos');
+                }
+
+                $returnPhotoPath = null;
+                if ($request->hasFile('external_return_photo')) {
+                    $returnPhotoPath = $this->storePublicFileSafely($request->file('external_return_photo'), 'external_photos');
+                }
+
+                $photoPath2 = null;
+                if ($request->hasFile('external_photo_2')) {
+                    $photoPath2 = $this->storePublicFileSafely($request->file('external_photo_2'), 'external_photos');
+                }
+
+                $returnPhotoPath2 = null;
+                if ($request->hasFile('external_return_photo_2')) {
+                    $returnPhotoPath2 = $this->storePublicFileSafely($request->file('external_return_photo_2'), 'external_photos');
+                }
+
+                $newStatus = \App\Enums\RequestStatus::DRIVER_ASSIGNED;
+
+                // Generate QR token if not yet set (handles both null AND empty string cases)
+                $qrToken = !empty($vehicleRequest->qr_code_token)
+                    ? $vehicleRequest->qr_code_token
+                    : ('REQ-' . time() . '-' . bin2hex(random_bytes(4)));
+
+                $vehicleRequest->update([
+                    'status' => $newStatus,
+                    'qr_code_token' => $qrToken,
+                    'is_external' => true,
+                    'third_party_cost' => $validated['third_party_cost'] ?? 0,
+                    'estimated_duration' => $validated['estimated_duration'] ?? null,
+                    'priority' => $priority,
+                    'notes' => $validated['notes'] ?? $vehicleRequest->notes,
+                    'assigned_by' => auth()->id(),
+                    'assigned_at' => now(),
+                    'external_fleet_info' => $validated['external_fleet_info'] ?? null,
+                    'external_photo_path' => $photoPath ?? $vehicleRequest->external_photo_path,
+                    'external_trip_type' => $validated['external_trip_type'] ?? 'round_trip',
+                    'external_departure_cost' => $validated['external_departure_cost'] ?? 0,
+                    'external_return_cost'    => $validated['external_return_cost'] ?? 0,
+                    'external_return_fleet_info' => $validated['external_return_fleet_info'] ?? null,
+                    'external_return_photo_path' => $returnPhotoPath ?? $vehicleRequest->external_return_photo_path,
+                    'external_driver_name'       => $validated['external_driver_name'] ?? null,
+                    'external_license_plate'      => $validated['external_license_plate'] ?? null,
+                    'external_return_driver_name' => $validated['external_return_driver_name'] ?? null,
+                    'external_return_license_plate'=> $validated['external_return_license_plate'] ?? null,
+                    'external_provider'           => $validated['external_provider'] ?? null,
+
+                    // Second external vehicle:
+                    'external_driver_name_2'       => $validated['external_driver_name_2'] ?? null,
+                    'external_license_plate_2'      => $validated['external_license_plate_2'] ?? null,
+                    'external_fleet_info_2'        => $validated['external_fleet_info_2'] ?? null,
+                    'external_photo_path_2'        => $photoPath2 ?? $vehicleRequest->external_photo_path_2,
+                    'external_departure_cost_2'    => $validated['external_departure_cost_2'] ?? 0,
+                    'external_return_cost_2'       => $validated['external_return_cost_2'] ?? 0,
+                    'external_return_driver_name_2' => $validated['external_return_driver_name_2'] ?? null,
+                    'external_return_license_plate_2'=> $validated['external_return_license_plate_2'] ?? null,
+                    'external_return_fleet_info_2' => $validated['external_return_fleet_info_2'] ?? null,
+                    'external_return_photo_path_2' => $returnPhotoPath2 ?? $vehicleRequest->external_return_photo_path_2,
+                    'third_party_cost_2'           => $validated['third_party_cost_2'] ?? 0,
+                ]);
+
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => 'Request berhasil ditugaskan ke Pihak Ketiga',
+                    'data'    => [
+                        'id' => null,
+                        'request' => $vehicleRequest->fresh(['user', 'passengers']),
+                    ],
+                ], 201);
+            }
+
+            $driverIds = $validated['driver_ids'] ?? [$validated['driver_id']];
+            $vehicleIds = $validated['vehicle_ids'] ?? [$validated['vehicle_id']];
+
+            if (count($driverIds) > 1 && count($driverIds) !== count(array_unique($driverIds))) {
+                return response()->json(['status' => 'error', 'message' => 'Driver 1 dan Driver 2 tidak boleh orang yang sama.'], 422);
+            }
+
+            if (count($vehicleIds) > 1 && count($vehicleIds) !== count(array_unique($vehicleIds))) {
+                return response()->json(['status' => 'error', 'message' => 'Kendaraan 1 dan Kendaraan 2 tidak boleh unit mobil yang sama.'], 422);
+            }
+
             \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, &$driverIds, &$vehicleIds) {
                 $existing = \App\Models\Assignment::where('request_id', $vehicleRequest->id)->get();
                 
