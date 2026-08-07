@@ -178,6 +178,10 @@ class RequestController extends Controller
                 }
             }
 
+            if (isset($data['passengers']) && is_string($data['passengers'])) {
+                $data['passengers'] = json_decode($data['passengers'], true);
+            }
+
             if (isset($data['itineraries']) && is_string($data['itineraries'])) {
                 $data['itineraries'] = json_decode($data['itineraries'], true);
             }

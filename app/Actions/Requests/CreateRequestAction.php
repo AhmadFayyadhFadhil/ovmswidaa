@@ -34,9 +34,12 @@ class CreateRequestAction
 
         // Validate passenger same-day availability and duplicates
         if (!empty($data['passengers'])) {
+            if (is_string($data['passengers'])) {
+                $data['passengers'] = json_decode($data['passengers'], true) ?: [];
+            }
             $seenNames = [];
             foreach ($data['passengers'] as $passengerData) {
-                if (empty($passengerData['name'])) continue;
+                if (!is_array($passengerData) || empty($passengerData['name'])) continue;
                 
                 $name = trim($passengerData['name']);
                 $lowerName = strtolower($name);
@@ -180,9 +183,13 @@ class CreateRequestAction
 
             // Create passengers if provided
             if (!empty($data['passengers'])) {
+                if (is_string($data['passengers'])) {
+                    $data['passengers'] = json_decode($data['passengers'], true) ?: [];
+                }
+
                 $picIdx = -1;
                 foreach ($data['passengers'] as $idx => $passengerData) {
-                    if (!empty($passengerData['is_pic']) && filter_var($passengerData['is_pic'], FILTER_VALIDATE_BOOLEAN)) {
+                    if (is_array($passengerData) && !empty($passengerData['is_pic']) && filter_var($passengerData['is_pic'], FILTER_VALIDATE_BOOLEAN)) {
                         $picIdx = $idx;
                         break;
                     }
@@ -192,12 +199,13 @@ class CreateRequestAction
                 }
 
                 foreach ($data['passengers'] as $idx => $passengerData) {
+                    if (!is_array($passengerData) || empty($passengerData['name'])) {
+                        continue;
+                    }
                     $userId = $passengerData['user_id'] ?? null;
-                    if (!empty($passengerData['name'])) {
-                        $cleanName = trim($passengerData['name']);
-                        $resolved = \App\Models\User::where(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), strtolower($cleanName))
-                            ->orWhere('name', 'like', '%' . $cleanName . '%')
-                            ->first();
+                    $cleanName = trim($passengerData['name']);
+                    if (!$userId && strlen($cleanName) >= 3) {
+                        $resolved = \App\Models\User::where(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), strtolower($cleanName))->first();
                         if ($resolved) {
                             $userId = $resolved->id;
                         }
@@ -205,7 +213,7 @@ class CreateRequestAction
 
                     Passenger::create([
                         'request_id' => $request->id,
-                        'name' => $passengerData['name'],
+                        'name' => $cleanName,
                         'department_id' => $resolveDeptId($passengerData['department_id'] ?? null),
                         'user_id' => $userId,
                         'is_pic' => ($idx === $picIdx),

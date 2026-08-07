@@ -24,6 +24,16 @@ return new class extends Migration
             DB::table('requests')
                 ->where('id', 33)
                 ->update(['passenger_count' => 1]);
+
+            // Delete extra passengers Aji & Rizky Bagus Kurniawan from REQ-35
+            DB::table('passengers')
+                ->where('request_id', 35)
+                ->whereIn('name', ['Aji', 'Rizky Bagus Kurniawan'])
+                ->delete();
+
+            DB::table('requests')
+                ->where('id', 35)
+                ->update(['passenger_count' => 7]);
         }
     }
 
