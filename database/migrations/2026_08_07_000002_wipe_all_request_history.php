@@ -9,7 +9,6 @@ return new class extends Migration
     public function up(): void
     {
         if (Schema::hasTable('requests')) {
-            // WIPE ALL REQUEST HISTORY FOR A 100% CLEAN PRELIVE START
             Schema::disableForeignKeyConstraints();
 
             DB::table('request_itineraries')->truncate();
@@ -26,7 +25,6 @@ return new class extends Migration
                 DB::table('audit_logs')->truncate();
             }
 
-            // Reset driver and vehicle availability statuses
             if (Schema::hasTable('users')) {
                 DB::table('users')->update(['availability_status' => 'available']);
             }
@@ -40,6 +38,5 @@ return new class extends Migration
 
     public function down(): void
     {
-        // No revert needed
     }
 };
