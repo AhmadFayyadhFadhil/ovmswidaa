@@ -169,6 +169,20 @@ class AssignmentController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Kendaraan 1 dan Kendaraan 2 tidak boleh unit mobil yang sama.'], 422);
             }
 
+            // Passenger capacity validation
+            $passengerCount = (int)($vehicleRequest->passenger_count ?: ($vehicleRequest->passengers()->count() ?: 1));
+            $vehicles = \App\Models\Vehicle::whereIn('id', $vehicleIds)->get();
+            $totalCapacity = $vehicles->sum(function ($v) {
+                return (int)($v->capacity > 0 ? $v->capacity : 7);
+            });
+
+            if ($passengerCount > $totalCapacity && count($vehicleIds) === 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Kapasitas kendaraan yang dipilih ({$totalCapacity} kursi) kurang untuk {$passengerCount} penumpang. Silakan tambahkan Mobil Kedua atau pilih Sewa Eksternal."
+                ], 422);
+            }
+
             \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest) {
                 $existing = \App\Models\Assignment::where('request_id', $vehicleRequest->id)->get();
                 foreach ($existing as $extAsg) {
