@@ -73,7 +73,7 @@ class AssignmentController extends Controller
     {
         try {
             $user = Auth::user();
-            if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !$user->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
+            if (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head']) && !$user->isHrGaHead()) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
             }
 

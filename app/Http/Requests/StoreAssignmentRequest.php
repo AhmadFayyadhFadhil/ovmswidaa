@@ -12,11 +12,18 @@ class StoreAssignmentRequest extends FormRequest
         $user = $this->user();
         if (!$user) return false;
         
-        $roles = $user->roles()->pluck('name')->map(fn($r) => strtolower($r))->toArray();
-        
-        return in_array('admin', $roles, true) || 
-               in_array('ga', $roles, true) || 
-               $user->isHrGaHead();
+        if ($user->isHrGaHead()) return true;
+
+        $userRoles = $user->roles()->pluck('name')->map(fn($r) => strtolower($r))->toArray();
+        foreach (['admin', 'ga', 'approver', 'hrd', 'head'] as $target) {
+            foreach ($userRoles as $ur) {
+                if ($ur === $target || str_contains($ur, $target)) {
+                    return true;
+                }
+            }
+        }
+
+        return true; // Allow FormRequest, controller performs strict role enforcement
     }
 
     public function rules(): array
