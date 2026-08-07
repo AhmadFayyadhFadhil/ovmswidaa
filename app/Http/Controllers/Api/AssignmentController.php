@@ -160,6 +160,14 @@ class AssignmentController extends Controller
         $driverIds = $validated['driver_ids'] ?? [$validated['driver_id']];
         $vehicleIds = $validated['vehicle_ids'] ?? [$validated['vehicle_id']];
 
+        if (count($driverIds) > 1 && count($driverIds) !== count(array_unique($driverIds))) {
+            return response()->json(['status' => 'error', 'message' => 'Driver 1 dan Driver 2 tidak boleh orang yang sama.'], 422);
+        }
+
+        if (count($vehicleIds) > 1 && count($vehicleIds) !== count(array_unique($vehicleIds))) {
+            return response()->json(['status' => 'error', 'message' => 'Kendaraan 1 dan Kendaraan 2 tidak boleh unit mobil yang sama.'], 422);
+        }
+
         try {
             \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, &$driverIds, &$vehicleIds) {
                 $existing = \App\Models\Assignment::where('request_id', $vehicleRequest->id)->get();
