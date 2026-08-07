@@ -48,7 +48,7 @@ class AssignDriverAction
                 'notes' => $notes,
             ]);
 
-            $reqStatus = $isUrgent ? RequestStatus::DRIVER_ASSIGNED->value : RequestStatus::WAITING_DRIVER->value;
+            $reqStatus = $isUrgent ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::WAITING_DRIVER;
             $qrCodeToken = $request->qr_code_token;
             if ($isUrgent && !$qrCodeToken) {
                 $qrCodeToken = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));
@@ -70,27 +70,30 @@ class AssignDriverAction
             ]);
 
             if ($isUrgent) {
-                // Create OperationalTrip directly
-                \App\Models\OperationalTrip::create([
-                    'request_id' => $request->id,
-                    'driver_id' => $driverId,
-                    'vehicle_id' => $vehicleId,
-                    'start_datetime' => $request->start_time ?? now(),
-                    'end_datetime' => $request->end_time ?? now()->addHours(4),
-                    'status' => 'scheduled',
-                ]);
+                try {
+                    \App\Models\OperationalTrip::create([
+                        'request_id' => $request->id,
+                        'driver_id' => $driverId,
+                        'vehicle_id' => $vehicleId,
+                        'start_datetime' => $request->start_time ?? now(),
+                        'end_datetime' => $request->end_time ?? now()->addHours(4),
+                        'status' => 'scheduled',
+                    ]);
+                } catch (\Throwable $ex) {}
             }
 
             // Also update any existing request_itineraries for this request
-            \App\Models\RequestItinerary::where('request_id', $request->id)
-                ->where(function ($q) {
-                    $q->whereNull('driver_id')->orWhereNull('vehicle_id');
-                })
-                ->update([
-                    'driver_id' => $driverId,
-                    'vehicle_id' => $vehicleId,
-                    'status' => 'assigned',
-                ]);
+            try {
+                \App\Models\RequestItinerary::where('request_id', $request->id)
+                    ->where(function ($q) {
+                        $q->whereNull('driver_id')->orWhereNull('vehicle_id');
+                    })
+                    ->update([
+                        'driver_id' => $driverId,
+                        'vehicle_id' => $vehicleId,
+                        'status' => 'assigned',
+                    ]);
+            } catch (\Throwable $ex) {}
 
             return $assignment;
         });

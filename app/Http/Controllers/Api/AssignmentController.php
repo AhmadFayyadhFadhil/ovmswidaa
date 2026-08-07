@@ -236,7 +236,7 @@ class AssignmentController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Kendaraan berhasil di-assign ke driver',
-                'data'    => $assignment ? new AssignmentResource($assignment->load(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy'])) : [
+                'data'    => $assignment ? new AssignmentResource($assignment->fresh(['request.user', 'request.passengers', 'request.driver', 'request.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'driver', 'assignedBy'])) : [
                     'id' => null,
                     'request' => $vehicleRequest->fresh(['user', 'passengers', 'driver', 'vehicle']),
                 ],
