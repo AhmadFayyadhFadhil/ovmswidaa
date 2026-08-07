@@ -69,15 +69,38 @@ class AssignmentController extends Controller
         ], 200);
     }
 
-    public function store(StoreAssignmentRequest $request, AssignDriverAction $action): JsonResponse
+    public function store(Request $request, AssignDriverAction $action): JsonResponse
     {
         try {
             $user = Auth::user();
-            if (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head']) && !$user->isHrGaHead()) {
+            if (!$user || (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head']) && !$user->isHrGaHead())) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
             }
 
-            $validated = $request->validated();
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+                'request_id'         => 'required|exists:requests,id',
+                'is_external'        => 'nullable|boolean',
+                'third_party_cost'   => 'nullable|numeric|min:0',
+                'estimated_duration' => 'nullable|integer|min:1',
+                'priority'           => 'nullable|string',
+                'driver_id'          => 'nullable|exists:users,id',
+                'vehicle_id'         => 'nullable|exists:vehicles,id',
+                'driver_ids'         => 'nullable|array',
+                'driver_ids.*'       => 'exists:users,id|distinct',
+                'vehicle_ids'        => 'nullable|array',
+                'vehicle_ids.*'      => 'exists:vehicles,id|distinct',
+                'notes'              => 'nullable|string|max:1000',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => $validator->errors()->first(),
+                    'errors'  => $validator->errors()
+                ], 422);
+            }
+
+            $validated = $validator->validated();
             $vehicleRequest = VehicleRequest::findOrFail($validated['request_id']);
 
             if (!empty($validated['is_external'])) {
