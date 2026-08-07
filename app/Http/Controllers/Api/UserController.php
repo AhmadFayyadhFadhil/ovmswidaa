@@ -457,10 +457,18 @@ class UserController extends Controller
                     DB::table('driver_assignments')->where('driver_id', $targetId)->delete();
                 }
 
-                if (Schema::hasTable('vehicle_requests')) {
-                    DB::table('vehicle_requests')->where('user_id', $targetId)->update(['user_id' => null]);
-                    DB::table('vehicle_requests')->where('driver_id', $targetId)->update(['driver_id' => null]);
-                    DB::table('vehicle_requests')->where('approver_id', $targetId)->update(['approver_id' => null]);
+                if (Schema::hasTable('requests')) {
+                    DB::table('requests')->where('user_id', $targetId)->update(['user_id' => null]);
+                    DB::table('requests')->where('driver_id', $targetId)->update(['driver_id' => null]);
+                    DB::table('requests')->where('approver_id', $targetId)->update(['approver_id' => null]);
+                }
+
+                if (Schema::hasTable('request_itineraries')) {
+                    DB::table('request_itineraries')->where('driver_id', $targetId)->update(['driver_id' => null]);
+                }
+
+                if (Schema::hasTable('operational_trips')) {
+                    DB::table('operational_trips')->where('driver_id', $targetId)->update(['driver_id' => null]);
                 }
 
                 if (Schema::hasTable('passengers')) {
