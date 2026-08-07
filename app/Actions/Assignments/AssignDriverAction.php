@@ -35,7 +35,7 @@ class AssignDriverAction
             }
 
             // Validate driver shift/work hours (status available dari jam sekian sampai sekian)
-            if ($driver->availability_start && $driver->availability_end) {
+            if ($request->start_time && $driver->availability_start && $driver->availability_end) {
                 $reqTime = date('H:i:s', strtotime($request->start_time));
                 if ($reqTime < $driver->availability_start || $reqTime > $driver->availability_end) {
                     throw new Exception("Waktu keberangkatan request ({$reqTime}) di luar jam kerja Driver {$driver->name} ({$driver->availability_start} - {$driver->availability_end}).");
@@ -119,6 +119,7 @@ class AssignDriverAction
      */
     private function validateDriverTimeConflict(int $driverId, Request $request): void
     {
+        if (!$request->start_time) return;
         $driver = \App\Models\User::find($driverId);
         $driverName = $driver ? $driver->name : 'yang bersangkutan';
         $reqDate = date('Y-m-d', strtotime($request->start_time));
@@ -161,6 +162,7 @@ class AssignDriverAction
      */
     private function validateVehicleTimeConflict(int $vehicleId, Request $request): void
     {
+        if (!$request->start_time) return;
         $vehicle = \App\Models\Vehicle::find($vehicleId);
         $vehiclePlate = $vehicle ? "{$vehicle->name} ({$vehicle->plate_number})" : 'yang bersangkutan';
         $reqDate = date('Y-m-d', strtotime($request->start_time));

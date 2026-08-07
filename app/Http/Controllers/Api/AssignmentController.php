@@ -169,35 +169,19 @@ class AssignmentController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Kendaraan 1 dan Kendaraan 2 tidak boleh unit mobil yang sama.'], 422);
             }
 
-            \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, &$driverIds, &$vehicleIds) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest) {
                 $existing = \App\Models\Assignment::where('request_id', $vehicleRequest->id)->get();
-                
-                $newDriversMap = [];
-                foreach ($driverIds as $index => $driverId) {
-                    $vId = $vehicleIds[$index] ?? $vehicleIds[0];
-                    $newDriversMap[(int)$driverId] = (int)$vId;
-                }
-
                 foreach ($existing as $extAsg) {
-                    $dId = (int)$extAsg->driver_id;
-                    
-                    if ($extAsg->status === 'accepted' && isset($newDriversMap[$dId]) && $newDriversMap[$dId] == $extAsg->vehicle_id) {
-                        unset($newDriversMap[$dId]);
-                    } else {
-                        if ($extAsg->status === 'pending_driver') {
-                            $extAsg->driver()->update(['availability_status' => 'available']);
-                        }
-                        
-                        \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
-                            ->where('driver_id', $dId)
-                            ->delete();
-                            
-                        $extAsg->delete();
+                    if ($extAsg->driver) {
+                        try {
+                            $extAsg->driver->update(['availability_status' => 'available']);
+                        } catch (\Throwable $ex) {}
                     }
+                    \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                        ->where('driver_id', $extAsg->driver_id)
+                        ->delete();
+                    $extAsg->delete();
                 }
-
-                $driverIds = array_keys($newDriversMap);
-                $vehicleIds = array_values($newDriversMap);
             });
 
             $assignment = null;
@@ -217,14 +201,13 @@ class AssignmentController extends Controller
                 }
             }
 
-            if (!$assignment) {
-                $assignment = \App\Models\Assignment::where('request_id', $vehicleRequest->id)->first();
-            }
-
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Kendaraan berhasil di-assign ke driver',
-                'data'    => new AssignmentResource($assignment->load(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy'])),
+                'data'    => $assignment ? new AssignmentResource($assignment->load(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy'])) : [
+                    'id' => null,
+                    'request' => $vehicleRequest->fresh(['user', 'passengers', 'driver', 'vehicle']),
+                ],
             ], 201);
         } catch (\Throwable $e) {
             \Log::error('Assignment creation error:', [
