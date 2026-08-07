@@ -56,11 +56,13 @@ class AssignDriverAction
             $isUrgent = in_array($priorityVal, ['Urgent', 'Critical'], true);
             $asgStatus = $isUrgent ? 'accepted' : 'pending_driver';
 
+            $assignerId = auth()->id() ?? $request->user_id ?? 1;
+
             $assignment = Assignment::create([
                 'request_id' => $request->id,
                 'driver_id' => $driverId,
                 'vehicle_id' => $vehicleId,
-                'assigned_by' => auth()->id(),
+                'assigned_by' => $assignerId,
                 'assigned_at' => now(),
                 'status' => $asgStatus,
                 'notes' => $notes,
@@ -77,7 +79,7 @@ class AssignDriverAction
                 'status' => $reqStatus,
                 'driver_id' => $driverId,
                 'vehicle_id' => $vehicleId,
-                'assigned_by' => auth()->id(),
+                'assigned_by' => $assignerId,
                 'assigned_at' => now(),
                 'is_external' => false,
                 'third_party_cost' => 0,
@@ -93,8 +95,8 @@ class AssignDriverAction
                     'request_id' => $request->id,
                     'driver_id' => $driverId,
                     'vehicle_id' => $vehicleId,
-                    'start_datetime' => $request->start_time,
-                    'end_datetime' => $request->end_time,
+                    'start_datetime' => $request->start_time ?? now(),
+                    'end_datetime' => $request->end_time ?? now()->addHours(4),
                     'status' => 'scheduled',
                 ]);
             }
