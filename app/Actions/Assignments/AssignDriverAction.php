@@ -103,8 +103,29 @@ class AssignDriverAction
      */
     private function validateDriverTimeConflict(int $driverId, Request $request): void
     {
-        // Non-blocking for seamless operational assignments
-        return;
+        $startTime = $request->start_time;
+        $endTime = $request->end_time;
+
+        if (!$startTime || !$endTime) {
+            return; // Cannot validate without time range
+        }
+
+        $conflict = Request::where('driver_id', $driverId)
+            ->where('id', '!=', $request->id)
+            ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
+            ->where(function ($q) use ($startTime, $endTime) {
+                $q->where(function ($inner) use ($startTime, $endTime) {
+                    $inner->where('start_time', '<', $endTime)
+                          ->where('end_time', '>', $startTime);
+                });
+            })
+            ->first();
+
+        if ($conflict) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'driver_id' => 'Driver ini sudah ditugaskan ke request lain (REQ-' . $conflict->id . ') pada rentang waktu yang sama (' . \Carbon\Carbon::parse($conflict->start_time)->format('d/m/Y H:i') . ' - ' . \Carbon\Carbon::parse($conflict->end_time)->format('d/m/Y H:i') . '). Silakan pilih driver lain.',
+            ]);
+        }
     }
 
     /**
@@ -112,7 +133,28 @@ class AssignDriverAction
      */
     private function validateVehicleTimeConflict(int $vehicleId, Request $request): void
     {
-        // Non-blocking for seamless operational assignments
-        return;
+        $startTime = $request->start_time;
+        $endTime = $request->end_time;
+
+        if (!$startTime || !$endTime) {
+            return; // Cannot validate without time range
+        }
+
+        $conflict = Request::where('vehicle_id', $vehicleId)
+            ->where('id', '!=', $request->id)
+            ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
+            ->where(function ($q) use ($startTime, $endTime) {
+                $q->where(function ($inner) use ($startTime, $endTime) {
+                    $inner->where('start_time', '<', $endTime)
+                          ->where('end_time', '>', $startTime);
+                });
+            })
+            ->first();
+
+        if ($conflict) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'vehicle_id' => 'Kendaraan ini sudah ditugaskan ke request lain (REQ-' . $conflict->id . ') pada rentang waktu yang sama (' . \Carbon\Carbon::parse($conflict->start_time)->format('d/m/Y H:i') . ' - ' . \Carbon\Carbon::parse($conflict->end_time)->format('d/m/Y H:i') . '). Silakan pilih kendaraan lain.',
+            ]);
+        }
     }
 }

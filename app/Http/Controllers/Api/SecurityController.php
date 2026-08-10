@@ -192,6 +192,7 @@ class SecurityController extends Controller
 
         $customMessage = null;
 
+        try {
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated, $targetTrip, &$customMessage) {
             $scanTime = !empty($validated['scanned_at'])
                 ? \Carbon\Carbon::parse($validated['scanned_at'], 'Asia/Jakarta')
@@ -443,6 +444,17 @@ class SecurityController extends Controller
                 }
             }
         });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Security scan error: ' . $e->getMessage(), [
+                'request_id' => $vehicleRequest->id,
+                'type' => $validated['type'],
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terjadi kesalahan saat memproses scan: ' . $e->getMessage(),
+            ], 500);
+        }
 
         if ($validated['type'] === 'checkout') {
             return response()->json([

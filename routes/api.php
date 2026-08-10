@@ -103,9 +103,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/requests/{vehicleRequest}/rate-driver', [RequestController::class, 'rateDriver']);
     Route::post('/requests/{vehicleRequest}/daily-assignments', [AssignmentController::class, 'storeDailyAssignments']);
 
-    // ===== SECURITY PORTAL ENDPOINTS =====
-    Route::get('/security/lookup', [SecurityController::class, 'lookup']);
-    Route::post('/security/scan', [SecurityController::class, 'scan']);
+
 
     // ===== SECURITY GUARDS ENDPOINTS =====
     Route::get('/security-guards', [SecurityGuardController::class, 'index']);
