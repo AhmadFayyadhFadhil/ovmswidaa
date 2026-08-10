@@ -98,6 +98,7 @@ class RequestResource extends JsonResource
             'priority'          => $this->priority?->value,
             'status'            => $this->status?->value,
             'notes'             => $this->notes,
+            'rejected_reason'   => $this->rejected_reason,
             'itinerary_file_url' => $this->itinerary_file_path ? asset('storage/' . $this->itinerary_file_path) : null,
             'itineraries'       => ($this->relationLoaded('itineraries') && $this->itineraries->count() > 0 ? $this->itineraries : $this->itineraries()->with(['driver', 'vehicle'])->get())->map(function ($it) {
                 return [

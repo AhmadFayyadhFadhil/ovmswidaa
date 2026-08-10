@@ -33,6 +33,10 @@ class ApproveRequestAction
             // Update request status
             if ($status === 'rejected') {
                 $newStatus = RequestStatus::REJECTED;
+                $request->update([
+                    'status' => $newStatus,
+                    'rejected_reason' => $notes,
+                ]);
             } else {
                 if ($role === 'dept_head') {
                     $newStatus = RequestStatus::APPROVED_DEPARTMENT;
@@ -44,9 +48,8 @@ class ApproveRequestAction
                         'qr_code_token' => 'REQ-' . time() . '-' . bin2hex(random_bytes(4)),
                     ]);
                 }
+                $request->update(['status' => $newStatus]);
             }
-
-            $request->update(['status' => $newStatus]);
 
             return $request;
         });
