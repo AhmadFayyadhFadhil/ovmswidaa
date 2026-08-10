@@ -695,9 +695,9 @@ class RequestController extends Controller
                     ]);
                 }
 
-                // Release driver and vehicle status to available
-                if ($activeItinerary->driver) {
-                    $activeItinerary->driver->update(['availability_status' => 'available']);
+                // Release driver and vehicle status safely with auto-revert queue check
+                if ($activeItinerary->driver_id) {
+                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($activeItinerary->driver_id);
                 }
                 if ($activeItinerary->vehicle) {
                     $activeItinerary->vehicle->update(['status' => 'Available']);
@@ -722,16 +722,16 @@ class RequestController extends Controller
                     $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
                     foreach ($trips as $trip) {
                         $trip->update(['status' => 'completed']);
-                        if ($trip->driver) {
-                            $trip->driver->update(['availability_status' => 'available']);
+                        if ($trip->driver_id) {
+                            \App\Services\DriverTaskQueueService::restorePendingDriverDuty($trip->driver_id);
                         }
                         if ($trip->vehicle) {
                             $trip->vehicle->update(['status' => 'Available']);
                         }
                     }
 
-                    if ($vehicleRequest->driver) {
-                        $vehicleRequest->driver->update(['availability_status' => 'available']);
+                    if ($vehicleRequest->driver_id) {
+                        \App\Services\DriverTaskQueueService::restorePendingDriverDuty($vehicleRequest->driver_id);
                     }
                     if ($vehicleRequest->vehicle) {
                         $vehicleRequest->vehicle->update(['status' => 'Available']);

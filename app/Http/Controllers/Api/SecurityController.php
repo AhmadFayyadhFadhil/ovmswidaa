@@ -323,8 +323,8 @@ class SecurityController extends Controller
                         'security_checkin_notes' => $validated['notes'] ?? null,
                     ]);
 
-                    if ($targetTrip->driver) {
-                        $targetTrip->driver->update(['availability_status' => 'available']);
+                    if ($targetTrip->driver_id) {
+                        \App\Services\DriverTaskQueueService::restorePendingDriverDuty($targetTrip->driver_id);
                     }
                     if ($targetTrip->vehicle) {
                         $targetTrip->vehicle->update(['status' => 'Available']);
@@ -354,9 +354,9 @@ class SecurityController extends Controller
                             'morning_checkin_notes' => $validated['notes'] ?? null,
                         ]);
 
-                        // RELEASE DRIVER & VEHICLE TO AVAILABLE FOR SESSIONS GAP
+                        // RELEASE DRIVER & VEHICLE WITH QUEUE REVERT CHECK
                         if ($driver) {
-                            $driver->update(['availability_status' => 'available']);
+                            \App\Services\DriverTaskQueueService::restorePendingDriverDuty($driver->id);
                         }
                         if ($vehicle) {
                             $vehicle->update(['status' => 'Available']);
@@ -381,7 +381,7 @@ class SecurityController extends Controller
                             ]);
                         }
 
-                        $customMessage = 'Scan Checkin Sesi 1 berhasil. Driver & Mobil rilis kembali ke status AVAILABLE untuk jeda Sesi 2.';
+                        $customMessage = 'Scan Checkin Sesi 1 berhasil. Status Driver & Mobil diperbarui.';
                     } else if ($todayItinerary->afternoon_status === 'on_going') {
                         $todayItinerary->update([
                             'afternoon_status' => 'completed',
@@ -393,7 +393,7 @@ class SecurityController extends Controller
                         ]);
 
                         if ($driver) {
-                            $driver->update(['availability_status' => 'available']);
+                            \App\Services\DriverTaskQueueService::restorePendingDriverDuty($driver->id);
                         }
                         if ($vehicle) {
                             $vehicle->update(['status' => 'Available']);
@@ -411,7 +411,7 @@ class SecurityController extends Controller
                             ]);
                         }
 
-                        $customMessage = 'Scan Checkin Sesi 2 berhasil. Driver & Mobil kembali ke status AVAILABLE.';
+                        $customMessage = 'Scan Checkin Sesi 2 berhasil. Status Driver & Mobil diperbarui.';
                     }
                 } else {
                     $vehicleRequest->update([
@@ -432,8 +432,8 @@ class SecurityController extends Controller
                                 'security_checkin_by' => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                             ]);
-                            if ($trip->driver) {
-                                $trip->driver->update(['availability_status' => 'available']);
+                            if ($trip->driver_id) {
+                                \App\Services\DriverTaskQueueService::restorePendingDriverDuty($trip->driver_id);
                             }
                             if ($trip->vehicle) {
                                 $trip->vehicle->update(['status' => 'Available']);
