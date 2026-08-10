@@ -11,7 +11,6 @@ class Assignment extends Model
 
     protected $fillable = [
         'request_id',
-        'vehicle_id',
         'driver_id',
         'assigned_by',
         'assigned_at',
@@ -30,11 +29,6 @@ class Assignment extends Model
     public function request()
     {
         return $this->belongsTo(Request::class);
-    }
-
-    public function vehicle()
-    {
-        return $this->belongsTo(Vehicle::class);
     }
 
     public function driver()

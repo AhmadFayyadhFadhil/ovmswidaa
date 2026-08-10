@@ -41,7 +41,7 @@ class AssignmentController extends Controller
         $perPage = $request->query('per_page', 15);
         $status  = $request->query('status');
 
-        $query = Assignment::with(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy']);
+        $query = Assignment::with(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'assignedBy']);
 
         if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
             $query->where('driver_id', $user->id);
@@ -236,7 +236,7 @@ class AssignmentController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Kendaraan berhasil di-assign ke driver',
-                'data'    => $assignment ? new AssignmentResource($assignment->fresh(['request.user', 'request.passengers', 'request.driver', 'request.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'driver', 'assignedBy'])) : [
+                'data'    => $assignment ? new AssignmentResource($assignment->fresh(['request.user', 'request.passengers', 'request.driver', 'request.vehicle', 'request.assignments.driver', 'driver', 'assignedBy'])) : [
                     'id' => null,
                     'request' => $vehicleRequest->fresh(['user', 'passengers', 'driver', 'vehicle']),
                 ],

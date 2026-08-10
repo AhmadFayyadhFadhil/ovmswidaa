@@ -45,9 +45,6 @@ class RequestResource extends JsonResource
                 if ($asg->driver) {
                     $driversList[] = $asg->driver->name;
                 }
-                if ($asg->vehicle) {
-                    $vehiclesList[] = $asg->vehicle->name . ' (' . $asg->vehicle->plate_number . ')';
-                }
             }
             if (empty($vehiclesList) && $this->vehicle) {
                 $vehiclesList[] = $this->vehicle->name . ' (' . $this->vehicle->plate_number . ')';

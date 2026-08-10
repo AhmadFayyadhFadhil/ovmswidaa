@@ -199,7 +199,6 @@ class RequestController extends Controller
                     'operationalTrips.driver',
                     'operationalTrips.vehicle',
                     'assignments.driver',
-                    'assignments.vehicle',
                     'approvals.approver',
                     'driver',
                     'vehicle',
