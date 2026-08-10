@@ -17,6 +17,8 @@ Route::post('/register', [AuthController::class, 'register'])->middleware('throt
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:3,1');
 Route::get('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
+Route::get('/trip-purposes', [\App\Http\Controllers\Api\TripPurposeController::class, 'index']);
+Route::get('/destination-cities', [\App\Http\Controllers\Api\DestinationCityController::class, 'index']);
 Route::get('/public-stats', [\App\Http\Controllers\Api\SettingController::class, 'getPublicStats']);
 // ===== FLUSH CACHE ENDPOINT (Public for easy cache clearing without root access) =====
 Route::get('/flush-cache', function () {
@@ -143,6 +145,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // ===== SYSTEM CONFIG ENDPOINTS (Admin only) =====
     Route::get('/system-config', [\App\Http\Controllers\Api\SettingController::class, 'index']);
     Route::put('/system-config', [\App\Http\Controllers\Api\SettingController::class, 'update']);
+
+    // ===== MASTER DATA: TRIP PURPOSES & DESTINATION CITIES =====
+    Route::post('/trip-purposes', [\App\Http\Controllers\Api\TripPurposeController::class, 'store']);
+    Route::put('/trip-purposes/{tripPurpose}', [\App\Http\Controllers\Api\TripPurposeController::class, 'update']);
+    Route::delete('/trip-purposes/{tripPurpose}', [\App\Http\Controllers\Api\TripPurposeController::class, 'destroy']);
+
+    Route::post('/destination-cities', [\App\Http\Controllers\Api\DestinationCityController::class, 'store']);
+    Route::put('/destination-cities/{destinationCity}', [\App\Http\Controllers\Api\DestinationCityController::class, 'update']);
+    Route::delete('/destination-cities/{destinationCity}', [\App\Http\Controllers\Api\DestinationCityController::class, 'destroy']);
     Route::post('/system-config/logo', [\App\Http\Controllers\Api\SettingController::class, 'uploadLogo']);
     Route::get('/system-config/stats', [\App\Http\Controllers\Api\SettingController::class, 'getStats']);
     Route::post('/system-config/purge-logs', [\App\Http\Controllers\Api\SettingController::class, 'purgeLogs']);
