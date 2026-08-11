@@ -529,7 +529,7 @@ class SecurityController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => new \App\Http\Resources\RequestResource($vehicleRequest->load(['user', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver'])),
+            'data'   => new \App\Http\Resources\RequestResource($vehicleRequest->load(['user', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'assignments.vehicle'])),
         ], 200);
     }
 

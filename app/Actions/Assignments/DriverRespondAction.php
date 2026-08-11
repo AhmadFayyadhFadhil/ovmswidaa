@@ -50,7 +50,7 @@ class DriverRespondAction
             }
 
             if ($response === 'accepted') {
-                $vehicleId = $vehicleId ?? $assignment->request->vehicle_id;
+                $vehicleId = $vehicleId ?? $assignment->vehicle_id ?? $assignment->request->vehicle_id;
                 
                 if (empty($vehicleId)) {
                     throw new Exception("Vehicle ID is required when accepting an assignment.");

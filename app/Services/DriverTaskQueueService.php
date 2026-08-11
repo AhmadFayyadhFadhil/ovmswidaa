@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
-use App\Models\VehicleRequest;
+use App\Models\Request as VehicleRequest;
 use App\Enums\RequestStatus;
 use Illuminate\Support\Facades\Log;
 
@@ -43,7 +43,7 @@ class DriverTaskQueueService
                 RequestStatus::APPROVED_HRD_GA,
             ])
             ->orderBy('priority', 'asc') // Non-urgent tasks
-            ->orderBy('departure_time', 'asc')
+            ->orderBy('start_time', 'asc')
             ->first();
 
         if ($pendingRequest) {

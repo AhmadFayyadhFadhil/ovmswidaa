@@ -11,6 +11,7 @@ class Assignment extends Model
 
     protected $fillable = [
         'request_id',
+        'vehicle_id',
         'driver_id',
         'assigned_by',
         'assigned_at',
@@ -34,6 +35,11 @@ class Assignment extends Model
     public function driver()
     {
         return $this->belongsTo(User::class, 'driver_id');
+    }
+
+    public function vehicle()
+    {
+        return $this->belongsTo(Vehicle::class, 'vehicle_id');
     }
 
     public function assignedBy()
