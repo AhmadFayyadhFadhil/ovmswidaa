@@ -20,6 +20,9 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
+        'https://ovms.widatra.com',
+        'http://ovms.widatra.com',
+        env('FRONTEND_URL', 'https://ovms.widatra.com'),
         'http://localhost:3000',
         'http://127.0.0.1:3000',
         'http://localhost:5173',
