@@ -28,9 +28,9 @@ class AssignDriverAction
             // Create assignment
             $priorityVal = 'Normal';
             if (!empty($data['priority'])) {
-                $priorityVal = is_object($data['priority']) ? ($data['priority']->value ?? (string)$data['priority']) : (string)$data['priority'];
+                $priorityVal = $data['priority'] instanceof \BackedEnum ? $data['priority']->value : (is_object($data['priority']) ? ($data['priority']->value ?? 'Normal') : (string)$data['priority']);
             } elseif (!empty($request->priority)) {
-                $priorityVal = is_object($request->priority) ? ($request->priority->value ?? (string)$request->priority) : (string)$request->priority;
+                $priorityVal = $request->priority instanceof \BackedEnum ? $request->priority->value : (is_object($request->priority) ? ($request->priority->value ?? 'Normal') : (string)$request->priority);
             }
 
             $isUrgent = in_array(strtolower($priorityVal), ['urgent', 'critical'], true);

@@ -104,7 +104,7 @@ class AssignmentController extends Controller
             $vehicleRequest = VehicleRequest::findOrFail($validated['request_id']);
 
             if (!empty($validated['is_external'])) {
-                $priority = $validated['priority'] ?? $vehicleRequest->priority->value ?? 'Normal';
+                $priority = $validated['priority'] ?? ($vehicleRequest->priority instanceof \BackedEnum ? $vehicleRequest->priority->value : ($vehicleRequest->priority ?? 'Normal'));
                 // Removed strict priority constraint: Urgent and Critical can now use third party fleet if needed
 
                 $photoPath = null;

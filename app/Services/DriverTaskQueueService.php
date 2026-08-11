@@ -55,7 +55,8 @@ class DriverTaskQueueService
                 $pendingRequest->update(['status' => RequestStatus::DRIVER_ASSIGNED]);
             }
 
-            Log::info("DriverTaskQueue: Driver ID {$driverId} auto-reverted to pending Request #{$pendingRequest->id} ({$pendingRequest->priority}).");
+            $priorityStr = $pendingRequest->priority instanceof \BackedEnum ? $pendingRequest->priority->value : (string)($pendingRequest->priority ?? 'Normal');
+            Log::info("DriverTaskQueue: Driver ID {$driverId} auto-reverted to pending Request #{$pendingRequest->id} ({$priorityStr}).");
             return true;
         }
 
