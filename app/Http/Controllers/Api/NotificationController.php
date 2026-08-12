@@ -283,6 +283,56 @@ class NotificationController extends Controller
     }
 
     /**
+     * Delete/hide all notifications for current user.
+     */
+    public function deleteAll(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            if (!$user) {
+                return $this->jsonNoCache(['status' => 'error', 'message' => 'Unauthenticated'], 401);
+            }
+
+            $ids = $request->input('ids', []);
+
+            if (empty($ids)) {
+                $ids = VehicleRequest::orderBy('id', 'desc')
+                    ->take(100)
+                    ->pluck('id')
+                    ->map(fn($id) => (string) $id)
+                    ->toArray();
+            }
+
+            foreach ($ids as $rawId) {
+                $notifId = $this->cleanId($rawId);
+                $state = UserNotificationState::firstOrNew([
+                    'user_id'         => $user->id,
+                    'notification_id' => $notifId,
+                ]);
+                $state->is_deleted = true;
+                if ($state->is_read === null) {
+                    $state->is_read = true;
+                }
+                $state->save();
+            }
+
+            Log::info("All notifications deleted for user {$user->id}");
+
+            return $this->jsonNoCache([
+                'status'  => 'success',
+                'message' => 'Semua notifikasi berhasil dihapus',
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Notification deleteAll error: ' . $e->getMessage());
+            return $this->jsonNoCache([
+                'status'  => 'error',
+                'message' => 'Gagal menghapus semua notifikasi: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Diagnostic test endpoint — verifies table exists, insert works, read works.
      */
     public function test(Request $request): JsonResponse
