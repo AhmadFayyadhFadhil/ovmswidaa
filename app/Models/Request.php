@@ -34,6 +34,7 @@ class Request extends Model
         'started_at',
         'completed_at',
         'rejected_reason',
+        'cancelled_by',
         'driver_response_status',
         'estimated_duration',
         'is_external',
@@ -120,6 +121,11 @@ class Request extends Model
     public function driver()
     {
         return $this->belongsTo(User::class, 'driver_id');
+    }
+
+    public function cancelledBy()
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     public function vehicle()

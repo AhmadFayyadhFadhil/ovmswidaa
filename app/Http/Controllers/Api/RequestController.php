@@ -417,6 +417,7 @@ class RequestController extends Controller
             $vehicleRequest->update([
                 'status'          => RequestStatus::CANCELLED,
                 'rejected_reason' => $reason,
+                'cancelled_by'    => \Illuminate\Support\Facades\Auth::id(),
             ]);
         });
 

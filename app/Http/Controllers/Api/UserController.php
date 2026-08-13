@@ -238,6 +238,14 @@ class UserController extends Controller
                 $role = 'GA';
             }
 
+            // Guard: Non-Admin users (like GA) cannot create Admin accounts
+            if ($role === 'Admin' && !$this->isAdmin()) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Hanya Superadmin yang berhak membuat akun dengan role Admin.',
+                ], 403);
+            }
+
             if ($role === 'Approver' && empty($validated['rank'] ?? null)) {
                 return response()->json([
                     'status'  => 'error',
@@ -302,7 +310,14 @@ class UserController extends Controller
 
     public function show(User $user): JsonResponse
     {
-        if (!$this->isAdmin()) {
+        $currentUser = Auth::user();
+        $isAuthorized = $currentUser && (
+            $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
+            $currentUser->isHrGaHead() ||
+            ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
+        );
+
+        if (!$isAuthorized) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -327,6 +342,14 @@ class UserController extends Controller
 
             if (!$isGaOrHrHead && !$this->isAdmin()) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+            }
+
+            // Guard: Non-Admin users cannot edit an Admin user's profile
+            if ($user->hasRoleDirect('Admin') && !$this->isAdmin()) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Hanya Superadmin yang berhak mengedit akun Admin.',
+                ], 403);
             }
 
             if ($isDutyStatusOnly) {
@@ -371,10 +394,16 @@ class UserController extends Controller
             if ($role === 'Ga') {
                 $role = 'GA';
             }
-            $targetRole = $role ?? ($user->getRoleNames()[0] ?? null);
 
-            // SIM A photo is optional for Driver role
-            // Photo will be stored if provided, existing photo preserved if not
+            // Guard: Non-Admin users cannot assign the Admin role
+            if ($role === 'Admin' && !$this->isAdmin()) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Hanya Superadmin yang berhak menetapkan role Admin.',
+                ], 403);
+            }
+
+            $targetRole = $role ?? ($user->getRoleNames()[0] ?? null);
 
             if ($role === 'Approver' && empty($validated['rank'] ?? null)) {
                 return response()->json([
@@ -392,9 +421,6 @@ class UserController extends Controller
             }
 
             unset($validated['role']);
-
-            // Password hashing is handled by User model's 'hashed' cast
-            // No need to call Hash::make() here
 
             $simFile = $request->file('sim_a_photo') ?? $request->file('sim_photo') ?? $request->file('photo');
             if ($simFile) {
@@ -432,7 +458,14 @@ class UserController extends Controller
 
     public function destroy(User $user): JsonResponse
     {
-        if (!$this->isAdmin()) {
+        $currentUser = Auth::user();
+        $isAuthorized = $currentUser && (
+            $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
+            $currentUser->isHrGaHead() ||
+            ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
+        );
+
+        if (!$isAuthorized) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -440,6 +473,29 @@ class UserController extends Controller
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Tidak dapat menghapus akun sendiri',
+            ], 422);
+        }
+
+        // Guard: Non-Admin users cannot delete Admin accounts
+        if ($user->hasRoleDirect('Admin') && !$this->isAdmin()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Hanya Superadmin yang berhak menghapus akun Admin.',
+            ], 403);
+        }
+
+        // Guard: Cannot delete user involved in active trips (ON_GOING or DRIVER_ASSIGNED)
+        $hasActiveTrips = \App\Models\Request::where(function ($q) use ($user) {
+                $q->where('user_id', $user->id)
+                  ->orWhere('driver_id', $user->id);
+            })
+            ->whereIn('status', [RequestStatus::DRIVER_ASSIGNED->value, RequestStatus::ON_GOING->value])
+            ->exists();
+
+        if ($hasActiveTrips) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Tidak dapat menghapus user ini karena sedang terlibat dalam perjalanan aktif.',
             ], 422);
         }
 
