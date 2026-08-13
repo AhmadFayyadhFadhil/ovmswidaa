@@ -54,7 +54,7 @@ class SettingController extends Controller
             if ($setting->key === 'company_logo' && $value) {
                 $filename = basename($value);
                 $fullPath = storage_path('app/public/settings/' . $filename);
-                $value = file_exists($fullPath) ? url('api/assets/settings/' . $filename) : null;
+                $value = file_exists($fullPath) ? asset('storage/settings/' . $filename) : null;
             } elseif ($setting->type === 'boolean') {
                 $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
             }
@@ -218,7 +218,7 @@ class SettingController extends Controller
                 'status' => 'success',
                 'message' => 'Logo perusahaan berhasil diperbarui',
                 'data' => [
-                    'logo_url' => url('api/assets/settings/' . $filename)
+                    'logo_url' => asset('storage/settings/' . $filename)
                 ]
             ]);
         } catch (\Throwable $e) {
@@ -317,7 +317,7 @@ class SettingController extends Controller
             $filename = basename($logo);
             $fullPath = storage_path('app/public/settings/' . $filename);
             if (file_exists($fullPath)) {
-                $logoUrl = url('api/assets/settings/' . $filename);
+                $logoUrl = asset('storage/settings/' . $filename);
             }
         }
 
