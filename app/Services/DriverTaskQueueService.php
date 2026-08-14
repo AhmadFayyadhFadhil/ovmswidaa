@@ -47,8 +47,24 @@ class DriverTaskQueueService
             ->first();
 
         if ($pendingRequest) {
-            // Driver has a pending task! Restore driver availability status
-            $newStatus = ($pendingRequest->status === RequestStatus::ON_GOING) ? 'on_trip' : 'assigned';
+            // Determine if the driver is TRULY on a trip right now
+            $isTrulyOnTrip = false;
+            if ($pendingRequest->relationLoaded('itineraries') || $pendingRequest->itineraries()->exists()) {
+                $isTrulyOnTrip = $pendingRequest->itineraries()->where(function ($q) use ($driverId) {
+                    $q->where(function ($sq) use ($driverId) {
+                        $sq->where('driver_id', $driverId)->orWhereNull('driver_id');
+                    })->where(function ($sq2) {
+                        $sq2->where('morning_status', 'on_going')
+                            ->orWhere('afternoon_status', 'on_going')
+                            ->orWhere('status', 'on_going');
+                    });
+                })->exists();
+            } else {
+                $isTrulyOnTrip = ($pendingRequest->status === RequestStatus::ON_GOING);
+            }
+
+            // Driver is only 'on_trip' if an active segment is ongoing on the road, otherwise 'available'
+            $newStatus = $isTrulyOnTrip ? 'on_trip' : 'available';
             $driver->update(['availability_status' => $newStatus]);
 
             if ($pendingRequest->status === RequestStatus::APPROVED_HRD_GA) {
@@ -56,7 +72,7 @@ class DriverTaskQueueService
             }
 
             $priorityStr = $pendingRequest->priority instanceof \BackedEnum ? $pendingRequest->priority->value : (string)($pendingRequest->priority ?? 'Normal');
-            Log::info("DriverTaskQueue: Driver ID {$driverId} auto-reverted to pending Request #{$pendingRequest->id} ({$priorityStr}).");
+            Log::info("DriverTaskQueue: Driver ID {$driverId} status updated to {$newStatus} for Request #{$pendingRequest->id} ({$priorityStr}).");
             return true;
         }
 

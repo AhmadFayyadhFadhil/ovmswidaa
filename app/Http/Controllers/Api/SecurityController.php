@@ -380,9 +380,13 @@ class SecurityController extends Controller
                                 'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                             ]);
+                        } else {
+                            $vehicleRequest->update([
+                                'status' => RequestStatus::DRIVER_ASSIGNED,
+                            ]);
                         }
 
-                        $customMessage = 'Scan Checkin Sesi 1 berhasil. Status Driver & Mobil diperbarui.';
+                        $customMessage = 'Scan Checkin Sesi 1 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.';
                     } else if ($todayItinerary->afternoon_status === 'on_going') {
                         $todayItinerary->update([
                             'afternoon_status' => 'completed',
@@ -410,9 +414,13 @@ class SecurityController extends Controller
                                 'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                             ]);
+                        } else {
+                            $vehicleRequest->update([
+                                'status' => RequestStatus::DRIVER_ASSIGNED,
+                            ]);
                         }
 
-                        $customMessage = 'Scan Checkin Sesi 2 berhasil. Status Driver & Mobil diperbarui.';
+                        $customMessage = 'Scan Checkin Sesi 2 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.';
                     }
                 } else {
                     $vehicleRequest->update([

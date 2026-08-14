@@ -159,18 +159,18 @@ class Request extends Model
                 $this->status = RequestStatus::COMPLETED;
             }
         } else {
-            if ($this->status === RequestStatus::COMPLETED) {
-                $anyStarted = $this->itineraries->contains(function ($it) {
-                    return in_array($it->status, ['on_going', 'completed'], true) ||
-                           $it->morning_status === 'on_going' ||
-                           $it->afternoon_status === 'on_going';
-                });
-                $newStatus = $anyStarted ? RequestStatus::ON_GOING : RequestStatus::DRIVER_ASSIGNED;
+            $anyActiveOnGoing = $this->itineraries->contains(function ($it) {
+                return $it->status === 'on_going' ||
+                       $it->morning_status === 'on_going' ||
+                       $it->afternoon_status === 'on_going';
+            });
+            $targetStatus = $anyActiveOnGoing ? RequestStatus::ON_GOING : RequestStatus::DRIVER_ASSIGNED;
+            if ($this->status === RequestStatus::COMPLETED || ($this->status === RequestStatus::ON_GOING && !$anyActiveOnGoing)) {
                 $this->update([
-                    'status'       => $newStatus,
+                    'status'       => $targetStatus,
                     'completed_at' => null,
                 ]);
-                $this->status = $newStatus;
+                $this->status = $targetStatus;
             }
         }
     }
