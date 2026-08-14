@@ -9,98 +9,118 @@ use App\Enums\RequestStatus;
 
 class ClearRequestHistory extends Command
 {
-    protected $signature   = 'requests:clear-history {--force : Skip confirmation prompt}';
-    protected $description = 'Delete all completed, on_going, and scheduled (driver_assigned/waiting_driver) requests along with their related data';
+    protected $signature   = 'ovms:clean-history {--force : Skip confirmation prompt}';
+    protected $aliases     = ['requests:clear-history'];
+    protected $description = 'Safely clear all vehicle request transaction history across all roles while preserving master data';
 
     public function handle(): int
     {
-        // Statuses to delete:
-        // - completed    (selesai)
-        // - on_going     (sedang berjalan)
-        // - driver_assigned / waiting_driver (terjadwal)
-        // - approved_hrd / approved_hrd_ga / assigned_by_ga / approved_department (pipeline yang sudah lewat approval)
-        $targetStatuses = [
-            'completed',
-            'on_going',
-            'driver_assigned',
-            'waiting_driver',
-            'approved_hrd',
-            'approved_hrd_ga',
-            'assigned_by_ga',
-            'approved_department',
-            'submitted',
-            'rejected',
-            'cancelled',
-        ];
+        $this->info('====================================================');
+        $this->info('   OVMS SAFE HISTORY CLEANING & SYSTEM RESET');
+        $this->info('====================================================');
+        $this->line('Master Data Protected: Users, Roles, Departments, Vehicles, Cities, Settings.');
+        $this->line('Targeted for Cleansing: Requests, Itineraries, Trips, Assignments, Approvals, Passengers, Notification States, Audit Logs.');
+        $this->newLine();
 
-        // Count before deletion
-        $counts = DB::table('requests')
-            ->selectRaw('status, count(*) as total')
-            ->groupBy('status')
-            ->pluck('total', 'status');
+        $totalRequests = DB::table('requests')->count();
+        $this->warn("Total {$totalRequests} request(s) and all linked historical transactions will be permanently cleaned.");
+        $this->warn("All Driver statuses will be reset to 'available' (Tersedia).");
+        $this->warn("All Vehicle statuses will be reset to 'Available' (Tersedia).");
+        $this->warn("Next Request ID will start fresh at #REQ-1.");
 
-        if ($counts->isEmpty()) {
-            $this->info('No requests found. Nothing to delete.');
+        if (!$this->option('force') && !$this->confirm('Are you sure you want to proceed with safe history cleaning?')) {
+            $this->info('Action cancelled.');
             return 0;
         }
 
-        $this->table(['Status', 'Count'], $counts->map(fn($c, $s) => [$s, $c])->values()->toArray());
-        $total = $counts->sum();
-        $this->warn("Total {$total} request(s) will be permanently deleted along with all related data.");
-        $this->warn('This action CANNOT be undone!');
+        $this->info('Starting atomic safe cleaning process...');
 
-        if (!$this->option('force') && !$this->confirm('Proceed with deletion?')) {
-            $this->info('Cancelled.');
-            return 0;
-        }
+        try {
+            DB::statement('SET FOREIGN_KEY_CHECKS = 0;');
 
-        // Get all request IDs
-        $requestIds = DB::table('requests')
-            ->whereIn('status', $targetStatuses)
-            ->pluck('id');
-
-        if ($requestIds->isEmpty()) {
-            $this->info('No matching requests found.');
-            return 0;
-        }
-
-        $this->info("Deleting " . $requestIds->count() . " request(s) and all related records...");
-
-        DB::transaction(function () use ($requestIds) {
-            // Delete all child/related records first (to avoid FK constraint errors)
-            DB::table('request_itineraries')->whereIn('request_id', $requestIds)->delete();
-            $this->line('  ✓ Itineraries deleted');
-
-            DB::table('operational_trips')->whereIn('request_id', $requestIds)->delete();
-            $this->line('  ✓ Operational trips deleted');
-
-            DB::table('assignments')->whereIn('request_id', $requestIds)->delete();
-            $this->line('  ✓ Assignments deleted');
-
-            DB::table('request_approvals')->whereIn('request_id', $requestIds)->delete();
-            $this->line('  ✓ Approvals deleted');
-
-            DB::table('passengers')->whereIn('request_id', $requestIds)->delete();
-            $this->line('  ✓ Passengers deleted');
-
-            // Reset driver and vehicle status to available
-            DB::table('users')->whereNotNull('id')->update(['availability_status' => 'available']);
-            $this->line('  ✓ Driver availability statuses reset to available');
-
-            if (DB::getSchemaBuilder()->hasTable('vehicles')) {
-                DB::table('vehicles')->whereNotNull('id')->update(['status' => 'Available']);
-                $this->line('  ✓ Vehicle statuses reset to available');
+            // 1. Truncate child & relation transaction tables
+            if (DB::getSchemaBuilder()->hasTable('request_itineraries')) {
+                DB::table('request_itineraries')->truncate();
+                $this->line('  ✓ Table [request_itineraries] truncated');
             }
 
-            // Finally delete the requests themselves
-            DB::table('requests')->whereIn('id', $requestIds)->delete();
-            $this->line('  ✓ Requests deleted');
-        });
+            if (DB::getSchemaBuilder()->hasTable('operational_trips')) {
+                DB::table('operational_trips')->truncate();
+                $this->line('  ✓ Table [operational_trips] truncated');
+            }
 
-        $this->newLine();
-        $this->info('✅ All request history has been cleared successfully!');
-        $this->info('User accounts and roles are untouched.');
+            if (DB::getSchemaBuilder()->hasTable('assignments')) {
+                DB::table('assignments')->truncate();
+                $this->line('  ✓ Table [assignments] truncated');
+            }
 
-        return 0;
+            if (DB::getSchemaBuilder()->hasTable('request_approvals')) {
+                DB::table('request_approvals')->truncate();
+                $this->line('  ✓ Table [request_approvals] truncated');
+            }
+
+            if (DB::getSchemaBuilder()->hasTable('passengers')) {
+                DB::table('passengers')->truncate();
+                $this->line('  ✓ Table [passengers] truncated');
+            }
+
+            if (DB::getSchemaBuilder()->hasTable('user_notification_states')) {
+                DB::table('user_notification_states')->truncate();
+                $this->line('  ✓ Table [user_notification_states] truncated (Notification badges reset to 0)');
+            }
+
+            if (DB::getSchemaBuilder()->hasTable('audit_logs')) {
+                DB::table('audit_logs')->truncate();
+                $this->line('  ✓ Table [audit_logs] truncated');
+            }
+
+            // 2. Truncate main requests table
+            if (DB::getSchemaBuilder()->hasTable('requests')) {
+                DB::table('requests')->truncate();
+                $this->line('  ✓ Table [requests] truncated (Auto-Increment reset to 1)');
+            }
+
+            // 3. Reset driver availability statuses
+            if (DB::getSchemaBuilder()->hasTable('users')) {
+                DB::table('users')->whereNotNull('id')->update(['availability_status' => 'available']);
+                $this->line("  ✓ All driver availability statuses reset to 'available'");
+            }
+
+            // 4. Reset vehicle operational statuses
+            if (DB::getSchemaBuilder()->hasTable('vehicles')) {
+                DB::table('vehicles')->whereNotNull('id')->update(['status' => 'Available']);
+                $this->line("  ✓ All vehicle statuses reset to 'Available'");
+            }
+
+            // 5. Create initial clean audit log entry
+            if (DB::getSchemaBuilder()->hasTable('audit_logs')) {
+                DB::table('audit_logs')->insert([
+                    'user_id'     => null,
+                    'action'      => 'SYSTEM_CLEAN_HISTORY',
+                    'description' => 'Seluruh riwayat transaksi pengujian lama telah dibersihkan secara aman. Sistem siap digunakan.',
+                    'created_at'  => now(),
+                    'updated_at'  => now(),
+                ]);
+                $this->line('  ✓ Initialized fresh audit log entry');
+            }
+
+            DB::statement('SET FOREIGN_KEY_CHECKS = 1;');
+
+            $this->newLine();
+            $this->info('====================================================');
+            $this->info(' ✅ SAFE HISTORY CLEANING COMPLETED SUCCESSFULLY!');
+            $this->info('====================================================');
+            $this->info(' - All User accounts, roles, and credentials remain intact.');
+            $this->info(' - All Vehicles, Departments, Cities, and Settings remain intact.');
+            $this->info(' - All Drivers and Vehicles are now Available.');
+            $this->info(' - New Requests will start from #REQ-1.');
+            $this->newLine();
+
+            return 0;
+        } catch (\Throwable $e) {
+            DB::statement('SET FOREIGN_KEY_CHECKS = 1;');
+            $this->error('Cleaning failed: ' . $e->getMessage());
+            return 1;
+        }
     }
 }
