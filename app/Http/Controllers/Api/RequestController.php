@@ -420,11 +420,16 @@ class RequestController extends Controller
                     $trip->delete();
                 }
 
-                $vehicleRequest->update([
+                $updateData = [
                     'status'          => RequestStatus::CANCELLED->value,
                     'rejected_reason' => $reason,
-                    'cancelled_by'    => \Illuminate\Support\Facades\Auth::id(),
-                ]);
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('requests', 'cancelled_by')) {
+                    $updateData['cancelled_by'] = \Illuminate\Support\Facades\Auth::id();
+                }
+
+                $vehicleRequest->update($updateData);
             });
 
             return response()->json(['status' => 'success', 'message' => 'Permintaan berhasil dibatalkan'], 200);
