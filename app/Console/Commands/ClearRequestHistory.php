@@ -94,14 +94,21 @@ class ClearRequestHistory extends Command
 
             // 5. Create initial clean audit log entry
             if (DB::getSchemaBuilder()->hasTable('audit_logs')) {
-                DB::table('audit_logs')->insert([
-                    'user_id'     => null,
-                    'action'      => 'SYSTEM_CLEAN_HISTORY',
-                    'description' => 'Seluruh riwayat transaksi pengujian lama telah dibersihkan secara aman. Sistem siap digunakan.',
-                    'created_at'  => now(),
-                    'updated_at'  => now(),
-                ]);
-                $this->line('  ✓ Initialized fresh audit log entry');
+                try {
+                    DB::table('audit_logs')->insert([
+                        'user_id'        => null,
+                        'auditable_id'   => null,
+                        'auditable_type' => 'App\\Models\\Request',
+                        'action'         => 'SYSTEM_CLEAN_HISTORY',
+                        'old_values'     => json_encode([]),
+                        'new_values'     => json_encode(['info' => 'Clean history executed successfully']),
+                        'created_at'     => now(),
+                        'updated_at'     => now(),
+                    ]);
+                    $this->line('  ✓ Initialized fresh audit log entry');
+                } catch (\Throwable $logErr) {
+                    // Non-fatal fallback for audit log insert
+                }
             }
 
             DB::statement('SET FOREIGN_KEY_CHECKS = 1;');
