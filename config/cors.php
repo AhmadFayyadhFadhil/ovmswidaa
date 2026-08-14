@@ -22,6 +22,10 @@ return [
     'allowed_origins' => [
         'https://ovms.widatra.com',
         'http://ovms.widatra.com',
+        'https://ovmsdev.widatra.com',
+        'http://ovmsdev.widatra.com',
+        'http://ovmsdev.widatra.com:8282',
+        'https://ovmsdev.widatra.com:8282',
         env('FRONTEND_URL', 'https://ovms.widatra.com'),
         'http://localhost:3000',
         'http://127.0.0.1:3000',
@@ -35,7 +39,9 @@ return [
         'http://127.0.0.1:4173',
     ],
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => [
+        '#^https?://.*\.widatra\.com(:[0-9]+)?$#',
+    ],
 
     'allowed_headers' => ['*'],
 
