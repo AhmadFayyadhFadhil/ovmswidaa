@@ -375,15 +375,16 @@ class RequestController extends Controller
             ], 422);
         }
 
-        // Require cancellation reason
-        $httpRequest->validate([
-            'rejected_reason' => 'required|string|min:5|max:500',
-        ], [
-            'rejected_reason.required' => 'Alasan pembatalan wajib diisi.',
-            'rejected_reason.min'      => 'Alasan pembatalan minimal 5 karakter.',
-        ]);
+        // Resolve cancellation reason from input, json, query, or fallback default
+        $reason = $httpRequest->input('rejected_reason') 
+            ?? $httpRequest->json('rejected_reason') 
+            ?? $httpRequest->input('notes') 
+            ?? $httpRequest->json('notes') 
+            ?? $httpRequest->query('rejected_reason');
 
-        $reason = $httpRequest->input('rejected_reason');
+        if (empty($reason) || strlen(trim((string)$reason)) < 3) {
+            $reason = 'Dibatalkan oleh pemohon / koordinator';
+        }
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $reason) {
             // Restore driver availability status if assigned
