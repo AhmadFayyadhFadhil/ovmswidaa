@@ -111,7 +111,12 @@ class CreateRequestAction
             $isExternal = !empty($data['is_external']);
 
             if ($isGA) {
-                $priority = 'Urgent';
+                if (empty($data['priority'])) {
+                    $priority = !empty($data['is_urgent']) ? 'Urgent' : 'Normal';
+                } else {
+                    $priority = $data['priority'];
+                }
+
                 if ($isExternal) {
                     $status = RequestStatus::DRIVER_ASSIGNED;
                     $assignedBy = $user->id;
