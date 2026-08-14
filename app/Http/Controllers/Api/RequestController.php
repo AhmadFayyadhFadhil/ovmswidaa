@@ -357,7 +357,8 @@ class RequestController extends Controller
         $user = Auth::user();
         $isOwner = (int) $vehicleRequest->user_id === (int) $user->id
             || $vehicleRequest->passengers()->where('user_id', $user->id)->exists();
-        $isSameDept = in_array((int) $vehicleRequest->department_id, $user->departmentGroup() ?? [(int) $user->department_id], true);
+        $deptGroup = method_exists($user, 'departmentGroup') ? ($user->departmentGroup() ?? [(int) $user->department_id]) : [(int) $user->department_id];
+        $isSameDept = in_array((int) $vehicleRequest->department_id, $deptGroup, true);
         $isAuthorized = $isOwner || $isSameDept || $user->hasRoleDirect(['Admin', 'GA', 'Employee', 'admin', 'ga', 'employee', 'Approver', 'approver']) || $user->isHrGaHead();
 
         if (!$isAuthorized) {
@@ -368,14 +369,15 @@ class RequestController extends Controller
         }
 
         // Allow deleting requests unless they are already in progress (on_going) or completed
-        if (in_array($vehicleRequest->status, [RequestStatus::ON_GOING, RequestStatus::COMPLETED], true)) {
+        $rawStatus = is_object($vehicleRequest->status) ? $vehicleRequest->status->value : $vehicleRequest->status;
+        if (in_array(strtolower((string)$rawStatus), ['on_going', 'completed'], true)) {
             return response()->json([
                 'status' => 'error', 
                 'message' => 'Tidak dapat membatalkan request yang sedang berjalan atau sudah selesai'
             ], 422);
         }
 
-        // Resolve cancellation reason from input, json, query, or fallback default
+        // Resolve cancellation reason from input, json, query, notes, or fallback default
         $reason = $httpRequest->input('rejected_reason') 
             ?? $httpRequest->json('rejected_reason') 
             ?? $httpRequest->input('notes') 
@@ -386,43 +388,53 @@ class RequestController extends Controller
             $reason = 'Dibatalkan oleh pemohon / koordinator';
         }
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $reason) {
-            // Restore driver availability status if assigned
-            if ($vehicleRequest->driver) {
-                $vehicleRequest->driver->update(['availability_status' => 'available']);
-            }
-
-            foreach ($vehicleRequest->itineraries as $itinerary) {
-                if ($itinerary->driver) {
-                    $itinerary->driver->update(['availability_status' => 'available']);
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $reason) {
+                // Restore driver availability status if assigned
+                if ($vehicleRequest->driver) {
+                    $vehicleRequest->driver->update(['availability_status' => 'available']);
                 }
-            }
 
-            // Delete assignments through Eloquent to trigger observers and restore driver status
-            foreach ($vehicleRequest->assignments as $assignment) {
-                if ($assignment->driver) {
-                    $assignment->driver->update(['availability_status' => 'available']);
+                if ($vehicleRequest->relationLoaded('itineraries') || $vehicleRequest->itineraries()->exists()) {
+                    foreach ($vehicleRequest->itineraries as $itinerary) {
+                        if ($itinerary->driver) {
+                            $itinerary->driver->update(['availability_status' => 'available']);
+                        }
+                    }
+                    $vehicleRequest->itineraries()->update(['status' => 'cancelled']);
                 }
-                $assignment->delete();
-            }
 
-            if ($vehicleRequest->operationalTrip) {
-                if ($vehicleRequest->operationalTrip->driver) {
-                    $vehicleRequest->operationalTrip->driver->update(['availability_status' => 'available']);
+                // Delete assignments through Eloquent to trigger observers and restore driver status
+                foreach ($vehicleRequest->assignments as $assignment) {
+                    if ($assignment->driver) {
+                        $assignment->driver->update(['availability_status' => 'available']);
+                    }
+                    $assignment->delete();
                 }
-                $vehicleRequest->operationalTrip->delete();
-            }
 
-            $vehicleRequest->itineraries()->update(['status' => 'cancelled']);
+                // Delete operational trips and restore driver status
+                foreach ($vehicleRequest->operationalTrips as $trip) {
+                    if ($trip->driver) {
+                        $trip->driver->update(['availability_status' => 'available']);
+                    }
+                    $trip->delete();
+                }
 
-            $vehicleRequest->update([
-                'status'          => RequestStatus::CANCELLED,
-                'rejected_reason' => $reason,
-                'cancelled_by'    => \Illuminate\Support\Facades\Auth::id(),
-            ]);
-        });
+                $vehicleRequest->update([
+                    'status'          => RequestStatus::CANCELLED->value,
+                    'rejected_reason' => $reason,
+                    'cancelled_by'    => \Illuminate\Support\Facades\Auth::id(),
+                ]);
+            });
 
-        return response()->json(['status' => 'success', 'message' => 'Permintaan berhasil dibatalkan'], 200);
+            return response()->json(['status' => 'success', 'message' => 'Permintaan berhasil dibatalkan'], 200);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Error cancelling request: ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal membatalkan permintaan: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function approve(Request $request, VehicleRequest $vehicleRequest, ApproveRequestAction $action): JsonResponse
