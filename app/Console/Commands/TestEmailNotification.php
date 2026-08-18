@@ -18,29 +18,74 @@ class TestEmailNotification extends Command
     {
         $arg = $this->argument('email_or_id');
 
-        // Check if numeric (Request ID)
+        // Check if numeric (Request ID) — trigger the real workflow
         if (is_numeric($arg)) {
             $reqId = (int)$arg;
-            $request = VehicleRequest::with(['user', 'department'])->find($reqId);
+            $request = VehicleRequest::with(['user', 'department', 'passengers.user'])->find($reqId);
             if (!$request) {
                 $this->error("Request #{$reqId} not found in database.");
                 return 1;
             }
 
-            $this->info("Triggering real submitted email workflow for Request #{$reqId}...");
-            $this->line("Requester: " . ($request->user ? $request->user->name . " ({$request->user->email})" : 'No user'));
+            $this->info("====================================================");
+            $this->info("  REAL WORKFLOW EMAIL TEST FOR REQUEST #{$reqId}");
+            $this->info("====================================================");
+            $this->line("Requester: " . ($request->user ? $request->user->name . " <{$request->user->email}>" : 'No user'));
             $this->line("Department: " . ($request->department ? $request->department->name : 'No dept'));
 
+            // Safely display priority
+            $priorityStr = 'N/A';
+            if ($request->priority) {
+                $priorityStr = is_object($request->priority) && property_exists($request->priority, 'value')
+                    ? $request->priority->value
+                    : (string)$request->priority;
+            }
+            $this->line("Priority: " . $priorityStr);
+
+            // Safely display status
+            $statusStr = 'N/A';
+            if ($request->status) {
+                $statusStr = is_object($request->status) && property_exists($request->status, 'value')
+                    ? $request->status->value
+                    : (string)$request->status;
+            }
+            $this->line("Status: " . $statusStr);
+            $this->line("Purpose: " . ($request->purpose ?? 'N/A'));
+            $this->newLine();
+
             try {
+                $this->info("Dispatching sendRequestSubmitted()...");
                 EmailNotificationService::sendRequestSubmitted($request);
-                $this->info("✅ Successfully processed email dispatch for Request #{$reqId}!");
+                $this->newLine();
+                $this->info("====================================================");
+                $this->info(" ✅ Email dispatch completed for Request #{$reqId}!");
+                $this->info("====================================================");
+                $this->line("Check the Laravel log for per-recipient success/failure details:");
+                $this->line("  tail -30 storage/logs/laravel.log");
+                $this->newLine();
                 return 0;
             } catch (\Throwable $e) {
-                $this->error("Failed: " . $e->getMessage());
+                $this->newLine();
+                $this->error("====================================================");
+                $this->error(" ❌ FATAL ERROR during email dispatch:");
+                $this->error(" " . $e->getMessage());
+                $this->error(" File: " . $e->getFile() . ":" . $e->getLine());
+                $this->error("====================================================");
+                $this->newLine();
+                $this->warn("Stack trace (last 5 frames):");
+                $frames = array_slice($e->getTrace(), 0, 5);
+                foreach ($frames as $i => $frame) {
+                    $file = $frame['file'] ?? '?';
+                    $line = $frame['line'] ?? '?';
+                    $func = ($frame['class'] ?? '') . ($frame['type'] ?? '') . ($frame['function'] ?? '?');
+                    $this->line("  #{$i} {$file}:{$line} → {$func}()");
+                }
+                $this->newLine();
                 return 1;
             }
         }
 
+        // --- Normal mode: send a dummy test email to the given address ---
         $destinationEmail = $arg;
 
         if (!filter_var($destinationEmail, FILTER_VALIDATE_EMAIL)) {

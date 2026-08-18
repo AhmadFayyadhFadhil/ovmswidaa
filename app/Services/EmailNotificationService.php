@@ -19,7 +19,39 @@ class EmailNotificationService
     }
 
     /**
+     * Universal safe-string converter.
+     * Converts any value (Enum object, BackedEnum, string, int, null) to a plain string.
+     */
+    private static function safeString($value, string $default = ''): string
+    {
+        if (is_null($value)) {
+            return $default;
+        }
+        if (is_string($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+        // PHP 8.1+ BackedEnum (e.g. RequestPriority, RequestStatus)
+        if (is_object($value)) {
+            if (property_exists($value, 'value')) {
+                return (string) $value->value;
+            }
+            if (method_exists($value, '__toString')) {
+                return (string) $value;
+            }
+            if ($value instanceof \UnitEnum) {
+                return $value->name;
+            }
+            return $default;
+        }
+        return $default;
+    }
+
+    /**
      * Helper to prepare common request payload for email templates.
+     * Every value in the returned array is guaranteed to be a plain string.
      */
     private static function buildCommonData(VehicleRequest $request, string $recipientName, string $badgeText, string $badgeColor, string $subjectTitle, string $messageBody, ?string $extraNote = null, ?string $assignmentInfo = null): array
     {
@@ -38,9 +70,17 @@ class EmailNotificationService
             $destination = $request->destination;
         }
 
-        // Schedule string
-        $startStr = $request->start_time ? $request->start_time->format('d M Y, H:i') : ($request->created_at ? $request->created_at->format('d M Y, H:i') : '-');
-        $endStr   = $request->end_time ? $request->end_time->format('d M Y, H:i') : null;
+        // Schedule string (safely handle Carbon objects and nulls)
+        $startStr = '-';
+        if ($request->start_time) {
+            try { $startStr = $request->start_time->format('d M Y, H:i'); } catch (\Throwable $e) { $startStr = (string)$request->start_time; }
+        } elseif ($request->created_at) {
+            try { $startStr = $request->created_at->format('d M Y, H:i'); } catch (\Throwable $e) { $startStr = (string)$request->created_at; }
+        }
+        $endStr = null;
+        if ($request->end_time) {
+            try { $endStr = $request->end_time->format('d M Y, H:i'); } catch (\Throwable $e) { $endStr = (string)$request->end_time; }
+        }
         $scheduleStr = $endStr ? "{$startStr} WIB s/d {$endStr} WIB" : "{$startStr} WIB";
 
         // Passengers
@@ -52,15 +92,19 @@ class EmailNotificationService
             $passengersList = implode(', ', $names);
         }
 
-        // Trip Type & Priority
-        $priorityVal = is_object($request->priority) && isset($request->priority->value)
-            ? $request->priority->value
-            : (string)($request->priority ?? 'NORMAL');
-        $priority = strtoupper($priorityVal);
-        $tripType = $request->is_multiday ? 'Multi-Day (Beberapa Hari)' : 'Same Day (Satu Hari)';
+        // Priority — safely unwrap Enum
+        $priority = strtoupper(self::safeString($request->priority, 'NORMAL'));
 
-        // Purpose
-        $purpose = $request->purpose ?? $request->trip_purpose ?? 'Perjalanan Dinas Operasional';
+        // Trip Type — safely handle missing column
+        $isMultiday = false;
+        try { $isMultiday = (bool)$request->is_multiday; } catch (\Throwable $e) { /* column may not exist */ }
+        $tripType = $isMultiday ? 'Multi-Day (Beberapa Hari)' : 'Same Day (Satu Hari)';
+
+        // Purpose — safely unwrap (could be Enum or plain string)
+        $purpose = self::safeString($request->purpose, '');
+        if (empty($purpose)) {
+            $purpose = self::safeString($request->trip_purpose ?? null, 'Perjalanan Dinas Operasional');
+        }
 
         $actionUrl = self::getFrontendUrl();
 
@@ -70,7 +114,7 @@ class EmailNotificationService
             'badgeColor'     => $badgeColor,
             'recipientName'  => $recipientName,
             'messageBody'    => $messageBody,
-            'requestId'      => $request->id,
+            'requestId'      => (string) $request->id,
             'requesterName'  => $requesterName,
             'departmentName' => $departmentName,
             'destination'    => $destination,
@@ -79,14 +123,15 @@ class EmailNotificationService
             'priority'       => $priority,
             'tripType'       => $tripType,
             'passengersList' => $passengersList,
-            'assignmentInfo' => $assignmentInfo,
-            'extraNote'      => $extraNote,
+            'assignmentInfo' => $assignmentInfo ?? '',
+            'extraNote'      => $extraNote ?? '',
             'actionUrl'      => $actionUrl,
         ];
     }
 
     /**
      * Safely send an email without throwing exceptions.
+     * Enhanced logging with file+line on failure for debugging.
      */
     private static function sendSafe(?string $recipientEmail, array $data): bool
     {
@@ -100,7 +145,7 @@ class EmailNotificationService
             Log::info("EmailNotificationService: Successfully sent '{$data['subjectTitle']}' to {$recipientEmail}");
             return true;
         } catch (\Throwable $e) {
-            Log::warning("EmailNotificationService: Failed sending email to {$recipientEmail}: " . $e->getMessage());
+            Log::error("EmailNotificationService: FAILED sending to {$recipientEmail}: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
             return false;
         }
     }
@@ -112,10 +157,10 @@ class EmailNotificationService
     {
         $request->loadMissing(['user', 'department']);
         $requester = $request->user;
-        $priorityRaw = is_object($request->priority) && isset($request->priority->value)
-            ? $request->priority->value
-            : (string)($request->priority ?? 'Normal');
-        $isUrgent = in_array(strtolower($priorityRaw), ['urgent', 'critical'], true);
+
+        // Safely extract priority string from Enum
+        $priorityStr = strtolower(self::safeString($request->priority, 'normal'));
+        $isUrgent = in_array($priorityStr, ['urgent', 'critical'], true);
 
         // A. Send Confirmation to Requester
         if ($requester && $requester->email) {
@@ -193,7 +238,7 @@ class EmailNotificationService
     public static function sendUrgentAlertToGA(VehicleRequest $request): void
     {
         $gaUsers = User::whereHas('roles', function ($q) {
-            $q->whereIn('name', ['gahrd', 'GA Coordinator', 'admin', 'Administrator']);
+            $q->whereIn('name', ['gahrd', 'GA Coordinator', 'admin', 'Administrator', 'GA']);
         })->get();
 
         foreach ($gaUsers as $ga) {
@@ -237,7 +282,7 @@ class EmailNotificationService
 
         // B. Notify GAHRD Coordinators
         $gaUsers = User::whereHas('roles', function ($q) {
-            $q->whereIn('name', ['gahrd', 'GA Coordinator']);
+            $q->whereIn('name', ['gahrd', 'GA Coordinator', 'GA']);
         })->get();
 
         foreach ($gaUsers as $ga) {
@@ -292,7 +337,7 @@ class EmailNotificationService
             }
         }
 
-        $assignmentStr = "{$vehicleInfo} &bull; Driver: {$driverName}{$driverPhone}";
+        $assignmentStr = "{$vehicleInfo} • Driver: {$driverName}{$driverPhone}";
 
         // A. Notify Requester
         if ($requester && $requester->email) {
@@ -358,7 +403,7 @@ class EmailNotificationService
 
         // Notify GAHRD Coordinators
         $gaUsers = User::whereHas('roles', function ($q) {
-            $q->whereIn('name', ['gahrd', 'GA Coordinator']);
+            $q->whereIn('name', ['gahrd', 'GA Coordinator', 'GA']);
         })->get();
 
         foreach ($gaUsers as $ga) {
