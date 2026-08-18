@@ -225,7 +225,7 @@ class EmailNotificationService
                 "Terdapat pengajuan permohonan kendaraan dinas baru dari staf departemen Anda yang membutuhkan peninjauan dan persetujuan Anda di OVMS.",
                 $request->notes ?? null
             );
-            $data['actionUrl'] = self::getFrontendUrl() . '/approver/requests';
+            $data['actionUrl'] = self::getFrontendUrl() . "/approver/requests?open_request={$request->id}";
             self::sendSafe($approver->email, $data);
         }
 
@@ -255,7 +255,7 @@ class EmailNotificationService
                     "PERINGATAN PRIORITAS TINGGI: Terdapat permohonan armada mendesak (Urgent/Critical) yang memerlukan perhatian dan penugasan armada secepatnya.",
                     $request->urgency_reason ?? $request->notes ?? 'Prioritas Urgent'
                 );
-                $data['actionUrl'] = self::getFrontendUrl() . '/gahrd/requests';
+                $data['actionUrl'] = self::getFrontendUrl() . "/gahrd/requests?open_request={$request->id}";
                 self::sendSafe($ga->email, $data);
             }
         }
@@ -280,6 +280,7 @@ class EmailNotificationService
                 "Kabar baik! Pengajuan permohonan kendaraan dinas Anda telah DISETUJUI oleh Kepala Departemen dan saat ini diteruskan ke tim GA & HRD untuk penugasan unit armada dan driver.",
                 $request->notes ?? null
             );
+            $data['actionUrl'] = self::getFrontendUrl() . "/employee/myrequests?open_request={$request->id}";
             self::sendSafe($requester->email, $data);
         }
 
@@ -299,7 +300,7 @@ class EmailNotificationService
                     "Permohonan kendaraan #REQ-{$request->id} telah disetujui oleh Kepala Departemen dan siap untuk dialokasikan unit kendaraan dan driver di dashboard GA.",
                     $request->notes ?? null
                 );
-                $data['actionUrl'] = self::getFrontendUrl() . '/gahrd/requests';
+                $data['actionUrl'] = self::getFrontendUrl() . "/gahrd/requests?open_request={$request->id}";
                 self::sendSafe($ga->email, $data);
             }
         }
@@ -354,6 +355,7 @@ class EmailNotificationService
                 $request->notes ?? null,
                 $assignmentStr
             );
+            $data['actionUrl'] = self::getFrontendUrl() . "/employee/myrequests?open_request={$request->id}";
             self::sendSafe($requester->email, $data);
         }
 
@@ -369,7 +371,7 @@ class EmailNotificationService
                 $request->notes ?? null,
                 $assignmentStr
             );
-            $data['actionUrl'] = self::getFrontendUrl() . '/driver/dashboard';
+            $data['actionUrl'] = self::getFrontendUrl() . "/driver/dashboard?open_request={$request->id}";
             self::sendSafe($driverEmail, $data);
         }
     }
