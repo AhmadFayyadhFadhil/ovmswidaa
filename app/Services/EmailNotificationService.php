@@ -127,17 +127,38 @@ class EmailNotificationService
 
         // B. Send Notification to Approver (Department Head)
         $approver = null;
-        if ($request->department_id) {
-            $approver = User::where('department_id', $request->department_id)
+        $deptId = $request->department_id ?? ($requester ? $requester->department_id : null);
+        
+        if ($deptId) {
+            $approver = User::where('department_id', $deptId)
                 ->where('is_department_head', true)
                 ->first();
+
+            if (!$approver) {
+                $approver = User::where('department_id', $deptId)
+                    ->whereHas('roles', function ($q) {
+                        $q->whereIn('name', ['approver', 'Approver', 'manager', 'Manager']);
+                    })->first();
+            }
         }
 
-        if (!$approver && $request->department_id) {
-            $approver = User::where('department_id', $request->department_id)
-                ->whereHas('roles', function ($q) {
-                    $q->whereIn('name', ['approver', 'Approver', 'manager', 'Manager']);
-                })->first();
+        if (!$approver && $request->department) {
+            $deptName = $request->department->name;
+            $approver = User::whereHas('department', function ($dq) use ($deptName) {
+                $dq->where('name', $deptName);
+            })->where(function ($uq) {
+                $uq->where('is_department_head', true)
+                   ->orWhereHas('roles', function ($rq) {
+                       $rq->whereIn('name', ['approver', 'Approver', 'manager', 'Manager']);
+                   });
+            })->first();
+        }
+
+        // Fallback: any user with role 'approver' or 'Approver'
+        if (!$approver) {
+            $approver = User::whereHas('roles', function ($q) {
+                $q->whereIn('name', ['approver', 'Approver']);
+            })->first();
         }
 
         if ($approver && $approver->email && $approver->id !== ($requester->id ?? null)) {
