@@ -53,7 +53,10 @@ class EmailNotificationService
         }
 
         // Trip Type & Priority
-        $priority = strtoupper($request->priority ?? 'NORMAL');
+        $priorityVal = is_object($request->priority) && isset($request->priority->value)
+            ? $request->priority->value
+            : (string)($request->priority ?? 'NORMAL');
+        $priority = strtoupper($priorityVal);
         $tripType = $request->is_multiday ? 'Multi-Day (Beberapa Hari)' : 'Same Day (Satu Hari)';
 
         // Purpose
@@ -109,7 +112,10 @@ class EmailNotificationService
     {
         $request->loadMissing(['user', 'department']);
         $requester = $request->user;
-        $isUrgent  = in_array(strtolower((string) $request->priority), ['urgent', 'critical'], true);
+        $priorityRaw = is_object($request->priority) && isset($request->priority->value)
+            ? $request->priority->value
+            : (string)($request->priority ?? 'Normal');
+        $isUrgent = in_array(strtolower($priorityRaw), ['urgent', 'critical'], true);
 
         // A. Send Confirmation to Requester
         if ($requester && $requester->email) {
