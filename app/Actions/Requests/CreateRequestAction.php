@@ -247,11 +247,13 @@ class CreateRequestAction
 
         // Trigger safe email notification
         try {
-            \Illuminate\Support\Facades\Log::error("[EMAIL-DIAG] CreateRequestAction: about to call sendRequestSubmitted for REQ#{$createdRequest->id}");
             \App\Services\EmailNotificationService::sendRequestSubmitted($createdRequest);
-            \Illuminate\Support\Facades\Log::error("[EMAIL-DIAG] CreateRequestAction: sendRequestSubmitted completed without exception for REQ#{$createdRequest->id}");
         } catch (\Throwable $mailErr) {
-            \Illuminate\Support\Facades\Log::error("[EMAIL-DIAG] CreateRequestAction EXCEPTION: " . $mailErr->getMessage() . " in " . $mailErr->getFile() . ":" . $mailErr->getLine());
+            try {
+                \Illuminate\Support\Facades\Log::warning('Failed triggering email on request creation: ' . $mailErr->getMessage());
+            } catch (\Throwable $logErr) {
+                // Ignore log file permission failures
+            }
         }
 
         return $createdRequest;

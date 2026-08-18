@@ -136,17 +136,19 @@ class EmailNotificationService
     private static function sendSafe(?string $recipientEmail, array $data): bool
     {
         if (empty($recipientEmail) || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
-            Log::error("[EMAIL-DIAG] SKIPPED: empty/invalid email '{$recipientEmail}'");
             return false;
         }
 
         try {
-            Log::error("[EMAIL-DIAG] SENDING to {$recipientEmail} | Subject: {$data['subjectTitle']}");
             Mail::to($recipientEmail)->send(new RequestNotificationMail($data));
-            Log::error("[EMAIL-DIAG] SUCCESS: sent to {$recipientEmail}");
+            try {
+                Log::info("EmailNotificationService: Successfully sent '{$data['subjectTitle']}' to {$recipientEmail}");
+            } catch (\Throwable $logErr) {}
             return true;
         } catch (\Throwable $e) {
-            Log::error("[EMAIL-DIAG] FAILED: {$recipientEmail} | Error: {$e->getMessage()} | File: {$e->getFile()}:{$e->getLine()}");
+            try {
+                Log::warning("EmailNotificationService: FAILED sending to {$recipientEmail}: {$e->getMessage()}");
+            } catch (\Throwable $logErr) {}
             return false;
         }
     }
@@ -156,14 +158,8 @@ class EmailNotificationService
      */
     public static function sendRequestSubmitted(VehicleRequest $request): void
     {
-        Log::error("[EMAIL-DIAG] === sendRequestSubmitted() CALLED for REQ#{$request->id} ===");
-
         $request->loadMissing(['user', 'department']);
         $requester = $request->user;
-
-        Log::error("[EMAIL-DIAG] Requester: " . ($requester ? "{$requester->name} <{$requester->email}>" : 'NULL'));
-        Log::error("[EMAIL-DIAG] Department: " . ($request->department ? $request->department->name : 'NULL') . " (dept_id={$request->department_id})");
-        Log::error("[EMAIL-DIAG] Priority raw type: " . gettype($request->priority) . " | value: " . self::safeString($request->priority, 'NULL'));
 
         // Safely extract priority string from Enum
         $priorityStr = strtolower(self::safeString($request->priority, 'normal'));
@@ -171,7 +167,6 @@ class EmailNotificationService
 
         // A. Send Confirmation to Requester
         if ($requester && $requester->email) {
-            Log::error("[EMAIL-DIAG] Step A: Building email data for requester {$requester->email}...");
             $data = self::buildCommonData(
                 $request,
                 $requester->name,
@@ -181,11 +176,7 @@ class EmailNotificationService
                 "Permohonan peminjaman armada kendaraan Anda telah berhasil diajukan ke sistem OVMS dan sedang menunggu persetujuan dari Kepala Departemen.",
                 $request->notes ?? null
             );
-            Log::error("[EMAIL-DIAG] Step A: Data built OK, calling sendSafe()...");
-            $resultA = self::sendSafe($requester->email, $data);
-            Log::error("[EMAIL-DIAG] Step A: sendSafe result = " . ($resultA ? 'TRUE (sent)' : 'FALSE (failed/skipped)'));
-        } else {
-            Log::error("[EMAIL-DIAG] Step A: SKIPPED — requester is null or has no email");
+            self::sendSafe($requester->email, $data);
         }
 
         // B. Send Notification to Approver (Department Head)
