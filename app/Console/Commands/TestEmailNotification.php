@@ -7,15 +7,41 @@ use App\Models\Request as VehicleRequest;
 use App\Services\EmailNotificationService;
 use App\Mail\RequestNotificationMail;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class TestEmailNotification extends Command
 {
-    protected $signature   = 'ovms:test-email {email : The destination email address to test}';
+    protected $signature   = 'ovms:test-email {email_or_id : Destination email address OR Request ID to test real workflow}';
     protected $description = 'Send a test corporate OVMS email notification via configured Gmail SMTP';
 
     public function handle(): int
     {
-        $destinationEmail = $this->argument('email');
+        $arg = $this->argument('email_or_id');
+
+        // Check if numeric (Request ID)
+        if (is_numeric($arg)) {
+            $reqId = (int)$arg;
+            $request = VehicleRequest::with(['user', 'department'])->find($reqId);
+            if (!$request) {
+                $this->error("Request #{$reqId} not found in database.");
+                return 1;
+            }
+
+            $this->info("Triggering real submitted email workflow for Request #{$reqId}...");
+            $this->line("Requester: " . ($request->user ? $request->user->name . " ({$request->user->email})" : 'No user'));
+            $this->line("Department: " . ($request->department ? $request->department->name : 'No dept'));
+
+            try {
+                EmailNotificationService::sendRequestSubmitted($request);
+                $this->info("✅ Successfully processed email dispatch for Request #{$reqId}!");
+                return 0;
+            } catch (\Throwable $e) {
+                $this->error("Failed: " . $e->getMessage());
+                return 1;
+            }
+        }
+
+        $destinationEmail = $arg;
 
         if (!filter_var($destinationEmail, FILTER_VALIDATE_EMAIL)) {
             $this->error("Invalid email address: '{$destinationEmail}'");
