@@ -13,7 +13,7 @@ class ApproveRequestAction
 {
     public function execute(Request $request, string $role, string $status, ?string $notes = null): Request
     {
-        return DB::transaction(function () use ($request, $role, $status, $notes) {
+        $updatedRequest = DB::transaction(function () use ($request, $role, $status, $notes) {
             $user = Auth::user();
 
             // Validate approver authorization
@@ -53,6 +53,18 @@ class ApproveRequestAction
 
             return $request;
         });
+
+        // Trigger safe email notification
+        try {
+            if ($status === 'rejected') {
+                \App\Services\EmailNotificationService::sendRequestRejected($updatedRequest, $notes);
+            } elseif ($updatedRequest->status === RequestStatus::APPROVED_DEPARTMENT) {
+                \App\Services\EmailNotificationService::sendDepartmentApproved($updatedRequest);
+            }
+        } catch (\Throwable $mailErr) {
+            \Illuminate\Support\Facades\Log::warning('Failed triggering email on approval/rejection: ' . $mailErr->getMessage());
+        }
+
+        return $updatedRequest;
     }
 }
-

@@ -233,6 +233,13 @@ class AssignmentController extends Controller
                 }
             }
 
+            // Trigger safe email notification to driver and requester
+            try {
+                \App\Services\EmailNotificationService::sendDriverAssigned($vehicleRequest->fresh(['user', 'department', 'assignments.driver', 'assignments.vehicle']), $assignment);
+            } catch (\Throwable $mailErr) {
+                \Log::warning('Failed sending driver assigned email: ' . $mailErr->getMessage());
+            }
+
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Kendaraan berhasil di-assign ke driver',

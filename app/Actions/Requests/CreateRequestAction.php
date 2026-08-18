@@ -71,7 +71,7 @@ class CreateRequestAction
             }
         }
 
-        return DB::transaction(function () use ($data) {
+        $createdRequest = DB::transaction(function () use ($data) {
             $user = auth()->user();
             $isGA = $user->hasRoleDirect('GA') || $user->hasRoleDirect('Admin') || $user->isHrGaHead();
             
@@ -244,5 +244,14 @@ class CreateRequestAction
 
             return $request;
         });
+
+        // Trigger safe email notification
+        try {
+            \App\Services\EmailNotificationService::sendRequestSubmitted($createdRequest);
+        } catch (\Throwable $mailErr) {
+            \Illuminate\Support\Facades\Log::warning('Failed triggering email on request creation: ' . $mailErr->getMessage());
+        }
+
+        return $createdRequest;
     }
 }

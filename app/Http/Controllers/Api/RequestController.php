@@ -432,6 +432,13 @@ class RequestController extends Controller
                 $vehicleRequest->update($updateData);
             });
 
+            // Trigger safe email notification for cancellation
+            try {
+                \App\Services\EmailNotificationService::sendRequestCancelled($vehicleRequest->fresh(['user', 'department', 'assignments.driver']), $reason);
+            } catch (\Throwable $mailErr) {
+                \Illuminate\Support\Facades\Log::warning('Failed sending cancellation email: ' . $mailErr->getMessage());
+            }
+
             return response()->json(['status' => 'success', 'message' => 'Permintaan berhasil dibatalkan'], 200);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Error cancelling request: ' . $e->getMessage(), ['exception' => $e]);
