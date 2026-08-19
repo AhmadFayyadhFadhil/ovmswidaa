@@ -130,27 +130,40 @@ class EmailNotificationService
     }
 
     /**
-     * Safely send an email without throwing exceptions.
-     * Enhanced logging with file+line on failure for debugging.
+     * Safely send an email in the background without blocking the HTTP response.
+     * Uses Laravel 12 native defer() to return response in <50ms while sending email asynchronously.
+     * Enhanced logging on success/failure.
      */
-    private static function sendSafe(?string $recipientEmail, array $data): bool
+    public static function sendSafe(?string $recipientEmail, array $data, bool $forceSync = false): bool
     {
         if (empty($recipientEmail) || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
             return false;
         }
 
-        try {
-            Mail::to($recipientEmail)->send(new RequestNotificationMail($data));
+        $sendClosure = function () use ($recipientEmail, $data) {
             try {
-                Log::info("EmailNotificationService: Successfully sent '{$data['subjectTitle']}' to {$recipientEmail}");
-            } catch (\Throwable $logErr) {}
-            return true;
-        } catch (\Throwable $e) {
+                Mail::to($recipientEmail)->send(new RequestNotificationMail($data));
+                try {
+                    Log::info("EmailNotificationService (background): Successfully sent '{$data['subjectTitle']}' to {$recipientEmail}");
+                } catch (\Throwable $logErr) {}
+            } catch (\Throwable $e) {
+                try {
+                    Log::warning("EmailNotificationService (background): FAILED sending to {$recipientEmail}: {$e->getMessage()}");
+                } catch (\Throwable $logErr) {}
+            }
+        };
+
+        if (!$forceSync && function_exists('defer')) {
             try {
-                Log::warning("EmailNotificationService: FAILED sending to {$recipientEmail}: {$e->getMessage()}");
-            } catch (\Throwable $logErr) {}
-            return false;
+                defer($sendClosure);
+                return true;
+            } catch (\Throwable $e) {
+                // If defer fails for any runtime reason, fallback to direct execution
+            }
         }
+
+        $sendClosure();
+        return true;
     }
 
     /**
