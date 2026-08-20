@@ -6,6 +6,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Mail\Mailables\Headers;
 use Illuminate\Queue\SerializesModels;
 
 class RequestNotificationMail extends Mailable
@@ -28,7 +29,7 @@ class RequestNotificationMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: $this->emailData['subjectTitle'] ?? '[OVMS] Pemberitahuan Permohonan Kendaraan',
+            subject: $this->emailData['subjectTitle'] ?? '[OVMS Widatra] Pemberitahuan Permohonan Kendaraan',
         );
     }
 
@@ -39,7 +40,23 @@ class RequestNotificationMail extends Mailable
     {
         return new Content(
             view: 'emails.request-notification',
+            text: 'emails.request-notification-text',
             with: $this->emailData,
+        );
+    }
+
+    /**
+     * Get the message headers for anti-spam deliverability.
+     */
+    public function headers(): Headers
+    {
+        return new Headers(
+            text: [
+                'X-Auto-Response-Suppress' => 'All',
+                'Auto-Submitted'           => 'auto-generated',
+                'X-Mailer'                 => 'OVMS-Widatra-Mailer/2.0',
+                'Precedence'               => 'bulk',
+            ],
         );
     }
 

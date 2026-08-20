@@ -92,6 +92,21 @@
               <td class="details-value" style="color: #475569;">{{ $extraNote }}</td>
             </tr>
             @endif
+            @if(!empty($itinerariesList))
+            <tr>
+              <td class="details-label">Rencana Perjalanan ({{ count($itinerariesList) }} Hari)</td>
+              <td class="details-value">
+                <table style="width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 12px;">
+                  @foreach($itinerariesList as $it)
+                  <tr style="border-bottom: 1px dashed #cbd5e1;">
+                    <td style="padding: 5px 0; font-weight: 600; color: #1e3a8a; width: 42%;">{{ $it['day'] }}</td>
+                    <td style="padding: 5px 0; color: #334155;">{{ $it['destination'] }} @if(!empty($it['activities'])) &bull; <em>{{ $it['activities'] }}</em> @endif</td>
+                  </tr>
+                  @endforeach
+                </table>
+              </td>
+            </tr>
+            @endif
           </table>
 
           @if(!empty($actionUrl))

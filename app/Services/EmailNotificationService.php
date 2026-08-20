@@ -55,7 +55,7 @@ class EmailNotificationService
      */
     private static function buildCommonData(VehicleRequest $request, string $recipientName, string $badgeText, string $badgeColor, string $subjectTitle, string $messageBody, ?string $extraNote = null, ?string $assignmentInfo = null): array
     {
-        $request->loadMissing(['user', 'department', 'passengers.user', 'assignments.driver', 'assignments.vehicle']);
+        $request->loadMissing(['user', 'department', 'passengers.user', 'assignments.driver', 'assignments.vehicle', 'itineraries']);
 
         $requesterName  = $request->user ? $request->user->name : 'Karyawan';
         $departmentName = $request->department ? $request->department->name : ($request->department_id ? "Dept #{$request->department_id}" : 'Umum');
@@ -70,6 +70,37 @@ class EmailNotificationService
             $destination = $request->destination;
         }
 
+        // Calculate Multi-Day & Duration accurately
+        $isMultiday = false;
+        $durationDays = 1;
+        $itinerariesList = [];
+
+        if ($request->itineraries && $request->itineraries->isNotEmpty()) {
+            $durationDays = $request->itineraries->count();
+            $isMultiday = ($durationDays > 1);
+            $itinerariesList = $request->itineraries->map(function ($it, $idx) {
+                $dayNum = $idx + 1;
+                $dateStr = $it->date ? (is_string($it->date) ? date('d M Y', strtotime($it->date)) : $it->date->format('d M Y')) : "Hari {$dayNum}";
+                $dest = $it->destination_city ? "{$it->destination_city} - {$it->destination_place}" : ($it->destination_place ?? $it->destination ?? '-');
+                $acts = $it->activities ?? $it->purpose ?? '';
+                return [
+                    'day' => "Hari {$dayNum} ({$dateStr})",
+                    'destination' => $dest,
+                    'activities' => $acts,
+                ];
+            })->toArray();
+        } elseif ($request->start_time && $request->end_time) {
+            try {
+                $startDay = $request->start_time->copy()->startOfDay();
+                $endDay = $request->end_time->copy()->startOfDay();
+                $diff = $startDay->diffInDays($endDay) + 1;
+                if ($diff > 1) {
+                    $isMultiday = true;
+                    $durationDays = (int) $diff;
+                }
+            } catch (\Throwable $e) {}
+        }
+
         // Schedule string (safely handle Carbon objects and nulls)
         $startStr = '-';
         if ($request->start_time) {
@@ -81,7 +112,14 @@ class EmailNotificationService
         if ($request->end_time) {
             try { $endStr = $request->end_time->format('d M Y, H:i'); } catch (\Throwable $e) { $endStr = (string)$request->end_time; }
         }
-        $scheduleStr = $endStr ? "{$startStr} WIB s/d {$endStr} WIB" : "{$startStr} WIB";
+
+        if ($isMultiday && $endStr) {
+            $scheduleStr = "{$startStr} WIB s/d {$endStr} WIB ({$durationDays} Hari)";
+        } elseif ($endStr) {
+            $scheduleStr = "{$startStr} WIB s/d {$endStr} WIB (1 Hari)";
+        } else {
+            $scheduleStr = "{$startStr} WIB";
+        }
 
         // Passengers
         $passengersList = '';
@@ -94,11 +132,7 @@ class EmailNotificationService
 
         // Priority — safely unwrap Enum
         $priority = strtoupper(self::safeString($request->priority, 'NORMAL'));
-
-        // Trip Type — safely handle missing column
-        $isMultiday = false;
-        try { $isMultiday = (bool)$request->is_multiday; } catch (\Throwable $e) { /* column may not exist */ }
-        $tripType = $isMultiday ? 'Multi-Day (Beberapa Hari)' : 'Same Day (Satu Hari)';
+        $tripType = $isMultiday ? "Multi-Day ({$durationDays} Hari)" : 'Same Day (1 Hari)';
 
         // Purpose — safely unwrap (could be Enum or plain string)
         $purpose = self::safeString($request->purpose, '');
@@ -122,6 +156,9 @@ class EmailNotificationService
             'scheduleStr'    => $scheduleStr,
             'priority'       => $priority,
             'tripType'       => $tripType,
+            'durationDays'   => $durationDays,
+            'isMultiday'     => $isMultiday,
+            'itinerariesList'=> $itinerariesList,
             'passengersList' => $passengersList,
             'assignmentInfo' => $assignmentInfo ?? '',
             'extraNote'      => $extraNote ?? '',
@@ -171,7 +208,7 @@ class EmailNotificationService
      */
     public static function sendRequestSubmitted(VehicleRequest $request): void
     {
-        $request->loadMissing(['user', 'department']);
+        $request->loadMissing(['user', 'department', 'itineraries']);
         $requester = $request->user;
 
         // Safely extract priority string from Enum
@@ -185,7 +222,7 @@ class EmailNotificationService
                 $requester->name,
                 $isUrgent ? 'URGENT DIBUAT' : 'PERMOHONAN DIBUAT',
                 $isUrgent ? '#dc2626' : '#2563eb',
-                "[OVMS] Konfirmasi Pengajuan Permohonan Armada #REQ-{$request->id}",
+                "[OVMS Widatra] Konfirmasi Pengajuan Permohonan Armada #REQ-{$request->id}",
                 "Permohonan peminjaman armada kendaraan Anda telah berhasil diajukan ke sistem OVMS dan sedang menunggu persetujuan dari Kepala Departemen.",
                 $request->notes ?? null
             );
@@ -234,7 +271,7 @@ class EmailNotificationService
                 $approver->name,
                 'MENUNGGU PERSETUJUAN',
                 '#d97706',
-                "[OVMS] Menunggu Persetujuan: Permohonan Armada #REQ-{$request->id} dari " . ($requester->name ?? 'Staf'),
+                "[OVMS Widatra] Menunggu Persetujuan: Permohonan Armada #REQ-{$request->id} dari " . ($requester->name ?? 'Staf'),
                 "Terdapat pengajuan permohonan kendaraan dinas baru dari staf departemen Anda yang membutuhkan peninjauan dan persetujuan Anda di OVMS.",
                 $request->notes ?? null
             );
@@ -262,9 +299,9 @@ class EmailNotificationService
                 $data = self::buildCommonData(
                     $request,
                     $ga->name,
-                    '🚨 PERMOHONAN URGENT',
+                    'PERMOHONAN URGENT',
                     '#dc2626',
-                    "🚨 [URGENT OVMS] Permohonan Mendesak #REQ-{$request->id} — " . ($request->user->name ?? 'Pemohon'),
+                    "[OVMS Widatra] Permohonan Armada Mendesak #REQ-{$request->id} — " . ($request->user->name ?? 'Pemohon'),
                     "PERINGATAN PRIORITAS TINGGI: Terdapat permohonan armada mendesak (Urgent/Critical) yang memerlukan perhatian dan penugasan armada secepatnya.",
                     $request->urgency_reason ?? $request->notes ?? 'Prioritas Urgent'
                 );
@@ -279,7 +316,7 @@ class EmailNotificationService
      */
     public static function sendDepartmentApproved(VehicleRequest $request): void
     {
-        $request->loadMissing(['user', 'department']);
+        $request->loadMissing(['user', 'department', 'itineraries']);
         $requester = $request->user;
 
         // A. Notify Requester
@@ -289,7 +326,7 @@ class EmailNotificationService
                 $requester->name,
                 'DISETUJUI DEPARTEMEN',
                 '#059669',
-                "[OVMS] Pengajuan #REQ-{$request->id} Telah Disetujui Kepala Departemen",
+                "[OVMS Widatra] Pengajuan Permohonan Armada #REQ-{$request->id} Disetujui Kepala Departemen",
                 "Kabar baik! Pengajuan permohonan kendaraan dinas Anda telah DISETUJUI oleh Kepala Departemen dan saat ini diteruskan ke tim GA & HRD untuk penugasan unit armada dan driver.",
                 $request->notes ?? null
             );
@@ -309,7 +346,7 @@ class EmailNotificationService
                     $ga->name,
                     'SIAP PENUGASAN ARMADA',
                     '#2563eb',
-                    "[OVMS] Permohonan #REQ-{$request->id} Siap Ditugaskan Armada & Driver",
+                    "[OVMS Widatra] Permohonan Armada #REQ-{$request->id} Siap Ditugaskan Unit & Driver",
                     "Permohonan kendaraan #REQ-{$request->id} telah disetujui oleh Kepala Departemen dan siap untuk dialokasikan unit kendaraan dan driver di dashboard GA.",
                     $request->notes ?? null
                 );
@@ -324,7 +361,7 @@ class EmailNotificationService
      */
     public static function sendDriverAssigned(VehicleRequest $request, $assignment = null): void
     {
-        $request->loadMissing(['user', 'department', 'assignments.driver', 'assignments.vehicle']);
+        $request->loadMissing(['user', 'department', 'assignments.driver', 'assignments.vehicle', 'itineraries']);
         $requester = $request->user;
 
         // Extract Vehicle & Driver info
@@ -363,7 +400,7 @@ class EmailNotificationService
                 $requester->name,
                 'ARMADA & DRIVER SIAP',
                 '#059669',
-                "🚗 [OVMS] Armada & Driver Telah Ditugaskan untuk Perjalanan #REQ-{$request->id}",
+                "[OVMS Widatra] Unit Armada & Driver Telah Ditugaskan untuk Perjalanan #REQ-{$request->id}",
                 "Unit kendaraan dan driver untuk perjalanan dinas Anda telah berhasil dialokasikan oleh tim GA & HRD. Silakan bersiap sesuai dengan jadwal keberangkatan.",
                 $request->notes ?? null,
                 $assignmentStr
@@ -377,9 +414,9 @@ class EmailNotificationService
             $data = self::buildCommonData(
                 $request,
                 $driverName,
-                '📋 SURAT TUGAS DRIVER',
+                'SURAT TUGAS DRIVER',
                 '#1e40af',
-                "📋 [SURAT TUGAS OVMS] Penugasan Perjalanan Dinas #REQ-{$request->id}",
+                "[OVMS Widatra] Surat Tugas Driver: Penugasan Perjalanan Dinas #REQ-{$request->id}",
                 "Halo Pak {$driverName}, Anda telah ditugaskan untuk melayani perjalanan dinas #REQ-{$request->id}. Mohon pastikan kondisi kendaraan dalam keadaan prima dan standby tepat waktu.",
                 $request->notes ?? null,
                 $assignmentStr
@@ -394,7 +431,7 @@ class EmailNotificationService
      */
     public static function sendRequestRejected(VehicleRequest $request, ?string $reason = null): void
     {
-        $request->loadMissing(['user', 'department']);
+        $request->loadMissing(['user', 'department', 'itineraries']);
         $requester = $request->user;
 
         if ($requester && $requester->email) {
@@ -403,7 +440,7 @@ class EmailNotificationService
                 $requester->name,
                 'PERMOHONAN DITOLAK',
                 '#dc2626',
-                "❌ [OVMS] Pemberitahuan Penolakan Permohonan Armada #REQ-{$request->id}",
+                "[OVMS Widatra] Pemberitahuan Penolakan Permohonan Armada #REQ-{$request->id}",
                 "Mohon maaf, pengajuan permohonan kendaraan dinas Anda #REQ-{$request->id} TIDAK DAPAT DISETUJUI.",
                 $reason ? "Alasan Penolakan: {$reason}" : 'Alasan penolakan tidak dicantumkan.'
             );
@@ -416,7 +453,7 @@ class EmailNotificationService
      */
     public static function sendRequestCancelled(VehicleRequest $request, ?string $reason = null): void
     {
-        $request->loadMissing(['user', 'department', 'assignments.driver']);
+        $request->loadMissing(['user', 'department', 'assignments.driver', 'itineraries']);
         $requesterName = $request->user ? $request->user->name : 'Pemohon';
 
         // Notify GAHRD Coordinators
@@ -431,7 +468,7 @@ class EmailNotificationService
                     $ga->name,
                     'PERMOHONAN DIBATALKAN',
                     '#64748b',
-                    "⚠️ [OVMS] Permohonan Armada #REQ-{$request->id} Telah Dibatalkan",
+                    "[OVMS Widatra] Permohonan Armada #REQ-{$request->id} Telah Dibatalkan",
                     "Pemberitahuan: Permohonan kendaraan #REQ-{$request->id} dari {$requesterName} telah DIBATALKAN. Jadwal armada/driver terkait telah dibebaskan kembali.",
                     $reason ? "Alasan Pembatalan: {$reason}" : 'Dibatalkan oleh pengguna.'
                 );
@@ -448,7 +485,7 @@ class EmailNotificationService
                         $asg->driver->name,
                         'TUGAS DIBATALKAN',
                         '#64748b',
-                        "⚠️ [OVMS] Penugasan Perjalanan #REQ-{$request->id} Dibatalkan",
+                        "[OVMS Widatra] Penugasan Perjalanan Dinas #REQ-{$request->id} Dibatalkan",
                         "Pemberitahuan: Penugasan perjalanan dinas #REQ-{$request->id} telah DIBATALKAN. Anda tidak perlu melakukan perjalanan ini.",
                         $reason ? "Alasan Pembatalan: {$reason}" : 'Dibatalkan oleh sistem.'
                     );
