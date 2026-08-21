@@ -121,6 +121,87 @@ class UserController extends Controller
             });
         }
 
+        $excludeRequestId = $request->query('exclude_busy_for_request_id');
+        if ($excludeRequestId) {
+            $targetRequest = \App\Models\Request::find($excludeRequestId);
+            if ($targetRequest && $targetRequest->start_time) {
+                $startTime = $targetRequest->start_time;
+                $endTime = $targetRequest->end_time;
+                if (!$endTime) {
+                    $duration = $targetRequest->estimated_duration ?: 3;
+                    $endTime = (clone $startTime)->addHours($duration);
+                }
+
+                $overlappingRequestIds = \App\Models\Request::where('id', '!=', $targetRequest->id)
+                    ->whereNotIn('status', [
+                        \App\Enums\RequestStatus::REJECTED,
+                        \App\Enums\RequestStatus::COMPLETED,
+                        \App\Enums\RequestStatus::CANCELLED
+                    ])
+                    ->where(function ($q) use ($startTime, $endTime) {
+                        $q->where(function ($sub) use ($startTime, $endTime) {
+                            $sub->where('start_time', '<', $endTime)
+                                ->where('end_time', '>', $startTime);
+                        });
+                    })
+                    ->pluck('id');
+
+                $busyDriverIds = [];
+
+                $busyFromRequests = \App\Models\Request::whereIn('id', $overlappingRequestIds)
+                    ->whereNotNull('driver_id')
+                    ->pluck('driver_id')
+                    ->toArray();
+                $busyDriverIds = array_merge($busyDriverIds, $busyFromRequests);
+
+                $busyFromTrips = \App\Models\OperationalTrip::whereIn('request_id', $overlappingRequestIds)
+                    ->where('status', '!=', 'cancelled')
+                    ->whereNotNull('driver_id')
+                    ->pluck('driver_id')
+                    ->toArray();
+                $busyDriverIds = array_merge($busyDriverIds, $busyFromTrips);
+
+                $busyFromItineraries = \App\Models\RequestItinerary::whereIn('request_id', $overlappingRequestIds)
+                    ->whereNotNull('driver_id')
+                    ->pluck('driver_id')
+                    ->toArray();
+                $busyDriverIds = array_merge($busyDriverIds, $busyFromItineraries);
+
+                $busyDriverIds = array_unique(array_filter($busyDriverIds));
+
+                if (!empty($busyDriverIds)) {
+                    $query->whereNotIn('id', $busyDriverIds);
+                }
+            }
+        } elseif ($request->query('target_start_time') && $request->query('target_end_time')) {
+            try {
+                $startTime = \Carbon\Carbon::parse($request->query('target_start_time'));
+                $endTime = \Carbon\Carbon::parse($request->query('target_end_time'));
+
+                $overlappingRequestIds = \App\Models\Request::whereNotIn('status', [
+                        \App\Enums\RequestStatus::REJECTED,
+                        \App\Enums\RequestStatus::COMPLETED,
+                        \App\Enums\RequestStatus::CANCELLED
+                    ])
+                    ->where(function ($q) use ($startTime, $endTime) {
+                        $q->where('start_time', '<', $endTime)
+                          ->where('end_time', '>', $startTime);
+                    })
+                    ->pluck('id');
+
+                $busyDriverIds = \App\Models\Request::whereIn('id', $overlappingRequestIds)
+                    ->whereNotNull('driver_id')
+                    ->pluck('driver_id')
+                    ->toArray();
+
+                $busyDriverIds = array_unique(array_filter($busyDriverIds));
+
+                if (!empty($busyDriverIds)) {
+                    $query->whereNotIn('id', $busyDriverIds);
+                }
+            } catch (\Throwable $e) {}
+        }
+
         $status = $request->query('status');
         if ($status) {
             $upperStatus = strtoupper($status);

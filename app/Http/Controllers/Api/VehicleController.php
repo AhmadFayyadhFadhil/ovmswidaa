@@ -33,20 +33,15 @@ class VehicleController extends Controller
                 }
                 
                 $overlappingRequestIds = \App\Models\Request::where('id', '!=', $targetRequest->id)
-                    ->where('status', '!=', \App\Enums\RequestStatus::REJECTED)
-                    ->where('status', '!=', \App\Enums\RequestStatus::COMPLETED)
+                    ->whereNotIn('status', [
+                        \App\Enums\RequestStatus::REJECTED,
+                        \App\Enums\RequestStatus::COMPLETED,
+                        \App\Enums\RequestStatus::CANCELLED
+                    ])
                     ->where(function ($q) use ($startTime, $endTime) {
                         $q->where(function ($sub) use ($startTime, $endTime) {
-                            $sub->where('start_time', '>=', $startTime)
-                                ->where('start_time', '<', $endTime);
-                        })
-                        ->orWhere(function ($sub) use ($startTime, $endTime) {
-                            $sub->where('end_time', '>', $startTime)
-                                ->where('end_time', '<=', $endTime);
-                        })
-                        ->orWhere(function ($sub) use ($startTime, $endTime) {
-                            $sub->where('start_time', '<=', $startTime)
-                                ->where('end_time', '>=', $endTime);
+                            $sub->where('start_time', '<', $endTime)
+                                ->where('end_time', '>', $startTime);
                         });
                     })
                     ->pluck('id');
@@ -65,6 +60,12 @@ class VehicleController extends Controller
                     ->pluck('vehicle_id')
                     ->toArray();
                 $busyVehicleIds = array_merge($busyVehicleIds, $busyFromTrips);
+
+                $busyFromItineraries = \App\Models\RequestItinerary::whereIn('request_id', $overlappingRequestIds)
+                    ->whereNotNull('vehicle_id')
+                    ->pluck('vehicle_id')
+                    ->toArray();
+                $busyVehicleIds = array_merge($busyVehicleIds, $busyFromItineraries);
 
                 $busyVehicleIds = array_unique(array_filter($busyVehicleIds));
 
