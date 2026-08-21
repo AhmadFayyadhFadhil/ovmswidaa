@@ -121,6 +121,19 @@ class UserController extends Controller
             });
         }
 
+        $simStatusFilter = $request->query('sim_status');
+        if ($simStatusFilter) {
+            $today = now()->toDateString();
+            $h30 = now()->addDays(30)->toDateString();
+            if ($simStatusFilter === 'expiring_soon' || $simStatusFilter === 'H-30' || $simStatusFilter === 'h-30') {
+                $query->whereNotNull('sim_expiry_date')->whereBetween('sim_expiry_date', [$today, $h30]);
+            } elseif ($simStatusFilter === 'expired') {
+                $query->whereNotNull('sim_expiry_date')->where('sim_expiry_date', '<', $today);
+            } elseif ($simStatusFilter === 'valid' || $simStatusFilter === 'active') {
+                $query->whereNotNull('sim_expiry_date')->where('sim_expiry_date', '>', $h30);
+            }
+        }
+
         $excludeRequestId = $request->query('exclude_busy_for_request_id');
         if ($excludeRequestId) {
             $targetRequest = \App\Models\Request::find($excludeRequestId);
@@ -303,15 +316,18 @@ class UserController extends Controller
             ]);
 
             $validated = $request->validate([
-                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')],
-                'name'     => 'required|string|max:255',
-                'email'    => ['required', 'email', Rule::unique('users', 'email')],
-                'password' => ['required', Password::min(6)],
-                'role'     => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
-                'rank'     => 'required_if:role,Approver|nullable|string|max:255',
-                'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+                'nik'             => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')],
+                'sim_number'      => ['nullable', 'string', 'max:50'],
+                'sim_type'        => ['nullable', 'string', 'max:50'],
+                'sim_expiry_date' => ['nullable', 'date'],
+                'name'            => 'required|string|max:255',
+                'email'           => ['required', 'email', Rule::unique('users', 'email')],
+                'password'        => ['required', Password::min(6)],
+                'role'            => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
+                'rank'            => 'required_if:role,Approver|nullable|string|max:255',
+                'department_id'   => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
-                'sim_a_photo' => ['nullable'],
+                'sim_a_photo'     => ['nullable'],
             ]);
 
             $role = ucfirst(strtolower($validated['role']));
@@ -346,6 +362,9 @@ class UserController extends Controller
 
             $data = [
                 'nik'                => $validated['nik'] ?? null,
+                'sim_number'         => $validated['sim_number'] ?? null,
+                'sim_type'           => $validated['sim_type'] ?? ($role === 'Driver' ? 'SIM A' : null),
+                'sim_expiry_date'    => $validated['sim_expiry_date'] ?? null,
                 'name'               => $validated['name'],
                 'email'              => $validated['email'],
                 'password'           => $validated['password'],
@@ -460,15 +479,18 @@ class UserController extends Controller
             ]);
 
             $validated = $request->validate([
-                'nik'      => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)],
-                'name'     => 'sometimes|required|string|max:255',
-                'email'    => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
-                'password' => ['sometimes', Password::min(6)],
-                'role'     => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
-                'rank'     => 'required_if:role,Approver|nullable|string|max:255',
-                'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+                'nik'             => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)],
+                'sim_number'      => ['nullable', 'string', 'max:50'],
+                'sim_type'        => ['nullable', 'string', 'max:50'],
+                'sim_expiry_date' => ['nullable'],
+                'name'            => 'sometimes|required|string|max:255',
+                'email'           => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+                'password'        => ['sometimes', Password::min(6)],
+                'role'            => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
+                'rank'            => 'required_if:role,Approver|nullable|string|max:255',
+                'department_id'   => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
-                'sim_a_photo' => ['nullable'],
+                'sim_a_photo'     => ['nullable'],
             ]);
 
             $role = isset($validated['role']) ? ucfirst(strtolower($validated['role'])) : null;
@@ -761,25 +783,52 @@ class UserController extends Controller
             }
         }
 
+        $simStatus = 'not_set';
+        $simExpiryDaysLeft = null;
+        $simExpiryDateStr = null;
+
+        if ($user->sim_expiry_date) {
+            $simExpiryDateStr = $user->sim_expiry_date instanceof \DateTimeInterface 
+                ? $user->sim_expiry_date->format('Y-m-d') 
+                : date('Y-m-d', strtotime((string)$user->sim_expiry_date));
+            
+            $today = \Carbon\Carbon::today();
+            $expiry = \Carbon\Carbon::parse($user->sim_expiry_date)->startOfDay();
+            $simExpiryDaysLeft = (int) $today->diffInDays($expiry, false);
+
+            if ($simExpiryDaysLeft < 0) {
+                $simStatus = 'expired';
+            } elseif ($simExpiryDaysLeft <= 30) {
+                $simStatus = 'expiring_soon';
+            } else {
+                $simStatus = 'valid';
+            }
+        }
+
         return [
-            'id'         => $user->id,
-            'nik'        => $user->nik,
-            'name'       => $user->name,
-            'email'      => $user->email,
-            'rank'       => $user->rank,
-            'department_id' => $user->department_id,
-            'department_name' => $user->department?->name,
+            'id'                  => $user->id,
+            'nik'                 => $user->nik,
+            'sim_number'          => $user->sim_number,
+            'sim_type'            => $user->sim_type ?? 'SIM A',
+            'sim_expiry_date'     => $simExpiryDateStr,
+            'sim_status'          => $simStatus,
+            'sim_expiry_days_left' => $simExpiryDaysLeft,
+            'name'                => $user->name,
+            'email'               => $user->email,
+            'rank'                => $user->rank,
+            'department_id'       => $user->department_id,
+            'department_name'     => $user->department?->name,
             'availability_status' => $computedStatus ?? 'available',
-            'is_department_head' => $user->is_department_head ?? false,
-            'avatar_url'     => $user->avatar ? url('storage/' . $user->avatar) : null,
-            'sim_a_photo_url' => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
-            'is_active'  => $user->is_active ?? false,
-            'can_request' => $user->can_request ?? false,
-            'availability_start' => $user->availability_start,
-            'availability_end' => $user->availability_end,
-            'roles'      => $user->getRoleNames(),
-            'created_at' => $user->created_at,
-            'updated_at' => $user->updated_at,
+            'is_department_head'  => $user->is_department_head ?? false,
+            'avatar_url'          => $user->avatar ? url('storage/' . $user->avatar) : null,
+            'sim_a_photo_url'     => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
+            'is_active'           => $user->is_active ?? false,
+            'can_request'         => $user->can_request ?? false,
+            'availability_start'  => $user->availability_start,
+            'availability_end'    => $user->availability_end,
+            'roles'               => $user->getRoleNames(),
+            'created_at'          => $user->created_at,
+            'updated_at'          => $user->updated_at,
         ];
     }
 

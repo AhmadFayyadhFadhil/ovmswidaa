@@ -27,6 +27,9 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'nik',
+        'sim_number',
+        'sim_type',
+        'sim_expiry_date',
         'name',
         'email',
         'password',
@@ -65,6 +68,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'sim_expiry_date' => 'date:Y-m-d',
             'password' => 'hashed',
             'is_department_head' => 'boolean',
             'is_active' => 'boolean',
