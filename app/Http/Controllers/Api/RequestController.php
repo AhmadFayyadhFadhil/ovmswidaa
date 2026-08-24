@@ -753,10 +753,27 @@ class RequestController extends Controller
                 }
             } else {
                 // Regular single-day request
-                $vehicleRequest->update([
+                $roleLabel = 'Pemohon / Requestor';
+                if (Auth::id() !== $vehicleRequest->user_id) {
+                    if ($user->hasRoleDirect('Admin') || $user->hasRoleDirect('Superadmin')) {
+                        $roleLabel = 'Administrator System';
+                    } else if ($user->hasRoleDirect('GA') || $user->isHrGaHead()) {
+                        $roleLabel = 'GA Coordinator';
+                    }
+                }
+
+                $updateData = [
                     'status' => RequestStatus::COMPLETED,
                     'completed_at' => now(),
-                ]);
+                ];
+
+                if (!$vehicleRequest->security_checked_in_at) {
+                    $updateData['security_checked_in_at'] = now();
+                    $updateData['security_checkin_by'] = $user->name . ' (' . $roleLabel . ')';
+                    $updateData['security_checkin_notes'] = 'Diselesaikan secara mandiri oleh ' . $roleLabel . ' di lokasi tujuan (Sewa Eksternal / Drop-Off Only)';
+                }
+
+                $vehicleRequest->update($updateData);
 
                 if (!$vehicleRequest->is_external) {
                     $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
