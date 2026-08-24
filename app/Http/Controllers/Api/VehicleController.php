@@ -78,13 +78,13 @@ class VehicleController extends Controller
         if ($status) {
             $upperStatus = strtoupper($status);
             if ($upperStatus === 'AVAILABLE') {
-                $query->whereIn('status', ['Available', 'available', 'AVAILABLE']);
-            } elseif ($upperStatus === 'IN TRANSIT' || $upperStatus === 'IN_TRANSIT' || $upperStatus === 'IN USE') {
-                $query->whereIn('status', ['In Use', 'in use', 'IN USE', 'In Transit']);
-            } elseif ($upperStatus === 'MAINTENANCE') {
-                $query->whereIn('status', ['Maintenance', 'maintenance', 'MAINTENANCE']);
-            } elseif ($upperStatus === 'RETIRED') {
-                $query->whereIn('status', ['Retired', 'retired', 'RETIRED']);
+                $query->whereIn('status', ['Available', 'available', 'AVAILABLE', 'Tersedia']);
+            } elseif (in_array($upperStatus, ['IN TRANSIT', 'IN_TRANSIT', 'IN USE', 'IN_USE', 'ON TRIP', 'ON_TRIP', 'ON_GOING'])) {
+                $query->whereIn('status', ['In Use', 'in use', 'IN USE', 'In Transit', 'On Trip', 'on trip', 'ON TRIP', 'On_Going']);
+            } elseif (in_array($upperStatus, ['MAINTENANCE', 'SERVIS', 'PERBAIKAN'])) {
+                $query->whereIn('status', ['Maintenance', 'maintenance', 'MAINTENANCE', 'Servis', 'Perbaikan']);
+            } elseif (in_array($upperStatus, ['RETIRED', 'DECOMMISSIONED', 'INACTIVE', 'TIDAK AKTIF'])) {
+                $query->whereIn('status', ['Retired', 'retired', 'RETIRED', 'Decommissioned', 'decommissioned', 'DECOMMISSIONED', 'Inactive']);
             } else {
                 $query->where('status', $status);
             }
