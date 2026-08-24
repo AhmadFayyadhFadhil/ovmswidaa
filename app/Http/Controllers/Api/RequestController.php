@@ -18,6 +18,9 @@ class RequestController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        // Real-time protection: Auto-cancel scheduled requests expired by >= 24 hours
+        \App\Services\RequestExpirationService::checkAndCancelExpired();
+
         $user    = Auth::user();
         $perPage = min((int) $request->query('per_page', 15), 100);
         $status  = $request->query('status');
