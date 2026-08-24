@@ -680,16 +680,11 @@ class RequestController extends Controller
         $isExternalOneWay = $vehicleRequest->is_external && ($vehicleRequest->external_trip_type === 'one_way' || !$vehicleRequest->is_return_to_factory);
 
         if ($isExternalOneWay) {
-            $validExternalStatuses = [
-                RequestStatus::ON_GOING->value,
-                RequestStatus::ASSIGNED_BY_GA->value,
-                RequestStatus::APPROVED_DEPARTMENT->value,
-                'driver_assigned',
-                'assigned_by_ga',
-                'on_going'
-            ];
-            if (!in_array($vehicleRequest->status->value ?? (string)$vehicleRequest->status, $validExternalStatuses)) {
-                return response()->json(['status' => 'error', 'message' => 'Perjalanan sewa eksternal drop-off hanya dapat diselesaikan dari status penugasan atau berjalan.'], 422);
+            $currentStatus = $vehicleRequest->status->value ?? (string)$vehicleRequest->status;
+            $isEnRoute = $currentStatus === RequestStatus::ON_GOING->value || $currentStatus === 'on_going' || !empty($vehicleRequest->security_checked_out_at);
+
+            if (!$isEnRoute) {
+                return response()->json(['status' => 'error', 'message' => 'Perjalanan sewa eksternal drop-off hanya dapat diselesaikan jika sudah mulai berjalan (on_going) atau telah di-scan keluar oleh security.'], 422);
             }
         } else if (($vehicleRequest->status->value ?? (string)$vehicleRequest->status) !== RequestStatus::ON_GOING->value) {
             return response()->json(['status' => 'error', 'message' => 'Perjalanan hanya dapat diselesaikan jika sedang berjalan (on_going).'], 422);
