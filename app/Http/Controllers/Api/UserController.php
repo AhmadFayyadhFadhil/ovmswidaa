@@ -617,9 +617,13 @@ class UserController extends Controller
                 }
 
                 if (Schema::hasTable('requests')) {
-                    DB::table('requests')->where('user_id', $targetId)->update(['user_id' => null]);
+                    DB::table('requests')->where('user_id', $targetId)->delete();
                     DB::table('requests')->where('driver_id', $targetId)->update(['driver_id' => null]);
                     DB::table('requests')->where('approver_id', $targetId)->update(['approver_id' => null]);
+                }
+
+                if (Schema::hasTable('user_notification_states')) {
+                    DB::table('user_notification_states')->where('user_id', $targetId)->delete();
                 }
 
                 if (Schema::hasTable('request_itineraries')) {
