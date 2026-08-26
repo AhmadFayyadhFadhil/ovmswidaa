@@ -10,10 +10,11 @@ define('LARAVEL_START', microtime(true));
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
     if (preg_match('/^https?:\/\/.*\.widatra\.com(:[0-9]+)?$/i', $origin) || str_contains($origin, 'localhost') || str_contains($origin, '127.0.0.1')) {
+        $reqHeaders = $_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS'] ?? 'Authorization, Content-Type, Accept, X-Requested-With, Application, Origin, Cache-Control, Pragma, Expires, X-CSRF-TOKEN';
         header("Access-Control-Allow-Origin: {$origin}");
         header("Access-Control-Allow-Credentials: true");
         header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
-        header("Access-Control-Allow-Headers: Authorization, Content-Type, Accept, X-Requested-With, Application, Origin");
+        header("Access-Control-Allow-Headers: {$reqHeaders}");
         header("Access-Control-Max-Age: 86400");
     }
     exit(0);
