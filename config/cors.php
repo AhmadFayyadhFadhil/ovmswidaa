@@ -19,14 +19,14 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
+    'allowed_origins' => array_unique(array_filter([
+        env('FRONTEND_URL'),                       // Production: https://ovms.widatra.com
         'https://ovms.widatra.com',
         'http://ovms.widatra.com',
         'https://ovmsdev.widatra.com',
         'http://ovmsdev.widatra.com',
         'http://ovmsdev.widatra.com:8282',
         'https://ovmsdev.widatra.com:8282',
-        env('FRONTEND_URL', 'https://ovms.widatra.com'),
         'http://localhost:3000',
         'http://127.0.0.1:3000',
         'http://localhost:5173',
@@ -37,7 +37,7 @@ return [
         'http://127.0.0.1:5175',
         'http://localhost:4173',
         'http://127.0.0.1:4173',
-    ],
+    ])),
 
     'allowed_origins_patterns' => [
         '#^https?://.*\.widatra\.com(:[0-9]+)?$#',
