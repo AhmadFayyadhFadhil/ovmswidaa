@@ -220,44 +220,28 @@ class AuthController extends Controller
 
         try {
             $file = $request->file('avatar');
-            $originalName = $file->getClientOriginalName();
-            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
-            
-            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
-                $ext = 'jpg';
-            }
+            $storedPath = $this->storePublicFileSafely($file, 'users/avatars');
 
-            $filename = time() . '_' . uniqid() . '.' . $ext;
-            $relativeDir = 'users/avatars';
-            $targetDir = storage_path('app/public/' . $relativeDir);
-
-            if (!file_exists($targetDir)) {
-                @mkdir($targetDir, 0777, true);
-            }
-
-            $targetPath = $targetDir . '/' . $filename;
-            
-            // Use move_uploaded_file / copy to bypass PHP finfo extension dependency
-            if (!@move_uploaded_file($file->getRealPath(), $targetPath)) {
-                if (!@copy($file->getRealPath(), $targetPath)) {
-                    throw new \Exception("Gagal menyalin file foto ke folder storage.");
-                }
+            if (!$storedPath) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Gagal menyimpan file foto ke folder storage server.',
+                ], 500);
             }
 
             // Hapus avatar lama jika ada di storage
-            if ($user->avatar && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar)) {
+            if ($user->avatar && $user->avatar !== $storedPath && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar)) {
                 @\Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar);
             }
 
-            $relativePath = $relativeDir . '/' . $filename;
-            $user->avatar = $relativePath;
+            $user->avatar = $storedPath;
             $user->save();
 
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Foto profil berhasil diperbarui',
                 'data'    => [
-                    'avatar_url' => url('storage/' . $relativePath),
+                    'avatar_url' => asset('storage/' . $storedPath),
                 ],
             ], 200);
         } catch (\Throwable $e) {
@@ -379,5 +363,48 @@ class AuthController extends Controller
                 'availability_status' => $user->availability_status,
             ],
         ], 200);
+    }
+
+    /**
+     * Store public file safely with multi-layer fallback strategy
+     */
+    private function storePublicFileSafely($file, string $folder): ?string
+    {
+        try {
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                $ext = 'jpg';
+            }
+
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $relativeDir = trim($folder, '/');
+            $targetDir = storage_path('app/public/' . $relativeDir);
+
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0777, true);
+            }
+
+            $targetPath = $targetDir . '/' . $filename;
+
+            $success = false;
+            if ($file->getRealPath()) {
+                $success = @move_uploaded_file($file->getRealPath(), $targetPath) || @copy($file->getRealPath(), $targetPath);
+            }
+
+            if (!$success) {
+                $storedPath = $file->store($relativeDir, 'public');
+                return $storedPath ?: null;
+            }
+
+            return $relativeDir . '/' . $filename;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Avatar File Storage Error ({$folder}): " . $e->getMessage());
+            try {
+                return $file->store($folder, 'public');
+            } catch (\Throwable $ex) {
+                return null;
+            }
+        }
     }
 }
