@@ -228,7 +228,6 @@ class TestUserDeletionScenarios extends Command
 
         $reqDId = DB::table('requests')->insertGetId([
             'user_id'           => $controlUserId,
-            'approver_id'       => $userD->id,
             'department_id'     => $deptId,
             'destination_city'  => 'Pasuruan',
             'destination_place' => 'Cabang',
@@ -242,19 +241,31 @@ class TestUserDeletionScenarios extends Command
             'updated_at'        => now()->subDays(5),
         ]);
 
+        if (Schema::hasTable('request_approvals')) {
+            DB::table('request_approvals')->insert([
+                'request_id'   => $reqDId,
+                'approver_id'  => $userD->id,
+                'step'         => 1,
+                'status'       => 'approved',
+                'created_at'   => now(),
+                'updated_at'   => now(),
+            ]);
+        }
+
         Auth::login($superAdmin);
         $resD = $controller->destroy($userD);
         $statusD = $resD->getStatusCode();
         $isDeletedD = !User::where('id', $userD->id)->exists();
-        $reqDAfter = DB::table('requests')->where('id', $reqDId)->first();
-        $isApproverNullified = ($reqDAfter && $reqDAfter->approver_id === null);
+        $isApprovalCleaned = Schema::hasTable('request_approvals') 
+            ? !DB::table('request_approvals')->where('approver_id', $userD->id)->exists()
+            : true;
 
         $results[] = [
             'scenario' => '4. User D (Approver Request User Lain)',
             'actor'    => 'Superadmin',
-            'expected' => '200 OK & Approver Nullified',
-            'actual'   => $statusD . ' - ' . ($isDeletedD && $isApproverNullified ? 'User Terhapus & Nullified' : 'Gagal'),
-            'pass'     => ($statusD === 200 && $isDeletedD && $isApproverNullified),
+            'expected' => '200 OK & Approvals Cleaned',
+            'actual'   => $statusD . ' - ' . ($isDeletedD && $isApprovalCleaned ? 'User & Approval Cleaned' : 'Gagal'),
+            'pass'     => ($statusD === 200 && $isDeletedD && $isApprovalCleaned),
         ];
 
         // Bersihkan request D

@@ -680,8 +680,12 @@ class UserController extends Controller
 
                 if (Schema::hasTable('requests')) {
                     DB::table('requests')->where('user_id', $targetId)->delete();
-                    DB::table('requests')->where('driver_id', $targetId)->update(['driver_id' => null]);
-                    DB::table('requests')->where('approver_id', $targetId)->update(['approver_id' => null]);
+                    if (Schema::hasColumn('requests', 'driver_id')) {
+                        DB::table('requests')->where('driver_id', $targetId)->update(['driver_id' => null]);
+                    }
+                    if (Schema::hasColumn('requests', 'approver_id')) {
+                        DB::table('requests')->where('approver_id', $targetId)->update(['approver_id' => null]);
+                    }
                     if (Schema::hasColumn('requests', 'cancelled_by')) {
                         DB::table('requests')->where('cancelled_by', $targetId)->update(['cancelled_by' => null]);
                     }
