@@ -269,9 +269,48 @@ class TestAllRolesAndWorkflows extends Command
 
         if (Schema::hasTable('request_itineraries')) {
             DB::table('request_itineraries')->insert([
-                ['request_id' => $req3Id, 'driver_id' => $driverA->id, 'vehicle_id' => $vehicleA->id, 'date' => now()->addDays(5)->toDateString(), 'destination_city' => 'Jakarta', 'destination_place' => 'Hotel Kemayoran', 'purpose' => 'Perjalanan Berangkat', 'status' => 'completed', 'created_at' => now(), 'updated_at' => now()],
-                ['request_id' => $req3Id, 'driver_id' => $driverA->id, 'vehicle_id' => $vehicleA->id, 'date' => now()->addDays(6)->toDateString(), 'destination_city' => 'Jakarta', 'destination_place' => 'JIExpo Kemayoran', 'purpose' => 'Expo Farmasi Hari 1', 'status' => 'completed', 'created_at' => now(), 'updated_at' => now()],
-                ['request_id' => $req3Id, 'driver_id' => $driverA->id, 'vehicle_id' => $vehicleA->id, 'date' => now()->addDays(7)->toDateString(), 'destination_city' => 'Pandaan', 'destination_place' => 'Kantor Pusat', 'purpose' => 'Perjalanan Pulang', 'status' => 'completed', 'created_at' => now(), 'updated_at' => now()],
+                [
+                    'request_id'            => $req3Id,
+                    'driver_id'             => $driverA->id,
+                    'vehicle_id'            => $vehicleA->id,
+                    'date'                  => now()->addDays(5)->toDateString(),
+                    'morning_time'          => '08:00',
+                    'morning_destination'   => 'Jakarta - Hotel Kemayoran',
+                    'afternoon_time'        => '14:00',
+                    'afternoon_destination' => 'JIExpo Kemayoran',
+                    'passengers_notes'      => 'Perjalanan Berangkat & Expo Farmasi Hari 1',
+                    'status'                => 'completed',
+                    'created_at'            => now(),
+                    'updated_at'            => now(),
+                ],
+                [
+                    'request_id'            => $req3Id,
+                    'driver_id'             => $driverA->id,
+                    'vehicle_id'            => $vehicleA->id,
+                    'date'                  => now()->addDays(6)->toDateString(),
+                    'morning_time'          => '09:00',
+                    'morning_destination'   => 'JIExpo Kemayoran',
+                    'afternoon_time'        => '17:00',
+                    'afternoon_destination' => 'Hotel Kemayoran',
+                    'passengers_notes'      => 'Expo Farmasi Hari 2 & Meeting Vendor',
+                    'status'                => 'completed',
+                    'created_at'            => now(),
+                    'updated_at'            => now(),
+                ],
+                [
+                    'request_id'            => $req3Id,
+                    'driver_id'             => $driverA->id,
+                    'vehicle_id'            => $vehicleA->id,
+                    'date'                  => now()->addDays(7)->toDateString(),
+                    'morning_time'          => '07:00',
+                    'morning_destination'   => 'Hotel Kemayoran',
+                    'afternoon_time'        => '19:00',
+                    'afternoon_destination' => 'Pandaan - Kantor Pusat',
+                    'passengers_notes'      => 'Perjalanan Pulang ke Kantor Pusat',
+                    'status'                => 'completed',
+                    'created_at'            => now(),
+                    'updated_at'            => now(),
+                ],
             ]);
         }
 
