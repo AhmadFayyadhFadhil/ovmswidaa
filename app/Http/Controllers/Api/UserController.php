@@ -587,18 +587,24 @@ class UserController extends Controller
     {
         try {
             $currentUser = Auth::user();
-            if (!$this->canManageUsers($currentUser)) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized: Anda tidak memiliki hak akses untuk menghapus user.'], 403);
+            if (!$currentUser) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthenticated.'], 401);
             }
 
-            if ((int) $user->id === (int) Auth::id()) {
+            // 1. Guard: Cannot delete self (Applies to all users: Admin, GA, Employee)
+            if ((int) $user->id === (int) $currentUser->id) {
                 return response()->json([
                     'status'  => 'error',
                     'message' => 'Tidak dapat menghapus akun sendiri.',
                 ], 422);
             }
 
-            // Guard: Non-Admin users (like GA Coordinator) cannot delete Admin accounts
+            // 2. Guard: Must have permission to manage users
+            if (!$this->canManageUsers($currentUser)) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized: Anda tidak memiliki hak akses untuk menghapus user.'], 403);
+            }
+
+            // 3. Guard: Non-Admin users (like GA Coordinator) cannot delete Admin accounts
             if ($user->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin']) && !$this->isAdmin()) {
                 return response()->json([
                     'status'  => 'error',
