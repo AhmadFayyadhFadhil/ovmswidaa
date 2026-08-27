@@ -607,36 +607,68 @@ class UserController extends Controller
             DB::transaction(function () use ($user) {
                 $targetId = $user->id;
 
-                // Delete or nullify all foreign key constraints before deleting user
+                // 1. Get all request IDs created by this user
+                $userRequestIds = [];
+                if (Schema::hasTable('requests')) {
+                    $userRequestIds = DB::table('requests')->where('user_id', $targetId)->pluck('id')->toArray();
+                }
+
+                // 2. Delete child records referencing those request IDs
+                if (!empty($userRequestIds)) {
+                    if (Schema::hasTable('assignments')) {
+                        DB::table('assignments')->whereIn('request_id', $userRequestIds)->delete();
+                    }
+                    if (Schema::hasTable('operational_trips')) {
+                        DB::table('operational_trips')->whereIn('request_id', $userRequestIds)->delete();
+                    }
+                    if (Schema::hasTable('request_itineraries')) {
+                        DB::table('request_itineraries')->whereIn('request_id', $userRequestIds)->delete();
+                    }
+                    if (Schema::hasTable('request_approvals')) {
+                        DB::table('request_approvals')->whereIn('request_id', $userRequestIds)->delete();
+                    }
+                    if (Schema::hasTable('passengers')) {
+                        DB::table('passengers')->whereIn('request_id', $userRequestIds)->delete();
+                    }
+                    DB::table('requests')->whereIn('id', $userRequestIds)->delete();
+                }
+
+                // 3. Delete driver & assignment records directly referencing this user
                 if (Schema::hasTable('assignments')) {
-                    DB::table('assignments')->where('driver_id', $targetId)->delete();
-                    DB::table('assignments')->where('assigned_by', $targetId)->update(['assigned_by' => null]);
+                    DB::table('assignments')->where('driver_id', $targetId)->orWhere('assigned_by', $targetId)->delete();
                 }
 
                 if (Schema::hasTable('driver_assignments')) {
                     DB::table('driver_assignments')->where('driver_id', $targetId)->delete();
                 }
 
+                if (Schema::hasTable('operational_trips')) {
+                    DB::table('operational_trips')->where('driver_id', $targetId)->delete();
+                }
+
+                if (Schema::hasTable('request_itineraries')) {
+                    DB::table('request_itineraries')->where('driver_id', $targetId)->delete();
+                }
+
                 if (Schema::hasTable('requests')) {
                     DB::table('requests')->where('user_id', $targetId)->delete();
                     DB::table('requests')->where('driver_id', $targetId)->update(['driver_id' => null]);
                     DB::table('requests')->where('approver_id', $targetId)->update(['approver_id' => null]);
+                    if (Schema::hasColumn('requests', 'cancelled_by')) {
+                        DB::table('requests')->where('cancelled_by', $targetId)->update(['cancelled_by' => null]);
+                    }
                 }
 
-                if (Schema::hasTable('user_notification_states')) {
-                    DB::table('user_notification_states')->where('user_id', $targetId)->delete();
-                }
-
-                if (Schema::hasTable('request_itineraries')) {
-                    DB::table('request_itineraries')->where('driver_id', $targetId)->update(['driver_id' => null]);
-                }
-
-                if (Schema::hasTable('operational_trips')) {
-                    DB::table('operational_trips')->where('driver_id', $targetId)->update(['driver_id' => null]);
+                if (Schema::hasTable('request_approvals')) {
+                    DB::table('request_approvals')->where('approver_id', $targetId)->delete();
                 }
 
                 if (Schema::hasTable('passengers')) {
                     DB::table('passengers')->where('user_id', $targetId)->delete();
+                }
+
+                if (Schema::hasTable('user_notification_states')) {
+                    DB::table('user_notification_states')->where('user_id', $targetId)->delete();
                 }
 
                 if (Schema::hasTable('notifications')) {
@@ -659,7 +691,11 @@ class UserController extends Controller
                     DB::table('model_has_permissions')->where('model_id', $targetId)->delete();
                 }
 
-                // Hard delete user from users table
+                if (Schema::hasTable('password_reset_tokens') && !empty($user->email)) {
+                    DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+                }
+
+                // 4. Hard delete user from users table
                 DB::table('users')->where('id', $targetId)->delete();
             });
 
