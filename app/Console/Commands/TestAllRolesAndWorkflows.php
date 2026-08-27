@@ -61,48 +61,34 @@ class TestAllRolesAndWorkflows extends Command
             ]
         );
 
-        // Setup 6 Role Actors
-        $admin = User::firstOrCreate(
-            ['email' => 'actor_admin@ovms.dev'],
-            ['nik' => 'ADM001', 'name' => 'Actor Superadmin', 'password' => Hash::make('password'), 'department_id' => $deptId, 'is_active' => 1]
-        );
-        $admin->syncRoles(['Admin']);
+        // Collision-proof Actor Resolution Helper
+        $getOrCreateActor = function (string $roleName, string $defaultNikPrefix, string $name) use ($deptId) {
+            $existing = User::whereHas('roles', fn($q) => $q->where('name', $roleName))->first();
+            if ($existing) {
+                return $existing;
+            }
+            $uniq = time() . rand(100, 999);
+            $user = User::create([
+                'nik'           => $defaultNikPrefix . '_' . $uniq,
+                'email'         => strtolower($defaultNikPrefix) . '_' . $uniq . '@ovms.dev',
+                'name'          => $name,
+                'password'      => Hash::make('password'),
+                'department_id' => $deptId,
+                'is_active'     => 1,
+            ]);
+            $user->syncRoles([$roleName]);
+            return $user;
+        };
 
-        $ga = User::firstOrCreate(
-            ['email' => 'actor_ga@ovms.dev'],
-            ['nik' => 'GA001', 'name' => 'Actor GA Coordinator', 'password' => Hash::make('password'), 'department_id' => $deptId, 'is_active' => 1]
-        );
-        $ga->syncRoles(['GA']);
-
-        $approver = User::firstOrCreate(
-            ['email' => 'actor_approver@ovms.dev'],
-            ['nik' => 'APP001', 'name' => 'Actor Dept Head Approver', 'password' => Hash::make('password'), 'department_id' => $deptId, 'is_active' => 1, 'is_department_head' => 1]
-        );
-        $approver->syncRoles(['Approver']);
-
-        $driverA = User::firstOrCreate(
-            ['email' => 'actor_driver_a@ovms.dev'],
-            ['nik' => 'DRV001', 'name' => 'Actor Driver Pak Joko', 'password' => Hash::make('password'), 'department_id' => $deptId, 'is_active' => 1, 'availability_status' => 'available']
-        );
-        $driverA->syncRoles(['Driver']);
-
-        $driverB = User::firstOrCreate(
-            ['email' => 'actor_driver_b@ovms.dev'],
-            ['nik' => 'DRV002', 'name' => 'Actor Driver Pak Budi', 'password' => Hash::make('password'), 'department_id' => $deptId, 'is_active' => 1, 'availability_status' => 'available']
-        );
-        $driverB->syncRoles(['Driver']);
-
-        $employee = User::firstOrCreate(
-            ['email' => 'actor_employee@ovms.dev'],
-            ['nik' => 'EMP001', 'name' => 'Actor Employee Pemohon', 'password' => Hash::make('password'), 'department_id' => $deptId, 'is_active' => 1]
-        );
-        $employee->syncRoles(['Employee']);
-
-        $security = User::firstOrCreate(
-            ['email' => 'actor_security@ovms.dev'],
-            ['nik' => 'SEC001', 'name' => 'Actor Security Pak Slamet', 'password' => Hash::make('password'), 'department_id' => $deptId, 'is_active' => 1]
-        );
-        $security->syncRoles(['Security']);
+        // Setup 6 Role Actors (Safe & Collision-Proof)
+        $admin    = $getOrCreateActor('Admin', 'ADM', 'Actor Superadmin');
+        $ga       = $getOrCreateActor('GA', 'GA', 'Actor GA Coordinator');
+        $approver = $getOrCreateActor('Approver', 'APP', 'Actor Dept Head Approver');
+        $driverA  = $getOrCreateActor('Driver', 'DRV1', 'Actor Driver Pak Joko');
+        $driverB  = User::whereHas('roles', fn($q) => $q->where('name', 'Driver'))->where('id', '!=', $driverA->id)->first() 
+            ?? $getOrCreateActor('Driver', 'DRV2', 'Actor Driver Pak Budi');
+        $employee = $getOrCreateActor('Employee', 'EMP', 'Actor Employee Pemohon');
+        $security = $getOrCreateActor('Security', 'SEC', 'Actor Security Pak Slamet');
 
         $workflowResults = [];
         $roleResults = [];
