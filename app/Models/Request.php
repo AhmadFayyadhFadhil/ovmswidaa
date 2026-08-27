@@ -75,12 +75,48 @@ class Request extends Model
     protected $casts = [
         'start_time' => 'datetime',
         'end_time' => 'datetime',
-        'status' => RequestStatus::class,
-        'priority' => RequestPriority::class,
         'is_external' => 'boolean',
         'security_checked_out_at' => 'datetime',
         'security_checked_in_at' => 'datetime',
     ];
+
+    /**
+     * Resilient case-insensitive Priority attribute accessor & mutator
+     */
+    protected function priority(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            get: function ($value) {
+                if (!$value) return RequestPriority::NORMAL;
+                if ($value instanceof RequestPriority) return $value;
+                $normalized = ucfirst(strtolower(trim((string)$value)));
+                return RequestPriority::tryFrom($normalized) ?? RequestPriority::tryFrom((string)$value) ?? RequestPriority::NORMAL;
+            },
+            set: function ($value) {
+                if ($value instanceof RequestPriority) return $value->value;
+                return ucfirst(strtolower(trim((string)$value)));
+            }
+        );
+    }
+
+    /**
+     * Resilient case-insensitive Status attribute accessor & mutator
+     */
+    protected function status(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            get: function ($value) {
+                if (!$value) return RequestStatus::SUBMITTED;
+                if ($value instanceof RequestStatus) return $value;
+                $normalized = strtolower(trim((string)$value));
+                return RequestStatus::tryFrom($normalized) ?? RequestStatus::tryFrom((string)$value) ?? RequestStatus::SUBMITTED;
+            },
+            set: function ($value) {
+                if ($value instanceof RequestStatus) return $value->value;
+                return strtolower(trim((string)$value));
+            }
+        );
+    }
 
     // Relationships
     public function user()
