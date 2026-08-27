@@ -998,33 +998,43 @@ class UserController extends Controller
 
             $filename = time() . '_' . uniqid() . '.' . $ext;
             $relativeDir = trim($folder, '/');
-            $targetDir = storage_path('app/public/' . $relativeDir);
+            $relativePath = $relativeDir . '/' . $filename;
 
+            $realPath = $file->getRealPath() ?: $file->getPathname();
+            $fileContent = $realPath ? @file_get_contents($realPath) : null;
+
+            // Strategy 1: Direct Storage Disk Binary Put (Bypasses finfo extension)
+            if ($fileContent !== false && $fileContent !== null) {
+                try {
+                    $stored = \Illuminate\Support\Facades\Storage::disk('public')->put($relativePath, $fileContent);
+                    if ($stored) {
+                        return $relativePath;
+                    }
+                } catch (\Throwable $diskEx) {
+                    \Illuminate\Support\Facades\Log::warning("Storage put failed: " . $diskEx->getMessage());
+                }
+            }
+
+            // Strategy 2: Direct Filesystem Write
+            $targetDir = storage_path('app/public/' . $relativeDir);
             if (!file_exists($targetDir)) {
                 @mkdir($targetDir, 0777, true);
             }
-
             $targetPath = $targetDir . '/' . $filename;
 
-            $success = false;
-            if ($file->getRealPath()) {
-                $success = @move_uploaded_file($file->getRealPath(), $targetPath) || @copy($file->getRealPath(), $targetPath);
+            if ($fileContent !== false && $fileContent !== null && @file_put_contents($targetPath, $fileContent) !== false) {
+                return $relativePath;
             }
 
-            if (!$success) {
-                $storedPath = $file->store($relativeDir, 'public');
-                return $storedPath ?: null;
+            // Strategy 3: move_uploaded_file / copy
+            if ($realPath && (@move_uploaded_file($realPath, $targetPath) || @copy($realPath, $targetPath))) {
+                return $relativePath;
             }
 
-            return $relativeDir . '/' . $filename;
+            return null;
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("File Storage Error ({$folder}): " . $e->getMessage());
-            try {
-                return $file->store($folder, 'public');
-            } catch (\Throwable $ex) {
-                \Illuminate\Support\Facades\Log::error("Laravel store fallback failed: " . $ex->getMessage());
-                return null;
-            }
+            return null;
         }
     }
 }

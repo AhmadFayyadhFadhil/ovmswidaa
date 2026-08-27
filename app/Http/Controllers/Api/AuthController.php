@@ -366,45 +366,56 @@ class AuthController extends Controller
     }
 
     /**
-     * Store public file safely with multi-layer fallback strategy
+     * Store public file safely with multi-layer fallback strategy (Zero 'finfo' dependency)
      */
     private function storePublicFileSafely($file, string $folder): ?string
     {
         try {
             $originalName = $file->getClientOriginalName();
             $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
-            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'])) {
                 $ext = 'jpg';
             }
 
             $filename = time() . '_' . uniqid() . '.' . $ext;
             $relativeDir = trim($folder, '/');
-            $targetDir = storage_path('app/public/' . $relativeDir);
+            $relativePath = $relativeDir . '/' . $filename;
 
+            $realPath = $file->getRealPath() ?: $file->getPathname();
+            $fileContent = $realPath ? @file_get_contents($realPath) : null;
+
+            // Strategy 1: Direct Storage Disk Binary Put (Bypasses finfo extension)
+            if ($fileContent !== false && $fileContent !== null) {
+                try {
+                    $stored = \Illuminate\Support\Facades\Storage::disk('public')->put($relativePath, $fileContent);
+                    if ($stored) {
+                        return $relativePath;
+                    }
+                } catch (\Throwable $diskEx) {
+                    \Illuminate\Support\Facades\Log::warning("Storage put failed: " . $diskEx->getMessage());
+                }
+            }
+
+            // Strategy 2: Direct Filesystem Write
+            $targetDir = storage_path('app/public/' . $relativeDir);
             if (!file_exists($targetDir)) {
                 @mkdir($targetDir, 0777, true);
             }
-
             $targetPath = $targetDir . '/' . $filename;
 
-            $success = false;
-            if ($file->getRealPath()) {
-                $success = @move_uploaded_file($file->getRealPath(), $targetPath) || @copy($file->getRealPath(), $targetPath);
+            if ($fileContent !== false && $fileContent !== null && @file_put_contents($targetPath, $fileContent) !== false) {
+                return $relativePath;
             }
 
-            if (!$success) {
-                $storedPath = $file->store($relativeDir, 'public');
-                return $storedPath ?: null;
+            // Strategy 3: move_uploaded_file / copy
+            if ($realPath && (@move_uploaded_file($realPath, $targetPath) || @copy($realPath, $targetPath))) {
+                return $relativePath;
             }
 
-            return $relativeDir . '/' . $filename;
+            return null;
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Avatar File Storage Error ({$folder}): " . $e->getMessage());
-            try {
-                return $file->store($folder, 'public');
-            } catch (\Throwable $ex) {
-                return null;
-            }
+            return null;
         }
     }
 }
