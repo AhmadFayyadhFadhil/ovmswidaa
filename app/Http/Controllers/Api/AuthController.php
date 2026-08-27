@@ -229,9 +229,12 @@ class AuthController extends Controller
                 ], 500);
             }
 
-            // Hapus avatar lama jika ada di storage
-            if ($user->avatar && $user->avatar !== $storedPath && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar)) {
-                @\Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar);
+            // Hapus avatar lama via native unlink (tanpa Flysystem / finfo)
+            if ($user->avatar && $user->avatar !== $storedPath) {
+                $oldAppPath = storage_path('app/public/' . $user->avatar);
+                $oldPubPath = public_path('storage/' . $user->avatar);
+                if (file_exists($oldAppPath)) @unlink($oldAppPath);
+                if (file_exists($oldPubPath)) @unlink($oldPubPath);
             }
 
             $user->avatar = $storedPath;
@@ -366,7 +369,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Store public file safely with multi-layer fallback strategy (Zero 'finfo' dependency)
+     * Store public file safely with pure native PHP filesystem (Zero framework/finfo dependency)
      */
     private function storePublicFileSafely($file, string $folder): ?string
     {
@@ -382,39 +385,52 @@ class AuthController extends Controller
             $relativePath = $relativeDir . '/' . $filename;
 
             $realPath = $file->getRealPath() ?: $file->getPathname();
-            $fileContent = $realPath ? @file_get_contents($realPath) : null;
+            $fileContent = null;
 
-            // Strategy 1: Direct Storage Disk Binary Put (Bypasses finfo extension)
-            if ($fileContent !== false && $fileContent !== null) {
+            if (method_exists($file, 'getContent')) {
                 try {
-                    $stored = \Illuminate\Support\Facades\Storage::disk('public')->put($relativePath, $fileContent);
-                    if ($stored) {
-                        return $relativePath;
-                    }
-                } catch (\Throwable $diskEx) {
-                    \Illuminate\Support\Facades\Log::warning("Storage put failed: " . $diskEx->getMessage());
+                    $fileContent = $file->getContent();
+                } catch (\Throwable $e) {}
+            }
+
+            if ($fileContent === null && $realPath && file_exists($realPath)) {
+                $fileContent = @file_get_contents($realPath);
+            }
+
+            $written = false;
+
+            // Target 1: storage/app/public/...
+            $appDir = storage_path('app/public/' . $relativeDir);
+            if (!file_exists($appDir)) {
+                @mkdir($appDir, 0777, true);
+            }
+            $appPath = $appDir . '/' . $filename;
+            if ($fileContent !== null && $fileContent !== false) {
+                if (@file_put_contents($appPath, $fileContent) !== false) {
+                    $written = true;
+                }
+            }
+            if (!$written && $realPath) {
+                if (@move_uploaded_file($realPath, $appPath) || @copy($realPath, $appPath)) {
+                    $written = true;
                 }
             }
 
-            // Strategy 2: Direct Filesystem Write
-            $targetDir = storage_path('app/public/' . $relativeDir);
-            if (!file_exists($targetDir)) {
-                @mkdir($targetDir, 0777, true);
+            // Target 2: public/storage/... (Dual write for instant direct serving)
+            $pubDir = public_path('storage/' . $relativeDir);
+            if (!file_exists($pubDir)) {
+                @mkdir($pubDir, 0777, true);
             }
-            $targetPath = $targetDir . '/' . $filename;
-
-            if ($fileContent !== false && $fileContent !== null && @file_put_contents($targetPath, $fileContent) !== false) {
-                return $relativePath;
-            }
-
-            // Strategy 3: move_uploaded_file / copy
-            if ($realPath && (@move_uploaded_file($realPath, $targetPath) || @copy($realPath, $targetPath))) {
-                return $relativePath;
+            $pubPath = $pubDir . '/' . $filename;
+            if ($fileContent !== null && $fileContent !== false) {
+                @file_put_contents($pubPath, $fileContent);
+            } elseif (file_exists($appPath)) {
+                @copy($appPath, $pubPath);
             }
 
-            return null;
+            return $written ? $relativePath : null;
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("Avatar File Storage Error ({$folder}): " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("Avatar Native Storage Error ({$folder}): " . $e->getMessage());
             return null;
         }
     }
