@@ -140,6 +140,7 @@ class TestAllRolesAndWorkflows extends Command
             'driver_id'   => $driverA->id,
             'vehicle_id'  => $vehicleA->id,
             'assigned_by' => $ga->id,
+            'assigned_at' => now(),
             'status'      => 'accepted',
             'created_at'  => now(),
             'updated_at'  => now(),
@@ -220,8 +221,8 @@ class TestAllRolesAndWorkflows extends Command
 
         // Assign 2 Mobil & 2 Driver
         DB::table('assignments')->insert([
-            ['request_id' => $req2Id, 'driver_id' => $driverA->id, 'vehicle_id' => $vehicleA->id, 'assigned_by' => $ga->id, 'status' => 'accepted', 'created_at' => now(), 'updated_at' => now()],
-            ['request_id' => $req2Id, 'driver_id' => $driverB->id, 'vehicle_id' => $vehicleB->id, 'assigned_by' => $ga->id, 'status' => 'accepted', 'created_at' => now(), 'updated_at' => now()],
+            ['request_id' => $req2Id, 'driver_id' => $driverA->id, 'vehicle_id' => $vehicleA->id, 'assigned_by' => $ga->id, 'assigned_at' => now(), 'status' => 'accepted', 'created_at' => now(), 'updated_at' => now()],
+            ['request_id' => $req2Id, 'driver_id' => $driverB->id, 'vehicle_id' => $vehicleB->id, 'assigned_by' => $ga->id, 'assigned_at' => now(), 'status' => 'accepted', 'created_at' => now(), 'updated_at' => now()],
         ]);
         DB::table('operational_trips')->insert([
             ['request_id' => $req2Id, 'driver_id' => $driverA->id, 'vehicle_id' => $vehicleA->id, 'start_datetime' => now()->addDays(2)->setHour(7), 'status' => 'scheduled', 'created_at' => now(), 'updated_at' => now()],
