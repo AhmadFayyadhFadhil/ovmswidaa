@@ -23,18 +23,16 @@ class NotificationController extends Controller
     }
 
     /**
-     * Helper to extract clean numeric string ID from notification string (e.g. "#RQ-17" -> "17", "REQ-17" -> "17").
+     * Helper to extract clean normalized string ID from notification identifier.
      */
     private function cleanId($id): string
     {
-        $str = (string) $id;
-        $digits = preg_replace('/[^0-9]/', '', $str);
-        return $digits !== '' ? $digits : trim($str);
+        return trim((string) $id);
     }
 
     /**
      * Fetch user notifications with persistent read and deleted statuses.
-     * 100% server-driven — uses ONLY user_notification_states table.
+     * 100% server-driven — uses user_notification_states table with Role-Aware filtering.
      */
     public function index(Request $request): JsonResponse
     {
@@ -50,7 +48,7 @@ class NotificationController extends Controller
                 ], 401);
             }
 
-            // Get all notification states for this user from dedicated table
+            // 1. Get all notification states for this user from dedicated table
             $readIds = [];
             $deletedIds = [];
 
@@ -69,63 +67,95 @@ class NotificationController extends Controller
                 Log::error('Notification index DB query failed: ' . $e->getMessage());
             }
 
-            // Fetch requests for generating system notifications
-            $requests = VehicleRequest::with(['user', 'department'])
-                ->orderBy('id', 'desc')
-                ->take(100)
-                ->get();
+            // 2. Determine User Role for Scope Filtering
+            $userRoles = $user->getRoleNames()->map(fn($r) => strtolower(trim($r)))->toArray();
+            $isAdminOrGA = in_array('admin', $userRoles, true) || in_array('administrator', $userRoles, true) || in_array('gahrd', $userRoles, true) || in_array('ga', $userRoles, true) || in_array('superadmin', $userRoles, true) || in_array('hrd', $userRoles, true);
+            $isDriver = in_array('driver', $userRoles, true) && !$isAdminOrGA;
+            $isApprover = in_array('approver', $userRoles, true) && !$isAdminOrGA;
+            $isEmployee = in_array('employee', $userRoles, true) && !$isAdminOrGA && !$isApprover && !$isDriver;
 
+            $query = VehicleRequest::with(['user', 'department', 'driver']);
+
+            if ($isEmployee) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id)
+                      ->orWhere('requested_by', $user->id);
+                });
+            } elseif ($isDriver) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('driver_id', $user->id)
+                      ->orWhereHas('assignment', fn($aq) => $aq->where('driver_id', $user->id));
+                });
+            } elseif ($isApprover) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('department_id', $user->department_id)
+                      ->orWhere('user_id', $user->id)
+                      ->orWhere('requested_by', $user->id);
+                });
+            }
+
+            $requests = $query->orderBy('id', 'desc')->take(100)->get();
             $notifications = [];
 
             foreach ($requests as $r) {
-                $notifId = $this->cleanId($r->id);
+                $rawStatus = is_object($r->status) ? $r->status->value : (string) $r->status;
+                $notifId = "req-{$r->id}-" . strtolower($rawStatus);
+                $legacyId = (string) $r->id;
 
                 // Skip deleted notifications for this user
-                if (in_array($notifId, $deletedIds, true)) {
+                if (in_array($notifId, $deletedIds, true) || in_array($legacyId, $deletedIds, true)) {
                     continue;
                 }
 
-                $rawStatus = is_object($r->status) ? $r->status->value : (string) $r->status;
-                $employeeName = $r->user ? $r->user->name : 'Staff';
-
+                $employeeName = $r->user ? $r->user->name : ($r->employee ?? 'Staff');
                 $dest = 'Tujuan';
                 if ($r->destination_city && $r->destination_place) {
                     $dest = "{$r->destination_city} - {$r->destination_place}";
-                } else if ($r->destination_city) {
+                } elseif ($r->destination_city) {
                     $dest = $r->destination_city;
-                } else if ($r->destination) {
+                } elseif ($r->destination) {
                     $dest = $r->destination;
                 }
 
                 $dateStr = $r->start_time
-                    ? $r->start_time->format('d-m-Y')
-                    : ($r->created_at ? $r->created_at->format('d-m-Y') : 'Terbaru');
+                    ? $r->start_time->format('d M Y')
+                    : ($r->created_at ? $r->created_at->format('d M Y') : 'Terbaru');
 
                 $severity = 'info';
                 $category = 'Operational';
+                $actionUrl = '/employee/myrequests';
+
+                if ($isAdminOrGA) {
+                    $actionUrl = '/admin/requests';
+                } elseif ($isApprover) {
+                    $actionUrl = '/approver/requests';
+                } elseif ($isDriver) {
+                    $actionUrl = '/driver/dashboard';
+                }
 
                 if (in_array($rawStatus, ['submitted', 'approved_department', 'approved_hrd', 'approved_hrd_ga', 'waiting_driver'])) {
                     $severity = 'high';
                     $category = 'Approvals';
-                } else if ($rawStatus === 'on_going') {
+                } elseif ($rawStatus === 'on_going') {
                     $severity = 'medium';
-                } else if ($rawStatus === 'completed') {
+                } elseif ($rawStatus === 'completed') {
                     $severity = 'low';
-                } else if ($rawStatus === 'rejected' || $rawStatus === 'cancelled') {
+                } elseif ($rawStatus === 'rejected' || $rawStatus === 'cancelled') {
                     $severity = 'low';
                     $category = 'System';
                 }
 
                 $notifications[] = [
                     'id'          => $notifId,
-                    'title'       => "Pengajuan Armada #{$r->id} ({$employeeName})",
-                    'description' => "Perjalanan dinas ke {$dest} tanggal {$dateStr}. Status: " . strtoupper(str_replace('_', ' ', $rawStatus)) . ".",
+                    'title'       => "Pengajuan Armada #REQ-{$r->id} ({$employeeName})",
+                    'description' => "Perjalanan dinas ke {$dest} pada {$dateStr}. Status: " . strtoupper(str_replace('_', ' ', $rawStatus)) . ".",
                     'timeAgo'     => $dateStr,
                     'severity'    => $severity,
                     'category'    => $category,
-                    'isRead'      => in_array($notifId, $readIds, true),
+                    'isRead'      => in_array($notifId, $readIds, true) || in_array($legacyId, $readIds, true),
                     'metadata'    => "REQ ID: #{$r->id}",
                     'rawStatus'   => $rawStatus,
+                    'actionUrl'   => $actionUrl,
                 ];
             }
 
@@ -296,11 +326,13 @@ class NotificationController extends Controller
             $ids = $request->input('ids', []);
 
             if (empty($ids)) {
-                $ids = VehicleRequest::orderBy('id', 'desc')
-                    ->take(100)
-                    ->pluck('id')
-                    ->map(fn($id) => (string) $id)
-                    ->toArray();
+                $requests = VehicleRequest::orderBy('id', 'desc')->take(100)->get();
+                $ids = [];
+                foreach ($requests as $r) {
+                    $rawStatus = is_object($r->status) ? $r->status->value : (string) $r->status;
+                    $ids[] = "req-{$r->id}-" . strtolower($rawStatus);
+                    $ids[] = (string) $r->id;
+                }
             }
 
             foreach ($ids as $rawId) {
@@ -333,7 +365,7 @@ class NotificationController extends Controller
     }
 
     /**
-     * Diagnostic test endpoint — verifies table exists, insert works, read works.
+     * Diagnostic test endpoint.
      */
     public function test(Request $request): JsonResponse
     {
@@ -342,7 +374,6 @@ class NotificationController extends Controller
         $results['user_id'] = $user ? $user->id : 'NOT AUTHENTICATED';
         $results['user_name'] = $user ? $user->name : 'N/A';
 
-        // 1. Check table
         try {
             $tableExists = \Illuminate\Support\Facades\Schema::hasTable('user_notification_states');
             $results['table_exists'] = $tableExists;
@@ -350,37 +381,6 @@ class NotificationController extends Controller
             $results['table_exists'] = 'ERROR: ' . $e->getMessage();
         }
 
-        // 2. Try insert test row
-        if ($user) {
-            try {
-                $state = UserNotificationState::firstOrNew([
-                    'user_id' => $user->id,
-                    'notification_id' => 'TEST_DIAGNOSTIC',
-                ]);
-                $state->is_read = true;
-                $state->is_deleted = false;
-                $state->save();
-
-                $results['insert_test'] = 'SUCCESS, id=' . $state->id;
-
-                // Read it back
-                $readBack = UserNotificationState::where('user_id', $user->id)
-                    ->where('notification_id', 'TEST_DIAGNOSTIC')
-                    ->first();
-                $results['read_back'] = $readBack ? 'SUCCESS, is_read=' . ($readBack->is_read ? 'true' : 'false') : 'FAILED';
-
-                // Clean up
-                UserNotificationState::where('user_id', $user->id)
-                    ->where('notification_id', 'TEST_DIAGNOSTIC')
-                    ->delete();
-                $results['cleanup'] = 'SUCCESS';
-
-            } catch (\Throwable $e) {
-                $results['insert_test'] = 'ERROR: ' . $e->getMessage();
-            }
-        }
-
-        // 3. Count existing states for this user
         if ($user) {
             try {
                 $count = UserNotificationState::where('user_id', $user->id)->count();
@@ -395,9 +395,9 @@ class NotificationController extends Controller
         }
 
         return $this->jsonNoCache([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Notification system diagnostic',
-            'data' => $results,
+            'data'    => $results,
         ]);
     }
 }
