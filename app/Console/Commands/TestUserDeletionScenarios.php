@@ -245,7 +245,7 @@ class TestUserDeletionScenarios extends Command
             DB::table('request_approvals')->insert([
                 'request_id'   => $reqDId,
                 'approver_id'  => $userD->id,
-                'step'         => 1,
+                'role'         => 'dept_head',
                 'status'       => 'approved',
                 'created_at'   => now(),
                 'updated_at'   => now(),
