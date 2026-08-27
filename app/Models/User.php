@@ -169,7 +169,15 @@ class User extends Authenticatable
 
     public function isHrGaDepartment(): bool
     {
-        return $this->department && $this->department->name === 'HRD & GA';
+        $validDeptNames = ['HRD & GA', 'HRD', 'GA', 'HRD&GA', 'HR&GA', 'Human Resources', 'General Affairs'];
+        if ($this->department && in_array($this->department->name, $validDeptNames, true)) {
+            return true;
+        }
+        if ($this->department_id) {
+            $deptName = Department::where('id', $this->department_id)->value('name');
+            return in_array($deptName, $validDeptNames, true);
+        }
+        return false;
     }
 
     public function isHrGaHead(): bool

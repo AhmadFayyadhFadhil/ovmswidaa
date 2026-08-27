@@ -51,7 +51,31 @@ class UserController extends Controller
     private function isAdmin(): bool
     {
         $user = Auth::user();
-        return $user && $user->hasRoleDirect('Admin');
+        return $user && $user->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin']);
+    }
+
+    private function canManageUsers(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        // 1. Superadmin / Admin
+        if ($user->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin'])) {
+            return true;
+        }
+
+        // 2. GA Coordinator / GA Staff
+        if ($user->hasRoleDirect(['GA', 'ga', 'GA Coordinator', 'ga coordinator', 'GA Staff', 'ga staff'])) {
+            return true;
+        }
+
+        // 3. HRD & GA Department Head or Approver
+        if ($user->isHrGaDepartment() && ($user->is_department_head || $user->hasRoleDirect(['Approver', 'approver', 'GA', 'ga']))) {
+            return true;
+        }
+
+        return false;
     }
 
     public function index(Request $request): JsonResponse
@@ -561,49 +585,53 @@ class UserController extends Controller
 
     public function destroy(User $user): JsonResponse
     {
-        $currentUser = Auth::user();
-        $isAuthorized = $currentUser && (
-            $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
-            $currentUser->isHrGaHead() ||
-            ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
-        );
-
-        if (!$isAuthorized) {
-            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
-        }
-
-        if ($user->id === Auth::id()) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Tidak dapat menghapus akun sendiri',
-            ], 422);
-        }
-
-        // Guard: Non-Admin users cannot delete Admin accounts
-        if ($user->hasRoleDirect('Admin') && !$this->isAdmin()) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Hanya Superadmin yang berhak menghapus akun Admin.',
-            ], 403);
-        }
-
-        // Guard: Cannot delete user involved in active trips (ON_GOING or DRIVER_ASSIGNED)
-        $hasActiveTrips = \App\Models\Request::where(function ($q) use ($user) {
-                $q->where('user_id', $user->id)
-                  ->orWhere('driver_id', $user->id);
-            })
-            ->whereIn('status', [RequestStatus::DRIVER_ASSIGNED->value, RequestStatus::ON_GOING->value])
-            ->exists();
-
-        if ($hasActiveTrips) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Tidak dapat menghapus user ini karena sedang terlibat dalam perjalanan aktif.',
-            ], 422);
-        }
-
         try {
-            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+            $currentUser = Auth::user();
+            if (!$this->canManageUsers($currentUser)) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized: Anda tidak memiliki hak akses untuk menghapus user.'], 403);
+            }
+
+            if ((int) $user->id === (int) Auth::id()) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Tidak dapat menghapus akun sendiri.',
+                ], 422);
+            }
+
+            // Guard: Non-Admin users (like GA Coordinator) cannot delete Admin accounts
+            if ($user->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin']) && !$this->isAdmin()) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Hanya Superadmin yang berhak menghapus akun Admin.',
+                ], 403);
+            }
+
+            // Guard: Cannot delete user involved in active trips (ON_GOING or DRIVER_ASSIGNED)
+            $hasActiveTrips = false;
+            if (Schema::hasTable('requests')) {
+                $hasActiveTrips = DB::table('requests')
+                    ->where(function ($q) use ($user) {
+                        $q->where('user_id', $user->id)
+                          ->orWhere('driver_id', $user->id);
+                    })
+                    ->whereIn('status', ['driver_assigned', 'on_going'])
+                    ->exists();
+            }
+
+            if ($hasActiveTrips) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Tidak dapat menghapus user ini karena sedang terlibat dalam perjalanan aktif.',
+                ], 422);
+            }
+
+            // Attempt session foreign key bypass safely
+            try {
+                DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+            } catch (\Throwable $fkErr) {
+                // Ignore if not permitted
+            }
+
             DB::transaction(function () use ($user) {
                 $targetId = $user->id;
 
@@ -704,13 +732,17 @@ class UserController extends Controller
                 'message' => 'User berhasil dihapus permanen dari sistem',
             ], 200);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('User Delete Error: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('User Delete Error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Gagal menghapus user: ' . $e->getMessage(),
             ], 500);
         } finally {
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            try {
+                DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            } catch (\Throwable $fkErr) {
+                // Ignore if not permitted
+            }
         }
     }
 
