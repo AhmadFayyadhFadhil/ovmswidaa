@@ -21,16 +21,20 @@ class AuthController extends Controller
             'password' => 'required|string|min:6',
         ]);
 
-        if (!Auth::attempt($validated)) {
+        $loginInput = trim($validated['nik']);
+        $password   = $validated['password'];
+
+        // Flexible authentication: support NIK or Email with automatic trimming
+        $user = User::where('nik', $loginInput)->orWhere('email', $loginInput)->first();
+
+        if (!$user || !Hash::check($password, $user->password)) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'NIK atau password salah',
+                'message' => 'NIK/Email atau password salah',
             ], 401);
         }
 
-        $user  = Auth::user();
         if (!$user->is_active) {
-            Auth::logout();
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Akun Anda belum aktif. Silakan hubungi GA Koordinator atau Administrator untuk aktivasi.',

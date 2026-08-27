@@ -603,6 +603,7 @@ class UserController extends Controller
         }
 
         try {
+            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
             DB::transaction(function () use ($user) {
                 $targetId = $user->id;
 
@@ -646,6 +647,10 @@ class UserController extends Controller
                     DB::table('audit_logs')->where('user_id', $targetId)->delete();
                 }
 
+                if (Schema::hasTable('personal_access_tokens')) {
+                    DB::table('personal_access_tokens')->where('tokenable_id', $targetId)->delete();
+                }
+
                 if (Schema::hasTable('model_has_roles')) {
                     DB::table('model_has_roles')->where('model_id', $targetId)->delete();
                 }
@@ -668,6 +673,8 @@ class UserController extends Controller
                 'status'  => 'error',
                 'message' => 'Gagal menghapus user: ' . $e->getMessage(),
             ], 500);
+        } finally {
+            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
         }
     }
 
