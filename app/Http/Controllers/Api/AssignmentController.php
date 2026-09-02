@@ -43,7 +43,7 @@ class AssignmentController extends Controller
 
         $query = Assignment::with(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'vehicle', 'assignedBy']);
 
-        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator', 'coordinator']) && !Auth::user()->isHrGaHead()) {
             $query->where('driver_id', $user->id);
         }
 
@@ -73,7 +73,7 @@ class AssignmentController extends Controller
     {
         try {
             $user = Auth::user();
-            if (!$user || (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head']) && !$user->isHrGaHead())) {
+            if (!$user || (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head', 'Driver Coordinator', 'driver coordinator', 'coordinator']) && !$user->isHrGaHead())) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
             }
 

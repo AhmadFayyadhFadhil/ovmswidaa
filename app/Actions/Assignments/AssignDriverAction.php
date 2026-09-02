@@ -33,52 +33,72 @@ class AssignDriverAction
                 $priorityVal = $request->priority instanceof \BackedEnum ? $request->priority->value : (is_object($request->priority) ? ($request->priority->value ?? 'Normal') : (string)$request->priority);
             }
 
-            $isUrgent = in_array(strtolower($priorityVal), ['urgent', 'critical'], true);
-            $asgStatus = $isUrgent ? 'accepted' : 'pending_driver';
+            $authUser = auth()->user();
+            $assignerId = $authUser?->id ?? $request->user_id ?? 1;
 
-            $assignerId = auth()->id() ?? $request->user_id ?? 1;
+            $userRoles = $authUser ? $authUser->getRoleNames()->map(fn($r) => strtolower(trim($r)))->toArray() : [];
+            $isGAOrAdmin = in_array('ga', $userRoles, true) || in_array('admin', $userRoles, true) || in_array('administrator', $userRoles, true);
+            $isCoordinator = in_array('driver coordinator', $userRoles, true) || in_array('driver_coordinator', $userRoles, true);
+
+            $isUrgent = in_array(strtolower($priorityVal), ['urgent', 'critical'], true);
+            $isDirectScheduled = $isGAOrAdmin || $isUrgent || !$isCoordinator;
+
+            $asgStatus = $isDirectScheduled ? 'accepted' : 'allocated';
+            $reqStatus = $isDirectScheduled ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::ASSIGNED_BY_GA;
 
             $assignment = Assignment::create([
-                'request_id' => $request->id,
-                'vehicle_id' => $vehicleId,
-                'driver_id' => $driverId,
+                'request_id'  => $request->id,
+                'vehicle_id'  => $vehicleId,
+                'driver_id'   => $driverId,
                 'assigned_by' => $assignerId,
                 'assigned_at' => now(),
-                'status' => $asgStatus,
-                'notes' => $notes,
+                'status'      => $asgStatus,
+                'notes'       => $notes,
             ]);
 
-            $reqStatus = $isUrgent ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::WAITING_DRIVER;
             $qrCodeToken = $request->qr_code_token;
-            if ($isUrgent && !$qrCodeToken) {
+            if ($isDirectScheduled && !$qrCodeToken) {
                 $qrCodeToken = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));
             }
 
             // Update request fields and status
-            $request->update([
-                'status' => $reqStatus,
-                'driver_id' => $driverId,
-                'vehicle_id' => $vehicleId,
-                'assigned_by' => $assignerId,
-                'assigned_at' => now(),
-                'is_external' => false,
-                'third_party_cost' => 0,
-                'estimated_duration' => $data['estimated_duration'] ?? $request->estimated_duration,
-                'priority' => $priorityVal,
+            $updatePayload = [
+                'status'                 => $reqStatus,
+                'driver_id'              => $driverId,
+                'vehicle_id'             => $vehicleId,
+                'assigned_by'            => $assignerId,
+                'assigned_at'            => now(),
+                'is_external'            => false,
+                'third_party_cost'       => 0,
+                'estimated_duration'     => $data['estimated_duration'] ?? $request->estimated_duration,
+                'priority'               => $priorityVal,
                 'driver_response_status' => $asgStatus,
-                'qr_code_token' => $qrCodeToken,
-            ]);
+                'qr_code_token'          => $qrCodeToken,
+            ];
 
-            if ($isUrgent) {
+            if ($isCoordinator && !$isGAOrAdmin) {
+                $updatePayload['coordinator_id'] = $assignerId;
+                $updatePayload['coordinator_assigned_at'] = now();
+            }
+
+            if ($isDirectScheduled) {
+                $updatePayload['ga_approved_by'] = $assignerId;
+                $updatePayload['ga_approved_at'] = now();
+            }
+
+            $request->update($updatePayload);
+
+            if ($isDirectScheduled) {
                 try {
-                    \App\Models\OperationalTrip::create([
-                        'request_id' => $request->id,
-                        'driver_id' => $driverId,
-                        'vehicle_id' => $vehicleId,
-                        'start_datetime' => $request->start_time ?? now(),
-                        'end_datetime' => $request->end_time ?? now()->addHours(4),
-                        'status' => 'scheduled',
-                    ]);
+                    \App\Models\OperationalTrip::firstOrCreate(
+                        ['request_id' => $request->id, 'driver_id' => $driverId],
+                        [
+                            'vehicle_id'     => $vehicleId,
+                            'start_datetime' => $request->start_time ?? now(),
+                            'end_datetime'   => $request->end_time ?? now()->addHours(4),
+                            'status'         => 'scheduled',
+                        ]
+                    );
                 } catch (\Throwable $ex) {}
             }
 

@@ -35,7 +35,7 @@ class RolePermissionSeeder extends Seeder
 
         // Buat role untuk guard web DAN sanctum
         foreach (['web', 'sanctum'] as $guard) {
-            foreach (['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'Security'] as $roleName) {
+            foreach (['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'Driver Coordinator', 'Security'] as $roleName) {
                 Role::firstOrCreate([
                     'name'       => $roleName,
                     'guard_name' => $guard,
@@ -48,12 +48,13 @@ class RolePermissionSeeder extends Seeder
         foreach (['web', 'sanctum'] as $guard) {
             $allPerms = Permission::where('guard_name', $guard)->get();
 
-            $admin    = Role::where('name', 'Admin')->where('guard_name', $guard)->first();
-            $ga       = Role::where('name', 'GA')->where('guard_name', $guard)->first();
-            $approver = Role::where('name', 'Approver')->where('guard_name', $guard)->first();
-            $employee = Role::where('name', 'Employee')->where('guard_name', $guard)->first();
-            $driver   = Role::where('name', 'Driver')->where('guard_name', $guard)->first();
-            $security = Role::where('name', 'Security')->where('guard_name', $guard)->first();
+            $admin       = Role::where('name', 'Admin')->where('guard_name', $guard)->first();
+            $ga          = Role::where('name', 'GA')->where('guard_name', $guard)->first();
+            $approver    = Role::where('name', 'Approver')->where('guard_name', $guard)->first();
+            $employee    = Role::where('name', 'Employee')->where('guard_name', $guard)->first();
+            $driver      = Role::where('name', 'Driver')->where('guard_name', $guard)->first();
+            $coordinator = Role::where('name', 'Driver Coordinator')->where('guard_name', $guard)->first();
+            $security    = Role::where('name', 'Security')->where('guard_name', $guard)->first();
 
             $admin->syncPermissions($allPerms);
 
@@ -77,6 +78,11 @@ class RolePermissionSeeder extends Seeder
 
             $driver->syncPermissions($allPerms->whereIn('name', [
                 'view-vehicle', 'view-own-request',
+            ]));
+
+            $coordinator->syncPermissions($allPerms->whereIn('name', [
+                'view-vehicle', 'view-own-request', 'view-all-requests',
+                'create-assignment', 'update-assignment',
             ]));
 
             $security->syncPermissions($allPerms->whereIn('name', [

@@ -70,9 +70,10 @@ class NotificationController extends Controller
             // 2. Determine User Role for Scope Filtering
             $userRoles = $user->getRoleNames()->map(fn($r) => strtolower(trim($r)))->toArray();
             $isAdminOrGA = in_array('admin', $userRoles, true) || in_array('administrator', $userRoles, true) || in_array('gahrd', $userRoles, true) || in_array('ga', $userRoles, true) || in_array('superadmin', $userRoles, true) || in_array('hrd', $userRoles, true);
-            $isDriver = in_array('driver', $userRoles, true) && !$isAdminOrGA;
+            $isCoordinator = (in_array('driver coordinator', $userRoles, true) || in_array('driver_coordinator', $userRoles, true) || in_array('coordinator', $userRoles, true)) && !$isAdminOrGA;
+            $isDriver = in_array('driver', $userRoles, true) && !$isAdminOrGA && !$isCoordinator;
             $isApprover = in_array('approver', $userRoles, true) && !$isAdminOrGA;
-            $isEmployee = in_array('employee', $userRoles, true) && !$isAdminOrGA && !$isApprover && !$isDriver;
+            $isEmployee = in_array('employee', $userRoles, true) && !$isAdminOrGA && !$isApprover && !$isDriver && !$isCoordinator;
 
             $query = VehicleRequest::with(['user', 'department', 'driver']);
 
@@ -81,10 +82,23 @@ class NotificationController extends Controller
                     $q->where('user_id', $user->id)
                       ->orWhere('requested_by', $user->id);
                 });
+            } elseif ($isCoordinator) {
+                $query->where(function ($q) use ($user) {
+                    $q->whereIn('status', [
+                        RequestStatus::APPROVED_DEPARTMENT->value,
+                        RequestStatus::ASSIGNED_BY_GA->value,
+                        RequestStatus::DRIVER_ASSIGNED->value,
+                        RequestStatus::ON_GOING->value,
+                        RequestStatus::COMPLETED->value,
+                    ])
+                    ->orWhere('driver_id', $user->id)
+                    ->orWhere('coordinator_id', $user->id)
+                    ->orWhereHas('assignments', fn($aq) => $aq->where('driver_id', $user->id));
+                });
             } elseif ($isDriver) {
                 $query->where(function ($q) use ($user) {
                     $q->where('driver_id', $user->id)
-                      ->orWhereHas('assignment', fn($aq) => $aq->where('driver_id', $user->id));
+                      ->orWhereHas('assignments', fn($aq) => $aq->where('driver_id', $user->id));
                 });
             } elseif ($isApprover) {
                 $query->where(function ($q) use ($user) {

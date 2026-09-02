@@ -34,21 +34,47 @@ class ApproveRequestAction
             if ($status === 'rejected') {
                 $newStatus = RequestStatus::REJECTED;
                 $request->update([
-                    'status' => $newStatus,
+                    'status'          => $newStatus,
                     'rejected_reason' => $notes,
                 ]);
             } else {
+                $updatePayload = [];
                 if ($role === 'dept_head') {
                     $newStatus = RequestStatus::APPROVED_DEPARTMENT;
                 } else {
                     $newStatus = RequestStatus::DRIVER_ASSIGNED;
+                    $updatePayload['ga_approved_by'] = $user->id;
+                    $updatePayload['ga_approved_at'] = now();
+                    $updatePayload['driver_response_status'] = 'accepted';
+
+                    if (!$request->qr_code_token) {
+                        $updatePayload['qr_code_token'] = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));
+                    }
+
+                    // Auto-accept assignment records
+                    try {
+                        \App\Models\Assignment::where('request_id', $request->id)
+                            ->update(['status' => 'accepted']);
+                    } catch (\Throwable $ex) {}
+
+                    // Ensure operational trip is created as scheduled
+                    if ($request->driver_id && $request->vehicle_id) {
+                        try {
+                            \App\Models\OperationalTrip::firstOrCreate(
+                                ['request_id' => $request->id, 'driver_id' => $request->driver_id],
+                                [
+                                    'vehicle_id'     => $request->vehicle_id,
+                                    'start_datetime' => $request->start_time ?? now(),
+                                    'end_datetime'   => $request->end_time ?? now()->addHours(4),
+                                    'status'         => 'scheduled',
+                                ]
+                            );
+                        } catch (\Throwable $ex) {}
+                    }
                 }
-                if (!$request->qr_code_token) {
-                    $request->update([
-                        'qr_code_token' => 'REQ-' . time() . '-' . bin2hex(random_bytes(4)),
-                    ]);
-                }
-                $request->update(['status' => $newStatus]);
+
+                $updatePayload['status'] = $newStatus;
+                $request->update($updatePayload);
             }
 
             return $request;

@@ -347,16 +347,20 @@ class UserController extends Controller
                 'name'            => 'required|string|max:255',
                 'email'           => ['required', 'email', Rule::unique('users', 'email')],
                 'password'        => ['required', Password::min(6)],
-                'role'            => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
+                'role'            => ['required', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'Driver Coordinator', 'Security', 'admin', 'ga', 'approver', 'employee', 'driver', 'driver coordinator', 'security'])],
                 'rank'            => 'required_if:role,Approver|nullable|string|max:255',
                 'department_id'   => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
                 'sim_a_photo'     => ['nullable'],
             ]);
 
-            $role = ucfirst(strtolower($validated['role']));
-            if ($role === 'Ga') {
+            $rawRole = trim((string)$validated['role']);
+            if (strcasecmp($rawRole, 'ga') === 0) {
                 $role = 'GA';
+            } elseif (strcasecmp($rawRole, 'driver coordinator') === 0) {
+                $role = 'Driver Coordinator';
+            } else {
+                $role = ucfirst(strtolower($rawRole));
             }
 
             // Guard: Non-Admin users (like GA) cannot create Admin accounts
@@ -510,16 +514,23 @@ class UserController extends Controller
                 'name'            => 'sometimes|required|string|max:255',
                 'email'           => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
                 'password'        => ['sometimes', Password::min(6)],
-                'role'            => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'admin', 'ga', 'approver', 'employee', 'driver'])],
+                'role'            => ['sometimes', Rule::in(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'Driver Coordinator', 'Security', 'admin', 'ga', 'approver', 'employee', 'driver', 'driver coordinator', 'security'])],
                 'rank'            => 'required_if:role,Approver|nullable|string|max:255',
                 'department_id'   => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
                 'sim_a_photo'     => ['nullable'],
             ]);
 
-            $role = isset($validated['role']) ? ucfirst(strtolower($validated['role'])) : null;
-            if ($role === 'Ga') {
-                $role = 'GA';
+            $rawRole = isset($validated['role']) ? trim((string)$validated['role']) : null;
+            $role = null;
+            if ($rawRole) {
+                if (strcasecmp($rawRole, 'ga') === 0) {
+                    $role = 'GA';
+                } elseif (strcasecmp($rawRole, 'driver coordinator') === 0) {
+                    $role = 'Driver Coordinator';
+                } else {
+                    $role = ucfirst(strtolower($rawRole));
+                }
             }
 
             // Guard: Non-Admin users cannot assign the Admin role

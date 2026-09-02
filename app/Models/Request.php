@@ -70,6 +70,10 @@ class Request extends Model
         'external_return_fleet_info_2',
         'external_return_photo_path_2',
         'third_party_cost_2',
+        'coordinator_id',
+        'coordinator_assigned_at',
+        'ga_approved_by',
+        'ga_approved_at',
     ];
 
     protected $casts = [
@@ -78,6 +82,8 @@ class Request extends Model
         'is_external' => 'boolean',
         'security_checked_out_at' => 'datetime',
         'security_checked_in_at' => 'datetime',
+        'coordinator_assigned_at' => 'datetime',
+        'ga_approved_at' => 'datetime',
     ];
 
     /**
@@ -157,6 +163,16 @@ class Request extends Model
     public function driver()
     {
         return $this->belongsTo(User::class, 'driver_id');
+    }
+
+    public function coordinator()
+    {
+        return $this->belongsTo(User::class, 'coordinator_id');
+    }
+
+    public function gaApprover()
+    {
+        return $this->belongsTo(User::class, 'ga_approved_by');
     }
 
     public function cancelledBy()
