@@ -94,24 +94,25 @@ class TestEmailNotification extends Command
         }
 
         $this->info('====================================================');
-        $this->info('   OVMS GMAIL SMTP TEST NOTIFICATION');
+        $this->info('   OVMS CORPORATE SMTP TEST NOTIFICATION');
         $this->info('====================================================');
-        $this->line("Mailer:    " . config('mail.default'));
-        $this->line("Host:      " . config('mail.mailers.smtp.host'));
-        $this->line("Port:      " . config('mail.mailers.smtp.port'));
-        $this->line("Username:  " . config('mail.mailers.smtp.username'));
-        $this->line("From:      " . config('mail.from.address') . " (" . config('mail.from.name') . ")");
-        $this->line("Target:    {$destinationEmail}");
+        $this->line("Mailer:     " . config('mail.default'));
+        $this->line("Host:       " . config('mail.mailers.smtp.host'));
+        $this->line("Port:       " . config('mail.mailers.smtp.port'));
+        $this->line("Encryption: " . (config('mail.mailers.smtp.encryption') ?? 'none'));
+        $this->line("Username:   " . config('mail.mailers.smtp.username'));
+        $this->line("From:       " . config('mail.from.address') . " (" . config('mail.from.name') . ")");
+        $this->line("Target:     {$destinationEmail}");
         $this->newLine();
 
         $this->info("Sending test notification to {$destinationEmail}...");
 
         $dummyData = [
-            'subjectTitle'   => '[TEST OVMS] Uji Coba Integrasi Gmail SMTP — PT Widatra Bhakti',
+            'subjectTitle'   => '[TEST OVMS] Uji Coba Integrasi Mail Server — PT Widatra Bhakti',
             'badgeText'      => 'UJI COBA SMTP BERHASIL',
             'badgeColor'     => '#059669',
             'recipientName'  => 'Rekan Kerja PT Widatra Bhakti',
-            'messageBody'    => 'Selamat! Integrasi sistem notifikasi email OVMS dengan Google Gmail SMTP telah BERHASIL terhubung dan berjalan dengan sempurna.',
+            'messageBody'    => 'Selamat! Integrasi sistem notifikasi email OVMS dengan Mail Server Perusahaan (mail.widatra.com) telah BERHASIL terhubung dan berjalan dengan sempurna.',
             'requestId'      => '999',
             'requesterName'  => 'Melodi Bella Astria',
             'departmentName' => 'HRD & GA',
@@ -122,7 +123,7 @@ class TestEmailNotification extends Command
             'tripType'       => 'Same Day (Satu Hari)',
             'passengersList' => 'Melodi Bella Astria, Tim IT',
             'assignmentInfo' => 'Toyota Avanza [N 1234 WB] • Driver: Pak Winaryo (HP: 08123456789)',
-            'extraNote'      => 'Email ini merupakan pesan uji coba untuk memvalidasi konfigurasi Gmail SMTP.',
+            'extraNote'      => 'Email ini merupakan pesan uji coba untuk memvalidasi konfigurasi Corporate SMTP.',
             'actionUrl'      => EmailNotificationService::getFrontendUrl(),
         ];
 
@@ -143,10 +144,10 @@ class TestEmailNotification extends Command
             $this->error(" ❌ GAGAL MENGIRIM EMAIL:");
             $this->error(" " . $e->getMessage());
             $this->error("====================================================");
-            $this->warn("Tips Perbaikan:");
-            $this->line("1. Pastikan MAIL_USERNAME berisi email Gmail Anda.");
-            $this->line("2. Pastikan MAIL_PASSWORD berisi 16-Digit Google App Password (Sandi Aplikasi).");
-            $this->line("3. Pastikan 2-Step Verification aktif di Akun Google.");
+            $this->warn("Panduan Pemeriksaan:");
+            $this->line("1. Pastikan MAIL_HOST dan MAIL_PORT sesuai (Port 25 dengan MAIL_ENCRYPTION=tls).");
+            $this->line("2. Pastikan MAIL_USERNAME berisi username akun (gais@widatra.com atau gais).");
+            $this->line("3. Pastikan MAIL_PASSWORD dibungkus tanda petik tunggal '...' jika mengandung karakter $.");
             $this->newLine();
 
             return 1;

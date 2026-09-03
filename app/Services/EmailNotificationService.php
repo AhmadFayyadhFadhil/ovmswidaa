@@ -290,8 +290,11 @@ class EmailNotificationService
      */
     public static function sendUrgentAlertToGA(VehicleRequest $request): void
     {
-        $gaUsers = User::whereHas('roles', function ($q) {
-            $q->whereIn('name', ['gahrd', 'GA Coordinator', 'admin', 'Administrator', 'GA']);
+        $gaUsers = User::where(function ($q) {
+            $q->where('is_driver_coordinator', true)
+              ->orWhereHas('roles', function ($rq) {
+                  $rq->whereIn('name', ['gahrd', 'GA Coordinator', 'admin', 'Administrator', 'GA', 'driver coordinator', 'driver_coordinator', 'coordinator']);
+              });
         })->get();
 
         foreach ($gaUsers as $ga) {
@@ -334,9 +337,12 @@ class EmailNotificationService
             self::sendSafe($requester->email, $data);
         }
 
-        // B. Notify GAHRD Coordinators
-        $gaUsers = User::whereHas('roles', function ($q) {
-            $q->whereIn('name', ['gahrd', 'GA Coordinator', 'GA']);
+        // B. Notify GAHRD & Driver Coordinators
+        $gaUsers = User::where(function ($q) {
+            $q->where('is_driver_coordinator', true)
+              ->orWhereHas('roles', function ($rq) {
+                  $rq->whereIn('name', ['gahrd', 'GA Coordinator', 'GA', 'driver coordinator', 'driver_coordinator', 'coordinator', 'admin', 'Administrator']);
+              });
         })->get();
 
         foreach ($gaUsers as $ga) {

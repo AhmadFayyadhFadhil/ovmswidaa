@@ -284,8 +284,14 @@ class RequestResource extends JsonResource
                 'status'      => $asg->status,
                 'assigned_at' => $asg->assigned_at,
             ]) : null,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
+            'coordinator_id'          => $this->coordinator_id,
+            'coordinator_name'        => $this->coordinator?->name,
+            'coordinator_assigned_at' => $this->coordinator_assigned_at,
+            'ga_approved_by'          => $this->ga_approved_by,
+            'ga_approved_name'        => $this->gaApprover?->name,
+            'ga_approved_at'          => $this->ga_approved_at,
+            'created_at'              => $this->created_at,
+            'updated_at'              => $this->updated_at,
         ];
     }
 }

@@ -43,7 +43,7 @@ class AssignmentController extends Controller
 
         $query = Assignment::with(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'vehicle', 'assignedBy']);
 
-        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator', 'coordinator']) && !Auth::user()->isHrGaHead()) {
             $query->where('driver_id', $user->id);
         }
 
@@ -73,7 +73,7 @@ class AssignmentController extends Controller
     {
         try {
             $user = Auth::user();
-            if (!$user || (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head']) && !$user->isHrGaHead())) {
+            if (!$user || (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head', 'Driver Coordinator', 'driver coordinator', 'coordinator']) && !$user->isHrGaHead())) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
             }
 
@@ -81,6 +81,8 @@ class AssignmentController extends Controller
                 'request_id'         => 'required|exists:requests,id',
                 'is_external'        => 'nullable|boolean',
                 'third_party_cost'   => 'nullable|numeric|min:0',
+                'start_time'         => 'nullable|string',
+                'end_time'           => 'nullable|string',
                 'estimated_duration' => 'nullable|integer|min:1',
                 'priority'           => 'nullable|string',
                 'driver_id'          => 'nullable|exists:users,id',
@@ -106,6 +108,10 @@ class AssignmentController extends Controller
             if (!empty($validated['is_external'])) {
                 $priority = $validated['priority'] ?? ($vehicleRequest->priority instanceof \BackedEnum ? $vehicleRequest->priority->value : ($vehicleRequest->priority ?? 'Normal'));
                 // Removed strict priority constraint: Urgent and Critical can now use third party fleet if needed
+
+                $extStartTime = !empty($validated['start_time']) ? \Carbon\Carbon::parse($validated['start_time']) : ($vehicleRequest->start_time ? \Carbon\Carbon::parse($vehicleRequest->start_time) : now());
+                $extDuration = isset($validated['estimated_duration']) && is_numeric($validated['estimated_duration']) && (int)$validated['estimated_duration'] > 0 ? (int)$validated['estimated_duration'] : ($vehicleRequest->estimated_duration ?: 3);
+                $extEndTime = !empty($validated['end_time']) ? \Carbon\Carbon::parse($validated['end_time']) : $extStartTime->copy()->addHours($extDuration);
 
                 $photoPath = null;
                 if ($request->hasFile('external_photo')) {
@@ -139,7 +145,9 @@ class AssignmentController extends Controller
                     'qr_code_token' => $qrToken,
                     'is_external' => true,
                     'third_party_cost' => $validated['third_party_cost'] ?? 0,
-                    'estimated_duration' => $validated['estimated_duration'] ?? null,
+                    'start_time' => $extStartTime->format('Y-m-d H:i:s'),
+                    'end_time' => $extEndTime->format('Y-m-d H:i:s'),
+                    'estimated_duration' => $extDuration,
                     'priority' => $priority,
                     'notes' => $validated['notes'] ?? $vehicleRequest->notes,
                     'assigned_by' => auth()->id(),
@@ -362,7 +370,7 @@ class AssignmentController extends Controller
     public function storeDailyAssignments(Request $request, VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
-        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !$user->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator']) && !$user->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
@@ -371,6 +379,8 @@ class AssignmentController extends Controller
             'daily_assignments.*.itinerary_id' => 'required|exists:request_itineraries,id',
             'daily_assignments.*.driver_id' => 'nullable|exists:users,id',
             'daily_assignments.*.vehicle_id' => 'nullable|exists:vehicles,id',
+            'daily_assignments.*.morning_time' => 'nullable|string',
+            'daily_assignments.*.afternoon_time' => 'nullable|string',
             'daily_assignments.*.is_external' => 'nullable|boolean',
             'daily_assignments.*.external_driver_name' => 'nullable|string|max:255',
             'daily_assignments.*.external_license_plate' => 'nullable|string|max:255',
@@ -401,9 +411,9 @@ class AssignmentController extends Controller
                             ->whereIn('status', ['assigned', 'on_going'])
                             ->whereHas('request', function ($q) {
                                 $q->whereNotIn('status', [
-                                    RequestStatus::REJECTED->value,
-                                    RequestStatus::CANCELLED->value,
-                                    RequestStatus::COMPLETED->value,
+                                    \App\Enums\RequestStatus::REJECTED->value,
+                                    \App\Enums\RequestStatus::CANCELLED->value,
+                                    \App\Enums\RequestStatus::COMPLETED->value,
                                 ]);
                             })
                             ->exists();
@@ -411,9 +421,9 @@ class AssignmentController extends Controller
                         $conflictingDriverSingleRequest = \App\Models\Request::where('driver_id', $driverId)
                             ->where('id', '!=', $vehicleRequest->id)
                             ->whereIn('status', [
-                                RequestStatus::WAITING_DRIVER->value,
-                                RequestStatus::DRIVER_ASSIGNED->value,
-                                RequestStatus::ON_GOING->value,
+                                \App\Enums\RequestStatus::WAITING_DRIVER->value,
+                                \App\Enums\RequestStatus::DRIVER_ASSIGNED->value,
+                                \App\Enums\RequestStatus::ON_GOING->value,
                             ])
                             ->where(function ($q) use ($itDateStr) {
                                 $q->whereDate('start_time', $itDateStr)
@@ -438,9 +448,9 @@ class AssignmentController extends Controller
                             ->whereIn('status', ['assigned', 'on_going'])
                             ->whereHas('request', function ($q) {
                                 $q->whereNotIn('status', [
-                                    RequestStatus::REJECTED->value,
-                                    RequestStatus::CANCELLED->value,
-                                    RequestStatus::COMPLETED->value,
+                                    \App\Enums\RequestStatus::REJECTED->value,
+                                    \App\Enums\RequestStatus::CANCELLED->value,
+                                    \App\Enums\RequestStatus::COMPLETED->value,
                                 ]);
                             })
                             ->exists();
@@ -448,9 +458,9 @@ class AssignmentController extends Controller
                         $conflictingVehicleSingleRequest = \App\Models\Request::where('vehicle_id', $vehicleId)
                             ->where('id', '!=', $vehicleRequest->id)
                             ->whereIn('status', [
-                                RequestStatus::WAITING_DRIVER->value,
-                                RequestStatus::DRIVER_ASSIGNED->value,
-                                RequestStatus::ON_GOING->value,
+                                \App\Enums\RequestStatus::WAITING_DRIVER->value,
+                                \App\Enums\RequestStatus::DRIVER_ASSIGNED->value,
+                                \App\Enums\RequestStatus::ON_GOING->value,
                             ])
                             ->where(function ($q) use ($itDateStr) {
                                 $q->whereDate('start_time', $itDateStr)
@@ -463,7 +473,7 @@ class AssignmentController extends Controller
                         }
                     }
 
-                    $itinerary->update([
+                    $updateItData = [
                         'driver_id' => $isExternal ? null : $driverId,
                         'vehicle_id' => $isExternal ? null : $vehicleId,
                         'is_external' => $isExternal,
@@ -472,11 +482,20 @@ class AssignmentController extends Controller
                         'external_fleet_info' => $isExternal ? ($asg['external_fleet_info'] ?? null) : null,
                         'third_party_cost' => $isExternal ? ($asg['third_party_cost'] ?? 0) : 0,
                         'status' => 'assigned',
-                    ]);
+                    ];
+
+                    if (!empty($asg['morning_time'])) {
+                        $updateItData['morning_time'] = $asg['morning_time'];
+                    }
+                    if (!empty($asg['afternoon_time'])) {
+                        $updateItData['afternoon_time'] = $asg['afternoon_time'];
+                    }
+
+                    $itinerary->update($updateItData);
 
                     // Create or update Assignment row for driver if internal
                     if (!$isExternal && $driverId) {
-                        Assignment::updateOrCreate(
+                        \App\Models\Assignment::updateOrCreate(
                             [
                                 'request_id' => $vehicleRequest->id,
                                 'driver_id'  => $driverId,

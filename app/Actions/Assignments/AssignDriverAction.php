@@ -13,17 +13,30 @@ class AssignDriverAction
 {
     public function execute(Request $request, int $driverId, int $vehicleId, ?string $notes = null, array $data = []): Assignment
     {
-        return DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
-            // Allow assignment regardless of status to prevent blocking operational flow
+        $createdAssignment = DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
+            // Determine effective start_time, duration, and end_time
+            $effectiveStartTime = !empty($data['start_time']) 
+                ? \Carbon\Carbon::parse($data['start_time']) 
+                : ($request->start_time ? \Carbon\Carbon::parse($request->start_time) : now());
 
-            // Validate driver availability status
-            $driver = \App\Models\User::find($driverId);
+            $effectiveDuration = isset($data['estimated_duration']) && is_numeric($data['estimated_duration']) && (int)$data['estimated_duration'] > 0
+                ? (int)$data['estimated_duration']
+                : ($request->estimated_duration ? (int)$request->estimated_duration : 3);
 
-            // ===== VALIDATE DRIVER TIME CONFLICT =====
-            $this->validateDriverTimeConflict($driverId, $request);
+            $effectiveEndTime = !empty($data['end_time'])
+                ? \Carbon\Carbon::parse($data['end_time'])
+                : $effectiveStartTime->copy()->addHours($effectiveDuration);
 
-            // ===== VALIDATE VEHICLE TIME CONFLICT =====
-            $this->validateVehicleTimeConflict($vehicleId, $request);
+            // Ensure end_time is strictly after start_time
+            if ($effectiveEndTime->lte($effectiveStartTime)) {
+                $effectiveEndTime = $effectiveStartTime->copy()->addHours($effectiveDuration);
+            }
+
+            // ===== VALIDATE DRIVER TIME CONFLICT WITH EFFECTIVE TIMES =====
+            $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $effectiveEndTime);
+
+            // ===== VALIDATE VEHICLE TIME CONFLICT WITH EFFECTIVE TIMES =====
+            $this->validateVehicleTimeConflict($vehicleId, $request, $effectiveStartTime, $effectiveEndTime);
 
             // Create assignment
             $priorityVal = 'Normal';
@@ -33,52 +46,73 @@ class AssignDriverAction
                 $priorityVal = $request->priority instanceof \BackedEnum ? $request->priority->value : (is_object($request->priority) ? ($request->priority->value ?? 'Normal') : (string)$request->priority);
             }
 
-            $isUrgent = in_array(strtolower($priorityVal), ['urgent', 'critical'], true);
-            $asgStatus = $isUrgent ? 'accepted' : 'pending_driver';
+            $authUser = auth()->user();
+            $assignerId = $authUser?->id ?? $request->user_id ?? 1;
 
-            $assignerId = auth()->id() ?? $request->user_id ?? 1;
+            $userRoles = $authUser ? $authUser->getRoleNames()->map(fn($r) => strtolower(trim($r)))->toArray() : [];
+            $isGAOrAdmin = in_array('ga', $userRoles, true) || in_array('admin', $userRoles, true) || in_array('administrator', $userRoles, true);
+            $isCoordinator = in_array('driver coordinator', $userRoles, true) || in_array('driver_coordinator', $userRoles, true);
+
+            $isUrgent = in_array(strtolower($priorityVal), ['urgent', 'critical'], true);
+            $isDirectScheduled = $isGAOrAdmin || $isUrgent || !$isCoordinator;
+
+            $asgStatus = $isDirectScheduled ? 'accepted' : 'allocated';
+            $reqStatus = $isDirectScheduled ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::ASSIGNED_BY_GA;
 
             $assignment = Assignment::create([
-                'request_id' => $request->id,
-                'vehicle_id' => $vehicleId,
-                'driver_id' => $driverId,
+                'request_id'  => $request->id,
+                'vehicle_id'  => $vehicleId,
+                'driver_id'   => $driverId,
                 'assigned_by' => $assignerId,
                 'assigned_at' => now(),
-                'status' => $asgStatus,
-                'notes' => $notes,
+                'status'      => $asgStatus,
+                'notes'       => $notes,
             ]);
 
-            $reqStatus = $isUrgent ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::WAITING_DRIVER;
             $qrCodeToken = $request->qr_code_token;
-            if ($isUrgent && !$qrCodeToken) {
+            if ($isDirectScheduled && !$qrCodeToken) {
                 $qrCodeToken = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));
             }
 
             // Update request fields and status
-            $request->update([
-                'status' => $reqStatus,
-                'driver_id' => $driverId,
-                'vehicle_id' => $vehicleId,
-                'assigned_by' => $assignerId,
-                'assigned_at' => now(),
-                'is_external' => false,
-                'third_party_cost' => 0,
-                'estimated_duration' => $data['estimated_duration'] ?? $request->estimated_duration,
-                'priority' => $priorityVal,
+            $updatePayload = [
+                'status'                 => $reqStatus,
+                'driver_id'              => $driverId,
+                'vehicle_id'             => $vehicleId,
+                'assigned_by'            => $assignerId,
+                'assigned_at'            => now(),
+                'is_external'            => false,
+                'third_party_cost'       => 0,
+                'start_time'             => $effectiveStartTime->format('Y-m-d H:i:s'),
+                'end_time'               => $effectiveEndTime->format('Y-m-d H:i:s'),
+                'estimated_duration'     => $effectiveDuration,
+                'priority'               => $priorityVal,
                 'driver_response_status' => $asgStatus,
-                'qr_code_token' => $qrCodeToken,
-            ]);
+                'qr_code_token'          => $qrCodeToken,
+            ];
 
-            if ($isUrgent) {
+            if ($isCoordinator && !$isGAOrAdmin) {
+                $updatePayload['coordinator_id'] = $assignerId;
+                $updatePayload['coordinator_assigned_at'] = now();
+            }
+
+            if ($isDirectScheduled) {
+                $updatePayload['ga_approved_by'] = $assignerId;
+                $updatePayload['ga_approved_at'] = now();
+            }
+
+            $request->update($updatePayload);
+
+            if ($isDirectScheduled) {
                 try {
-                    \App\Models\OperationalTrip::create([
-                        'request_id' => $request->id,
-                        'driver_id' => $driverId,
-                        'vehicle_id' => $vehicleId,
-                        'start_datetime' => $request->start_time ?? now(),
-                        'end_datetime' => $request->end_time ?? now()->addHours(4),
-                        'status' => 'scheduled',
-                    ]);
+                    $trip = \App\Models\OperationalTrip::firstOrNew(
+                        ['request_id' => $request->id, 'driver_id' => $driverId]
+                    );
+                    $trip->vehicle_id = $vehicleId;
+                    $trip->start_datetime = $effectiveStartTime->format('Y-m-d H:i:s');
+                    $trip->end_datetime = $effectiveEndTime->format('Y-m-d H:i:s');
+                    $trip->status = 'scheduled';
+                    $trip->save();
                 } catch (\Throwable $ex) {}
             }
 
@@ -97,15 +131,24 @@ class AssignDriverAction
 
             return $assignment;
         });
+
+        // Trigger safe email notification
+        try {
+            \App\Services\EmailNotificationService::sendDriverAssigned($request);
+        } catch (\Throwable $mailErr) {
+            \Illuminate\Support\Facades\Log::warning('Failed triggering email on driver assignment: ' . $mailErr->getMessage());
+        }
+
+        return $createdAssignment;
     }
 
     /**
      * Validate driver doesn't have conflicting assignment at the same time
      */
-    private function validateDriverTimeConflict(int $driverId, Request $request): void
+    private function validateDriverTimeConflict(int $driverId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null): void
     {
-        $startTime = $request->start_time;
-        $endTime = $request->end_time;
+        $startTime = $effectiveStartTime ?? ($request->start_time ? \Carbon\Carbon::parse($request->start_time) : null);
+        $endTime = $effectiveEndTime ?? ($request->end_time ? \Carbon\Carbon::parse($request->end_time) : null);
 
         if (!$startTime || !$endTime) {
             return; // Cannot validate without time range
@@ -124,7 +167,7 @@ class AssignDriverAction
 
         if ($conflict) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'driver_id' => 'Driver ini sudah ditugaskan ke request lain (REQ-' . $conflict->id . ') pada rentang waktu yang sama (' . \Carbon\Carbon::parse($conflict->start_time)->format('d/m/Y H:i') . ' - ' . \Carbon\Carbon::parse($conflict->end_time)->format('d/m/Y H:i') . '). Silakan pilih driver lain.',
+                'driver_id' => 'Driver ini sudah ditugaskan ke request lain (#REQ-' . $conflict->id . ') pada rentang waktu yang sama (' . \Carbon\Carbon::parse($conflict->start_time)->format('d/m/Y H:i') . ' - ' . \Carbon\Carbon::parse($conflict->end_time)->format('d/m/Y H:i') . '). Silakan pilih driver lain atau sesuaikan jam keberangkatan.',
             ]);
         }
     }
@@ -132,10 +175,10 @@ class AssignDriverAction
     /**
      * Validate vehicle doesn't have conflicting assignment at the same time
      */
-    private function validateVehicleTimeConflict(int $vehicleId, Request $request): void
+    private function validateVehicleTimeConflict(int $vehicleId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null): void
     {
-        $startTime = $request->start_time;
-        $endTime = $request->end_time;
+        $startTime = $effectiveStartTime ?? ($request->start_time ? \Carbon\Carbon::parse($request->start_time) : null);
+        $endTime = $effectiveEndTime ?? ($request->end_time ? \Carbon\Carbon::parse($request->end_time) : null);
 
         if (!$startTime || !$endTime) {
             return; // Cannot validate without time range
@@ -154,7 +197,7 @@ class AssignDriverAction
 
         if ($conflict) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'vehicle_id' => 'Kendaraan ini sudah ditugaskan ke request lain (REQ-' . $conflict->id . ') pada rentang waktu yang sama (' . \Carbon\Carbon::parse($conflict->start_time)->format('d/m/Y H:i') . ' - ' . \Carbon\Carbon::parse($conflict->end_time)->format('d/m/Y H:i') . '). Silakan pilih kendaraan lain.',
+                'vehicle_id' => 'Kendaraan ini sudah ditugaskan ke request lain (#REQ-' . $conflict->id . ') pada rentang waktu yang sama (' . \Carbon\Carbon::parse($conflict->start_time)->format('d/m/Y H:i') . ' - ' . \Carbon\Carbon::parse($conflict->end_time)->format('d/m/Y H:i') . '). Silakan pilih kendaraan lain atau sesuaikan jam keberangkatan.',
             ]);
         }
     }
