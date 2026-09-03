@@ -17,7 +17,7 @@ class ApproveRequestAction
             $user = Auth::user();
 
             // Validate approver authorization
-            if (!$user->hasRoleDirect('Admin') && !$user->hasRoleDirect('Approver') && !$user->hasRoleDirect('GA')) {
+            if (!$user->hasRoleDirect('Admin') && !$user->hasRoleDirect('Approver') && !$user->hasRoleDirect('GA') && !$user->isHrGaHead()) {
                 throw new Exception("Anda tidak berhak untuk approve/reject request ini.");
             }
 

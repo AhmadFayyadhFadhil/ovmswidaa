@@ -83,8 +83,15 @@ class RequestPolicy
             return true;
         }
 
+        // GA Coordinator / GA Staff / HRGA Head can approve fleet allocations
+        if ($user->hasRoleDirect('GA') || $user->isHrGaHead()) {
+            if (in_array($request->status, [RequestStatus::ASSIGNED_BY_GA, RequestStatus::APPROVED_DEPARTMENT], true)) {
+                return true;
+            }
+        }
+
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::ASSIGNED_BY_GA, RequestStatus::APPROVED_DEPARTMENT])) {
+            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::ASSIGNED_BY_GA, RequestStatus::APPROVED_DEPARTMENT], true)) {
                 return true;
             }
 
@@ -110,8 +117,15 @@ class RequestPolicy
             return true;
         }
 
+        // GA Coordinator / GA Staff / HRGA Head can reject requests after submission
+        if ($user->hasRoleDirect('GA') || $user->isHrGaHead()) {
+            if (in_array($request->status, [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::ASSIGNED_BY_GA], true)) {
+                return true;
+            }
+        }
+
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::ASSIGNED_BY_GA])) {
+            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::ASSIGNED_BY_GA], true)) {
                 return true;
             }
 
