@@ -13,7 +13,7 @@ class AssignDriverAction
 {
     public function execute(Request $request, int $driverId, int $vehicleId, ?string $notes = null, array $data = []): Assignment
     {
-        return DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
+        $createdAssignment = DB::transaction(function () use ($request, $driverId, $vehicleId, $notes, $data) {
             // Determine effective start_time, duration, and end_time
             $effectiveStartTime = !empty($data['start_time']) 
                 ? \Carbon\Carbon::parse($data['start_time']) 
@@ -131,6 +131,15 @@ class AssignDriverAction
 
             return $assignment;
         });
+
+        // Trigger safe email notification
+        try {
+            \App\Services\EmailNotificationService::sendDriverAssigned($request);
+        } catch (\Throwable $mailErr) {
+            \Illuminate\Support\Facades\Log::warning('Failed triggering email on driver assignment: ' . $mailErr->getMessage());
+        }
+
+        return $createdAssignment;
     }
 
     /**
