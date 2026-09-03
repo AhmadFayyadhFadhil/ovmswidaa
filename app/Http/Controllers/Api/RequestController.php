@@ -27,12 +27,13 @@ class RequestController extends Controller
         $search  = $request->query('search');
 
         // Cache role checks once to avoid repeated DB queries (N× hasRoleDirect calls)
-        $isAdmin    = $user->hasRoleDirect('Admin');
-        $isGA       = $user->hasRoleDirect('GA');
-        $isApprover = $user->hasRoleDirect('Approver');
-        $isDriver   = $user->hasRoleDirect('Driver');
-        $isSecurity = $user->hasRoleDirect('Security');
-        $isHrGaHead = $user->isHrGaHead();
+        $isAdmin       = $user->hasRoleDirect('Admin');
+        $isGA          = $user->hasRoleDirect('GA');
+        $isApprover    = $user->hasRoleDirect('Approver');
+        $isDriver      = $user->hasRoleDirect('Driver');
+        $isSecurity    = $user->hasRoleDirect('Security');
+        $isCoordinator = $user->hasRoleDirect(['Driver Coordinator', 'driver coordinator']) || $user->hasRole('Driver Coordinator');
+        $isHrGaHead    = $user->isHrGaHead();
         $myRequestsOnly = $request->boolean('my_requests_only') || $request->input('scope') === 'my_requests';
 
         $query = VehicleRequest::with([
@@ -94,6 +95,9 @@ class RequestController extends Controller
                       });
                 });
             }
+        } elseif ($isCoordinator && !$isAdmin && !$isGA) {
+            // Coordinator can view all requests or all fleet requests to allocate drivers
+            // (e.g. from Alokasi Armada /gahrd/requests and Kalender /gahrd/calendar)
         } elseif (!$isAdmin && !$isApprover && !$isGA && !$isSecurity && !$isHrGaHead) {
             if ($isDriver) {
                 $query->where(function ($q) use ($user) {
@@ -239,6 +243,7 @@ class RequestController extends Controller
             !$user->hasRoleDirect('Admin') && 
             !$user->isHrGaHead() && 
             !$user->hasRoleDirect('GA') && 
+            !$user->hasRoleDirect(['Driver Coordinator', 'driver coordinator']) &&
             !$user->hasRoleDirect('Security') && 
             $vehicleRequest->driver_id !== $user->id && 
             $vehicleRequest->operationalTrip?->driver_id !== $user->id &&
@@ -810,7 +815,7 @@ class RequestController extends Controller
     {
         $user = Auth::user();
         $isAuthorized = $user && (
-            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga']) ||
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator']) ||
             $user->isHrGaHead() ||
             ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
         );
@@ -825,7 +830,7 @@ class RequestController extends Controller
         ]);
 
         $driver = \App\Models\User::findOrFail($validated['driver_id']);
-        if (!$driver->hasRoleDirect(['Driver', 'driver'])) {
+        if (!$driver->hasRoleDirect(['Driver', 'driver', 'Driver Coordinator', 'driver coordinator'])) {
             return response()->json(['status' => 'error', 'message' => 'User yang ditunjuk bukan Driver.'], 422);
         }
 

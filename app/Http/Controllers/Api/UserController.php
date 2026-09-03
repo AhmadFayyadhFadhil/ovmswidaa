@@ -85,7 +85,7 @@ class UserController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $hasAccess = $user->hasRoleDirect(['Admin', 'GA']) || $user->isHrGaHead();
+        $hasAccess = $user->hasRoleDirect(['Admin', 'GA', 'Driver Coordinator']) || $user->isHrGaHead();
 
         if (!$hasAccess) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
@@ -141,7 +141,11 @@ class UserController extends Controller
 
         if ($role) {
             $query->whereHas('roles', function ($q) use ($role) {
-                $q->where('name', $role);
+                if (strcasecmp($role, 'driver') === 0) {
+                    $q->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), ['driver', 'driver coordinator']);
+                } else {
+                    $q->where('name', $role);
+                }
             });
         }
 
@@ -939,7 +943,7 @@ class UserController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        if (!$user->hasRoleDirect(['Admin', 'GA', 'Approver', 'Employee', 'Driver'])) {
+        if (!$user->hasRoleDirect(['Admin', 'GA', 'Approver', 'Employee', 'Driver', 'Driver Coordinator'])) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 

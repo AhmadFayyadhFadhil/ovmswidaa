@@ -362,7 +362,7 @@ class AssignmentController extends Controller
     public function storeDailyAssignments(Request $request, VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
-        if (!$this->hasRoleDirect($user, ['Admin', 'admin']) && !$user->isHrGaHead() && !$this->hasRoleDirect($user, ['GA', 'ga'])) {
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator']) && !$user->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
