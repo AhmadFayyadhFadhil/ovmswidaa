@@ -107,6 +107,31 @@ class TestEmailNotification extends Command
 
         $this->info("Sending test notification to {$destinationEmail}...");
 
+        // Direct SMTP Diagnostic Test
+        try {
+            $host = config('mail.mailers.smtp.host');
+            $port = (int)config('mail.mailers.smtp.port');
+            $this->line("→ Testing direct socket connect to {$host}:{$port}...");
+            $socket = @fsockopen($host, $port, $errno, $errstr, 5);
+            if ($socket) {
+                $banner = fgets($socket, 512);
+                $this->line("  [Server Greeting] " . trim($banner));
+                fputs($socket, "EHLO ovmsdev.widatra.com\r\n");
+                $ehloCaps = [];
+                while ($resp = fgets($socket, 512)) {
+                    $ehloCaps[] = trim($resp);
+                    if (substr($resp, 3, 1) === ' ') break;
+                }
+                $this->line("  [Server Capabilities]: " . implode(' | ', $ehloCaps));
+                fclose($socket);
+            } else {
+                $this->warn("  [Socket Failed]: ({$errno}) {$errstr}");
+            }
+        } catch (\Throwable $diagEx) {
+            $this->line("  [Diagnostic Exception]: " . $diagEx->getMessage());
+        }
+        $this->newLine();
+
         $dummyData = [
             'subjectTitle'   => '[TEST OVMS] Uji Coba Integrasi Mail Server — PT Widatra Bhakti',
             'badgeText'      => 'UJI COBA SMTP BERHASIL',
