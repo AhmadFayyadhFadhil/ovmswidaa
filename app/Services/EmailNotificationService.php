@@ -430,6 +430,37 @@ class EmailNotificationService
             $data['actionUrl'] = self::getFrontendUrl() . "/driver/dashboard?open_request={$request->id}";
             self::sendSafe($driverEmail, $data);
         }
+
+        // C. Send Notification to all registered Passengers (Only upon Scheduled / Driver Assigned)
+        if ($request->passengers && $request->passengers->isNotEmpty()) {
+            $alreadySentEmails = [strtolower(trim($requester->email ?? ''))];
+            if ($driverEmail) {
+                $alreadySentEmails[] = strtolower(trim($driverEmail));
+            }
+
+            foreach ($request->passengers as $p) {
+                $pUser = $p->user;
+                $pEmail = $pUser ? $pUser->email : null;
+                $pName = $pUser ? $pUser->name : ($p->name ?? 'Rekan Penumpang');
+
+                if ($pEmail && !in_array(strtolower(trim($pEmail)), $alreadySentEmails, true)) {
+                    $alreadySentEmails[] = strtolower(trim($pEmail));
+
+                    $data = self::buildCommonData(
+                        $request,
+                        $pName,
+                        'JADWAL TERSEDIA',
+                        '#059669',
+                        "[OVMS Widatra] Informasi Jadwal Keberangkatan Perjalanan Dinas #REQ-{$request->id}",
+                        "Pemberitahuan: Anda terdaftar sebagai penumpang dalam perjalanan dinas #REQ-{$request->id}. Unit kendaraan dan driver telah dialokasikan dan siap melayani perjalanan sesuai jadwal keberangkatan.",
+                        $request->notes ?? null,
+                        $assignmentStr
+                    );
+                    $data['actionUrl'] = self::getFrontendUrl() . "/employee/myrequests?open_request={$request->id}";
+                    self::sendSafe($pEmail, $data);
+                }
+            }
+        }
     }
 
     /**
