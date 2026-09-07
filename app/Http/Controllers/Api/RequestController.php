@@ -805,6 +805,15 @@ class RequestController extends Controller
             return $errorResponse;
         }
 
+        // Trigger trip completed email notification if status is completed
+        try {
+            if ($vehicleRequest->fresh()->status === RequestStatus::COMPLETED) {
+                \App\Services\EmailNotificationService::sendTripCompleted($vehicleRequest);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Failed to send trip completed email for Request #{$vehicleRequest->id}: " . $e->getMessage());
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => 'Perjalanan selesai',
