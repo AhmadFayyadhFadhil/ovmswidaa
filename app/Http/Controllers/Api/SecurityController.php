@@ -471,6 +471,15 @@ class SecurityController extends Controller
                 'data'    => $vehicleRequest->load(['user', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle']),
             ], 200);
         } else {
+            // Trigger trip completed email notification if checkin finalized the request
+            try {
+                if ($vehicleRequest->fresh()->status === RequestStatus::COMPLETED) {
+                    \App\Services\EmailNotificationService::sendTripCompleted($vehicleRequest);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Failed to send trip completed email on security checkin for Request #{$vehicleRequest->id}: " . $e->getMessage());
+            }
+
             return response()->json([
                 'status'  => 'success',
                 'message' => $customMessage ?? ($targetTrip ? 'Checkin unit armada berhasil dikonfirmasi.' : 'Scan Kembali (Checkin) berhasil dikonfirmasi.'),

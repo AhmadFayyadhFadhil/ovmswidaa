@@ -162,6 +162,12 @@ class EmailNotificationService
             'passengersList' => $passengersList,
             'assignmentInfo' => $assignmentInfo ?? '',
             'extraNote'      => $extraNote ?? '',
+            'departureTimeStr' => '',
+            'completionTimeStr'=> '',
+            'totalDurationStr' => '',
+            'isCompleted'    => false,
+            'ctaBtnText'     => 'Buka Permohonan di OVMS &rarr;',
+            'ctaBtnColor'    => '#1d4ed8',
             'actionUrl'      => $actionUrl,
         ];
     }
@@ -527,6 +533,171 @@ class EmailNotificationService
                         $reason ? "Alasan Pembatalan: {$reason}" : 'Dibatalkan oleh sistem.'
                     );
                     self::sendSafe($asg->driver->email, $data);
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculate human-readable duration string between two timestamps.
+     * Output examples: "3 Jam 45 Menit", "45 Menit", "2 Hari 3 Jam 15 Menit".
+     */
+    public static function calculateDurationString($startTime, $endTime): string
+    {
+        if (!$startTime || !$endTime) {
+            return '-';
+        }
+
+        try {
+            $start = $startTime instanceof \Carbon\Carbon ? $startTime : \Carbon\Carbon::parse($startTime);
+            $end = $endTime instanceof \Carbon\Carbon ? $endTime : \Carbon\Carbon::parse($endTime);
+
+            if ($end->lessThan($start)) {
+                return '0 Menit';
+            }
+
+            $diffMinutes = $start->diffInMinutes($end);
+            if ($diffMinutes <= 0) {
+                return '< 1 Menit';
+            }
+
+            $days = intdiv($diffMinutes, 1440);
+            $remainingMinutes = $diffMinutes % 1440;
+            $hours = intdiv($remainingMinutes, 60);
+            $mins = $remainingMinutes % 60;
+
+            $parts = [];
+            if ($days > 0) {
+                $parts[] = "{$days} Hari";
+            }
+            if ($hours > 0) {
+                $parts[] = "{$hours} Jam";
+            }
+            if ($mins > 0 || empty($parts)) {
+                $parts[] = "{$mins} Menit";
+            }
+
+            return implode(' ', $parts);
+        } catch (\Throwable $e) {
+            return '-';
+        }
+    }
+
+    /**
+     * 7. TRIGGER: Trip Completed (Perjalanan Selesai).
+     * Sends trip completion summary & driver rating CTA to Requester and all registered Passengers.
+     */
+    public static function sendTripCompleted(VehicleRequest $request): void
+    {
+        $request->loadMissing(['user', 'department', 'passengers.user', 'assignments.driver', 'assignments.vehicle', 'itineraries', 'operationalTrips']);
+        $requester = $request->user;
+
+        // Determine actual departure time
+        $depTime = null;
+        if ($request->security_checked_out_at) {
+            $depTime = $request->security_checked_out_at;
+        } elseif ($request->operationalTrips && $request->operationalTrips->isNotEmpty()) {
+            $depTime = $request->operationalTrips->min('start_datetime') ?? $request->operationalTrips->min('security_checked_out_at');
+        }
+        if (!$depTime && $request->start_time) {
+            $depTime = $request->start_time;
+        }
+        if (!$depTime) {
+            $depTime = $request->created_at;
+        }
+
+        // Determine actual completion time
+        $compTime = null;
+        if ($request->security_checked_in_at) {
+            $compTime = $request->security_checked_in_at;
+        } elseif ($request->completed_at) {
+            $compTime = $request->completed_at;
+        } elseif ($request->operationalTrips && $request->operationalTrips->isNotEmpty()) {
+            $compTime = $request->operationalTrips->max('end_datetime') ?? $request->operationalTrips->max('security_checked_in_at');
+        }
+        if (!$compTime) {
+            $compTime = now();
+        }
+
+        $depCarbon = $depTime instanceof \Carbon\Carbon ? $depTime : \Carbon\Carbon::parse($depTime);
+        $compCarbon = $compTime instanceof \Carbon\Carbon ? $compTime : \Carbon\Carbon::parse($compTime);
+
+        $departureStr = $depCarbon->format('d M Y, H:i') . ' WIB';
+        $completionStr = $compCarbon->format('d M Y, H:i') . ' WIB';
+        $totalDurationStr = self::calculateDurationString($depCarbon, $compCarbon);
+
+        // Extract Vehicle & Driver info
+        $driverName = 'Driver Operasional';
+        $vehicleInfo = 'Unit Armada Widatra';
+        if ($request->assignments && $request->assignments->isNotEmpty()) {
+            $firstAssign = $request->assignments->first();
+            if ($firstAssign->driver) {
+                $driverName = $firstAssign->driver->name;
+            }
+            if ($firstAssign->vehicle) {
+                $vehicleInfo = "{$firstAssign->vehicle->name} [{$firstAssign->vehicle->plate_number}]";
+            }
+        }
+        $assignmentStr = "{$vehicleInfo} • Driver: {$driverName}";
+
+        $destination = $request->destination_city ? ($request->destination_place ? "{$request->destination_city} — {$request->destination_place}" : $request->destination_city) : ($request->destination ?? 'Tujuan Dinas');
+
+        $ratingUrl = self::getFrontendUrl() . "/employee/myrequests?id={$request->id}&review=true";
+
+        // A. Send to Requester
+        if ($requester && $requester->email) {
+            $data = self::buildCommonData(
+                $request,
+                $requester->name,
+                'PERJALANAN SELESAI',
+                '#059669',
+                "[OVMS Widatra] Perjalanan Dinas #REQ-{$request->id} Telah Selesai — Berikan Penilaian Driver ⭐",
+                "Terima kasih telah menggunakan fasilitas kendaraan dinas PT Widatra Bhakti. Perjalanan dinas Anda ke {$destination} telah selesai dengan selamat. Mohon kesediaan Anda untuk memberikan ulasan dan rating performa driver pada tombol di bawah ini.",
+                $request->notes ?? null,
+                $assignmentStr
+            );
+            $data['departureTimeStr'] = $departureStr;
+            $data['completionTimeStr'] = $completionStr;
+            $data['totalDurationStr'] = $totalDurationStr;
+            $data['isCompleted'] = true;
+            $data['ctaBtnText'] = '⭐ Berikan Penilaian & Rating Driver';
+            $data['ctaBtnColor'] = '#059669';
+            $data['actionUrl'] = $ratingUrl;
+
+            self::sendSafe($requester->email, $data);
+        }
+
+        // B. Send to registered Passengers
+        if ($request->passengers && $request->passengers->isNotEmpty()) {
+            $alreadySentEmails = [strtolower(trim($requester->email ?? ''))];
+
+            foreach ($request->passengers as $p) {
+                $pUser = $p->user;
+                $pEmail = $pUser ? $pUser->email : null;
+                $pName = $pUser ? $pUser->name : ($p->name ?? 'Rekan Penumpang');
+
+                if ($pEmail && !in_array(strtolower(trim($pEmail)), $alreadySentEmails, true)) {
+                    $alreadySentEmails[] = strtolower(trim($pEmail));
+
+                    $data = self::buildCommonData(
+                        $request,
+                        $pName,
+                        'PERJALANAN SELESAI',
+                        '#059669',
+                        "[OVMS Widatra] Perjalanan Dinas #REQ-{$request->id} Telah Selesai — Berikan Penilaian Driver ⭐",
+                        "Pemberitahuan: Perjalanan dinas #REQ-{$request->id} ke {$destination} yang Anda ikuti telah selesai dengan selamat. Mohon kesediaan Anda untuk memberikan rating performa driver pada tombol di bawah ini.",
+                        $request->notes ?? null,
+                        $assignmentStr
+                    );
+                    $data['departureTimeStr'] = $departureStr;
+                    $data['completionTimeStr'] = $completionStr;
+                    $data['totalDurationStr'] = $totalDurationStr;
+                    $data['isCompleted'] = true;
+                    $data['ctaBtnText'] = '⭐ Berikan Penilaian & Rating Driver';
+                    $data['ctaBtnColor'] = '#059669';
+                    $data['actionUrl'] = $ratingUrl;
+
+                    self::sendSafe($pEmail, $data);
                 }
             }
         }

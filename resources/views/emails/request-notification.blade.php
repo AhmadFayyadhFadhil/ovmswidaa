@@ -80,6 +80,24 @@
               <td class="details-value">{{ $passengersList }}</td>
             </tr>
             @endif
+            @if(!empty($departureTimeStr))
+            <tr>
+              <td class="details-label">Waktu Keberangkatan</td>
+              <td class="details-value" style="color: #0f172a; font-weight: 600;">{{ $departureTimeStr }}</td>
+            </tr>
+            @endif
+            @if(!empty($completionTimeStr))
+            <tr>
+              <td class="details-label">Waktu Selesai (Kembali)</td>
+              <td class="details-value" style="color: #059669; font-weight: 700;">{{ $completionTimeStr }}</td>
+            </tr>
+            @endif
+            @if(!empty($totalDurationStr))
+            <tr>
+              <td class="details-label">Total Waktu Perjalanan</td>
+              <td class="details-value"><span style="background-color: #ecfdf5; color: #065f46; font-weight: 700; padding: 4px 10px; border-radius: 6px; border: 1px solid #a7f3d0; font-size: 12.5px;">⏱️ {{ $totalDurationStr }}</span></td>
+            </tr>
+            @endif
             @if(!empty($assignmentInfo))
             <tr>
               <td class="details-label">Armada & Driver</td>
@@ -111,7 +129,9 @@
 
           @if(!empty($actionUrl))
           <div class="cta-container">
-            <a href="{{ $actionUrl }}" target="_blank" class="cta-btn">Buka Permohonan di OVMS &rarr;</a>
+            <a href="{{ $actionUrl }}" target="_blank" class="cta-btn" style="background-color: {{ $ctaBtnColor ?? '#1d4ed8' }};">
+              {{ $ctaBtnText ?? 'Buka Permohonan di OVMS &rarr;' }}
+            </a>
           </div>
           @endif
         </td>

@@ -133,23 +133,29 @@ class TestEmailNotification extends Command
         $this->newLine();
 
         $dummyData = [
-            'subjectTitle'   => '[TEST OVMS] Uji Coba Integrasi Mail Server — PT Widatra Bhakti',
-            'badgeText'      => 'UJI COBA SMTP BERHASIL',
+            'subjectTitle'   => '[TEST OVMS] Uji Coba Notifikasi Perjalanan Selesai — PT Widatra Bhakti',
+            'badgeText'      => 'PERJALANAN SELESAI',
             'badgeColor'     => '#059669',
             'recipientName'  => 'Rekan Kerja PT Widatra Bhakti',
-            'messageBody'    => 'Selamat! Integrasi sistem notifikasi email OVMS dengan Mail Server Perusahaan (mail.widatra.com) telah BERHASIL terhubung dan berjalan dengan sempurna.',
+            'messageBody'    => 'Selamat! Integrasi sistem notifikasi email OVMS dengan Mail Server Perusahaan (mail.widatra.com) telah BERHASIL. Perjalanan dinas ke Surabaya — Kantor Pusat / Vendor telah selesai dengan selamat. Mohon luangkan waktu sejenak untuk memberikan ulasan dan rating performa driver pada tombol di bawah ini.',
             'requestId'      => '999',
             'requesterName'  => 'Melodi Bella Astria',
             'departmentName' => 'HRD & GA',
             'destination'    => 'Surabaya — Kantor Pusat / Vendor',
-            'purpose'        => 'Uji Coba Pengiriman Notifikasi Email Otomatis',
-            'scheduleStr'    => now()->format('d M Y, H:i') . ' WIB',
+            'purpose'        => 'Uji Coba Pengiriman Notifikasi Email Selesai Perjalanan',
+            'scheduleStr'    => now()->subHours(4)->format('d M Y, H:i') . ' WIB',
             'priority'       => 'NORMAL',
             'tripType'       => 'Same Day (Satu Hari)',
             'passengersList' => 'Melodi Bella Astria, Tim IT',
             'assignmentInfo' => 'Toyota Avanza [N 1234 WB] • Driver: Pak Winaryo (HP: 08123456789)',
-            'extraNote'      => 'Email ini merupakan pesan uji coba untuk memvalidasi konfigurasi Corporate SMTP.',
-            'actionUrl'      => EmailNotificationService::getFrontendUrl(),
+            'extraNote'      => 'Email ini merupakan pesan uji coba untuk memvalidasi fitur Notifikasi Perjalanan Selesai & Rating Driver.',
+            'departureTimeStr' => now()->subHours(4)->format('d M Y, 08:00') . ' WIB',
+            'completionTimeStr'=> now()->format('d M Y, 12:45') . ' WIB',
+            'totalDurationStr' => '4 Jam 45 Menit',
+            'isCompleted'    => true,
+            'ctaBtnText'     => '⭐ Berikan Penilaian & Rating Driver',
+            'ctaBtnColor'    => '#059669',
+            'actionUrl'      => EmailNotificationService::getFrontendUrl() . "/employee/myrequests?id=999&review=true",
         ];
 
         try {
