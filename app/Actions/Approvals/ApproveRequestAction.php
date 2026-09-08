@@ -86,6 +86,8 @@ class ApproveRequestAction
                 \App\Services\EmailNotificationService::sendRequestRejected($updatedRequest, $notes);
             } elseif ($updatedRequest->status === RequestStatus::APPROVED_DEPARTMENT) {
                 \App\Services\EmailNotificationService::sendDepartmentApproved($updatedRequest);
+            } elseif ($updatedRequest->status === RequestStatus::DRIVER_ASSIGNED) {
+                \App\Services\EmailNotificationService::sendDriverAssigned($updatedRequest->fresh(['user', 'department', 'driver', 'vehicle', 'assignments.driver', 'assignments.vehicle']));
             }
         } catch (\Throwable $mailErr) {
             \Illuminate\Support\Facades\Log::warning('Failed triggering email on approval/rejection: ' . $mailErr->getMessage());
