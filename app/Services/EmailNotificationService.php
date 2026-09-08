@@ -166,7 +166,7 @@ class EmailNotificationService
             'completionTimeStr'=> '',
             'totalDurationStr' => '',
             'isCompleted'    => false,
-            'ctaBtnText'     => 'Buka Permohonan di OVMS &rarr;',
+            'ctaBtnText'     => 'Buka Permohonan di OVMS →',
             'ctaBtnColor'    => '#1d4ed8',
             'actionUrl'      => $actionUrl,
         ];

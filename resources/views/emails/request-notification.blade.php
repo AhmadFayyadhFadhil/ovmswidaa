@@ -130,7 +130,7 @@
           @if(!empty($actionUrl))
           <div class="cta-container">
             <a href="{{ $actionUrl }}" target="_blank" class="cta-btn" style="background-color: {{ $ctaBtnColor ?? '#1d4ed8' }};">
-              {{ $ctaBtnText ?? 'Buka Permohonan di OVMS &rarr;' }}
+              {{ $ctaBtnText ?? 'Buka Permohonan di OVMS →' }}
             </a>
           </div>
           @endif
