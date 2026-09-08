@@ -132,13 +132,6 @@ class AssignDriverAction
             return $assignment;
         });
 
-        // Trigger safe email notification
-        try {
-            \App\Services\EmailNotificationService::sendDriverAssigned($request);
-        } catch (\Throwable $mailErr) {
-            \Illuminate\Support\Facades\Log::warning('Failed triggering email on driver assignment: ' . $mailErr->getMessage());
-        }
-
         return $createdAssignment;
     }
 
