@@ -166,7 +166,7 @@ class EmailNotificationService
             'completionTimeStr'=> '',
             'totalDurationStr' => '',
             'isCompleted'    => false,
-            'ctaBtnText'     => 'Buka Permohonan di OVMS &rarr;',
+            'ctaBtnText'     => 'Buka Permohonan di OVMS →',
             'ctaBtnColor'    => '#1d4ed8',
             'actionUrl'      => $actionUrl,
         ];
@@ -373,7 +373,7 @@ class EmailNotificationService
      */
     public static function sendDriverAssigned(VehicleRequest $request, $assignment = null): void
     {
-        $request->loadMissing(['user', 'department', 'assignments.driver', 'assignments.vehicle', 'itineraries']);
+        $request->load(['user', 'department', 'driver', 'vehicle', 'assignments.driver', 'assignments.vehicle', 'itineraries']);
         $requester = $request->user;
 
         // Extract Vehicle & Driver info
@@ -383,6 +383,7 @@ class EmailNotificationService
         $vehicleInfo = 'Unit Armada Widatra';
 
         if ($assignment) {
+            $assignment->loadMissing(['driver', 'vehicle']);
             if ($assignment->driver) {
                 $driverName  = $assignment->driver->name;
                 $driverPhone = $assignment->driver->phone ? " (HP: {$assignment->driver->phone})" : '';
@@ -391,15 +392,22 @@ class EmailNotificationService
             if ($assignment->vehicle) {
                 $vehicleInfo = "{$assignment->vehicle->name} [{$assignment->vehicle->plate_number}]";
             }
-        } elseif ($request->assignments && $request->assignments->isNotEmpty()) {
-            $firstAssign = $request->assignments->first();
-            if ($firstAssign->driver) {
-                $driverName  = $firstAssign->driver->name;
-                $driverPhone = $firstAssign->driver->phone ? " (HP: {$firstAssign->driver->phone})" : '';
-                $driverEmail = $firstAssign->driver->email;
+        } elseif ($request->driver) {
+            $driverName  = $request->driver->name;
+            $driverPhone = $request->driver->phone ? " (HP: {$request->driver->phone})" : '';
+            $driverEmail = $request->driver->email;
+            if ($request->vehicle) {
+                $vehicleInfo = "{$request->vehicle->name} [{$request->vehicle->plate_number}]";
             }
-            if ($firstAssign->vehicle) {
-                $vehicleInfo = "{$firstAssign->vehicle->name} [{$firstAssign->vehicle->plate_number}]";
+        } elseif ($request->assignments && $request->assignments->isNotEmpty()) {
+            $latestAssign = $request->assignments->sortByDesc('id')->first();
+            if ($latestAssign && $latestAssign->driver) {
+                $driverName  = $latestAssign->driver->name;
+                $driverPhone = $latestAssign->driver->phone ? " (HP: {$latestAssign->driver->phone})" : '';
+                $driverEmail = $latestAssign->driver->email;
+            }
+            if ($latestAssign && $latestAssign->vehicle) {
+                $vehicleInfo = "{$latestAssign->vehicle->name} [{$latestAssign->vehicle->plate_number}]";
             }
         }
 
@@ -629,13 +637,18 @@ class EmailNotificationService
         // Extract Vehicle & Driver info
         $driverName = 'Driver Operasional';
         $vehicleInfo = 'Unit Armada Widatra';
-        if ($request->assignments && $request->assignments->isNotEmpty()) {
-            $firstAssign = $request->assignments->first();
-            if ($firstAssign->driver) {
-                $driverName = $firstAssign->driver->name;
+        if ($request->driver) {
+            $driverName = $request->driver->name;
+            if ($request->vehicle) {
+                $vehicleInfo = "{$request->vehicle->name} [{$request->vehicle->plate_number}]";
             }
-            if ($firstAssign->vehicle) {
-                $vehicleInfo = "{$firstAssign->vehicle->name} [{$firstAssign->vehicle->plate_number}]";
+        } elseif ($request->assignments && $request->assignments->isNotEmpty()) {
+            $latestAssign = $request->assignments->sortByDesc('id')->first();
+            if ($latestAssign && $latestAssign->driver) {
+                $driverName = $latestAssign->driver->name;
+            }
+            if ($latestAssign && $latestAssign->vehicle) {
+                $vehicleInfo = "{$latestAssign->vehicle->name} [{$latestAssign->vehicle->plate_number}]";
             }
         }
         $assignmentStr = "{$vehicleInfo} • Driver: {$driverName}";

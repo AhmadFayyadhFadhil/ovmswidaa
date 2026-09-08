@@ -78,7 +78,12 @@ class RequestPolicy
      */
     public function approve(User $user, Request $request): bool
     {
-        // Admin can always approve
+        // Terminal states and ongoing / driver assigned trips cannot be approved by anyone
+        if (in_array($request->status, [RequestStatus::COMPLETED, RequestStatus::REJECTED, RequestStatus::CANCELLED, RequestStatus::ON_GOING, RequestStatus::DRIVER_ASSIGNED, RequestStatus::WAITING_DRIVER], true)) {
+            return false;
+        }
+
+        // Admin can approve active pending requests
         if ($user->hasRoleDirect('Admin')) {
             return true;
         }
@@ -112,7 +117,12 @@ class RequestPolicy
      */
     public function reject(User $user, Request $request): bool
     {
-        // Admin can always reject
+        // Terminal states and ongoing trips cannot be rejected
+        if (in_array($request->status, [RequestStatus::COMPLETED, RequestStatus::REJECTED, RequestStatus::CANCELLED, RequestStatus::ON_GOING], true)) {
+            return false;
+        }
+
+        // Admin can reject active requests
         if ($user->hasRoleDirect('Admin')) {
             return true;
         }
