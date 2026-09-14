@@ -80,10 +80,17 @@ class ClearRequestHistory extends Command
                 $this->line('  ✓ Table [requests] truncated (Auto-Increment reset to 1)');
             }
 
-            // 3. Reset driver availability statuses
+            // 3. Reset driver availability statuses and user notification states
             if (DB::getSchemaBuilder()->hasTable('users')) {
-                DB::table('users')->whereNotNull('id')->update(['availability_status' => 'available']);
-                $this->line("  ✓ All driver availability statuses reset to 'available'");
+                $userUpdates = ['availability_status' => 'available'];
+                if (DB::getSchemaBuilder()->hasColumn('users', 'read_notification_ids')) {
+                    $userUpdates['read_notification_ids'] = null;
+                }
+                if (DB::getSchemaBuilder()->hasColumn('users', 'deleted_notification_ids')) {
+                    $userUpdates['deleted_notification_ids'] = null;
+                }
+                DB::table('users')->whereNotNull('id')->update($userUpdates);
+                $this->line("  ✓ All driver availability statuses reset to 'available' and notification states cleared");
             }
 
             // 4. Reset vehicle operational statuses
