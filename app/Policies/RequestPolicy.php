@@ -78,8 +78,17 @@ class RequestPolicy
      */
     public function approve(User $user, Request $request): bool
     {
+        $statusStr = $request->status instanceof RequestStatus ? $request->status->value : (string) $request->status;
+
         // Terminal states and ongoing / driver assigned trips cannot be approved by anyone
-        if (in_array($request->status, [RequestStatus::COMPLETED, RequestStatus::REJECTED, RequestStatus::CANCELLED, RequestStatus::ON_GOING, RequestStatus::DRIVER_ASSIGNED, RequestStatus::WAITING_DRIVER], true)) {
+        if (in_array($statusStr, [
+            RequestStatus::COMPLETED->value,
+            RequestStatus::REJECTED->value,
+            RequestStatus::CANCELLED->value,
+            RequestStatus::ON_GOING->value,
+            RequestStatus::DRIVER_ASSIGNED->value,
+            RequestStatus::WAITING_DRIVER->value
+        ], true)) {
             return false;
         }
 
@@ -89,18 +98,24 @@ class RequestPolicy
         }
 
         // GA Coordinator / GA Staff / HRGA Head can approve fleet allocations
-        if ($user->hasRoleDirect('GA') || $user->isHrGaHead()) {
-            if (in_array($request->status, [RequestStatus::ASSIGNED_BY_GA, RequestStatus::APPROVED_DEPARTMENT], true)) {
+        if ($user->hasRoleDirect(['GA', 'Admin']) || $user->isHrGaHead()) {
+            if (in_array($statusStr, [
+                RequestStatus::ASSIGNED_BY_GA->value,
+                RequestStatus::APPROVED_DEPARTMENT->value
+            ], true)) {
                 return true;
             }
         }
 
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::ASSIGNED_BY_GA, RequestStatus::APPROVED_DEPARTMENT], true)) {
+            if ($user->isHrGaHead() && in_array($statusStr, [
+                RequestStatus::ASSIGNED_BY_GA->value,
+                RequestStatus::APPROVED_DEPARTMENT->value
+            ], true)) {
                 return true;
             }
 
-            if ($request->status === RequestStatus::SUBMITTED) {
+            if ($statusStr === RequestStatus::SUBMITTED->value) {
                 $userDeptGroup = array_map('strval', $user->departmentGroup());
                 $reqDeptId = (string) $request->department_id;
                 $reqUserDeptId = (string) ($request->user?->department_id ?? '');
@@ -117,8 +132,15 @@ class RequestPolicy
      */
     public function reject(User $user, Request $request): bool
     {
+        $statusStr = $request->status instanceof RequestStatus ? $request->status->value : (string) $request->status;
+
         // Terminal states and ongoing trips cannot be rejected
-        if (in_array($request->status, [RequestStatus::COMPLETED, RequestStatus::REJECTED, RequestStatus::CANCELLED, RequestStatus::ON_GOING], true)) {
+        if (in_array($statusStr, [
+            RequestStatus::COMPLETED->value,
+            RequestStatus::REJECTED->value,
+            RequestStatus::CANCELLED->value,
+            RequestStatus::ON_GOING->value
+        ], true)) {
             return false;
         }
 
@@ -128,18 +150,26 @@ class RequestPolicy
         }
 
         // GA Coordinator / GA Staff / HRGA Head can reject requests after submission
-        if ($user->hasRoleDirect('GA') || $user->isHrGaHead()) {
-            if (in_array($request->status, [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::ASSIGNED_BY_GA], true)) {
+        if ($user->hasRoleDirect(['GA', 'Admin']) || $user->isHrGaHead()) {
+            if (in_array($statusStr, [
+                RequestStatus::SUBMITTED->value,
+                RequestStatus::APPROVED_DEPARTMENT->value,
+                RequestStatus::ASSIGNED_BY_GA->value
+            ], true)) {
                 return true;
             }
         }
 
         if ($user->hasRoleDirect('Approver')) {
-            if ($user->isHrGaHead() && in_array($request->status, [RequestStatus::SUBMITTED, RequestStatus::APPROVED_DEPARTMENT, RequestStatus::ASSIGNED_BY_GA], true)) {
+            if ($user->isHrGaHead() && in_array($statusStr, [
+                RequestStatus::SUBMITTED->value,
+                RequestStatus::APPROVED_DEPARTMENT->value,
+                RequestStatus::ASSIGNED_BY_GA->value
+            ], true)) {
                 return true;
             }
 
-            if ($request->status === RequestStatus::SUBMITTED) {
+            if ($statusStr === RequestStatus::SUBMITTED->value) {
                 $userDeptGroup = array_map('strval', $user->departmentGroup());
                 $reqDeptId = (string) $request->department_id;
                 $reqUserDeptId = (string) ($request->user?->department_id ?? '');
