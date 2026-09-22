@@ -54,7 +54,9 @@ class SettingController extends Controller
             if ($setting->key === 'company_logo' && $value) {
                 $filename = basename($value);
                 $fullPath = storage_path('app/public/settings/' . $filename);
-                $value = file_exists($fullPath) ? asset('storage/settings/' . $filename) : null;
+                $value = (file_exists($fullPath) || file_exists(public_path('storage/settings/' . $filename)))
+                    ? '/storage/settings/' . $filename
+                    : null;
             } elseif ($setting->type === 'boolean') {
                 $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
             }
@@ -331,8 +333,8 @@ class SettingController extends Controller
             if ($logo) {
                 $filename = basename($logo);
                 $fullPath = storage_path('app/public/settings/' . $filename);
-                if (file_exists($fullPath)) {
-                    $logoUrl = asset('storage/settings/' . $filename);
+                if (file_exists($fullPath) || file_exists(public_path('storage/settings/' . $filename))) {
+                    $logoUrl = '/storage/settings/' . $filename;
                 }
             }
         } catch (\Throwable $e) {
