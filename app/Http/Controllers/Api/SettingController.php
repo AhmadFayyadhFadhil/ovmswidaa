@@ -300,25 +300,45 @@ class SettingController extends Controller
      */
     public function getPublicStats(): JsonResponse
     {
-        $activeVehicles = Vehicle::count();
-        $dailyRequests = \App\Models\Request::whereDate('created_at', today())->count();
-        if ($dailyRequests === 0) {
-            $dailyRequests = \App\Models\Request::count();
+        try {
+            $activeVehicles = Vehicle::count();
+        } catch (\Throwable $e) {
+            $activeVehicles = 0;
         }
-        $activeDrivers = User::whereHas('roles', function($q) {
-            $q->where('name', 'Driver');
-        })->count();
 
-        $systemName = Setting::getValue('system_name', 'OVMS');
-        $companyName = Setting::getValue('company_name', 'Enterprise Fleet');
-        $logo = Setting::getValue('company_logo');
-        $logoUrl = null;
-        if ($logo) {
-            $filename = basename($logo);
-            $fullPath = storage_path('app/public/settings/' . $filename);
-            if (file_exists($fullPath)) {
-                $logoUrl = asset('storage/settings/' . $filename);
+        try {
+            $dailyRequests = \App\Models\Request::whereDate('created_at', today())->count();
+            if ($dailyRequests === 0) {
+                $dailyRequests = \App\Models\Request::count();
             }
+        } catch (\Throwable $e) {
+            $dailyRequests = 0;
+        }
+
+        try {
+            $activeDrivers = User::whereHas('roles', function($q) {
+                $q->whereRaw('LOWER(name) = ?', ['driver']);
+            })->count();
+        } catch (\Throwable $e) {
+            $activeDrivers = 0;
+        }
+
+        try {
+            $systemName = Setting::getValue('system_name', 'OVMS');
+            $companyName = Setting::getValue('company_name', 'PT Widarta Bhakti');
+            $logo = Setting::getValue('company_logo');
+            $logoUrl = null;
+            if ($logo) {
+                $filename = basename($logo);
+                $fullPath = storage_path('app/public/settings/' . $filename);
+                if (file_exists($fullPath)) {
+                    $logoUrl = asset('storage/settings/' . $filename);
+                }
+            }
+        } catch (\Throwable $e) {
+            $systemName = 'OVMS';
+            $companyName = 'PT Widarta Bhakti';
+            $logoUrl = null;
         }
 
         return response()->json([
