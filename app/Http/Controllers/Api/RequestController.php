@@ -472,10 +472,11 @@ class RequestController extends Controller
             'notes' => 'nullable|string'
         ]);
 
-        $role = $request->input('role') ?? match($vehicleRequest->status) {
-            RequestStatus::SUBMITTED           => 'dept_head',
-            RequestStatus::APPROVED_DEPARTMENT => 'hrd_head',
-            RequestStatus::ASSIGNED_BY_GA      => 'hrd_head',
+        $statusStr = $vehicleRequest->status instanceof RequestStatus ? $vehicleRequest->status->value : (string) $vehicleRequest->status;
+        $role = $request->input('role') ?? match($statusStr) {
+            RequestStatus::SUBMITTED->value           => 'dept_head',
+            RequestStatus::APPROVED_DEPARTMENT->value => 'hrd_head',
+            RequestStatus::ASSIGNED_BY_GA->value      => 'hrd_head',
             default => null,
         };
 
@@ -511,10 +512,10 @@ class RequestController extends Controller
             'notes' => 'required|string'
         ]);
 
-        // Auto-detect role from current request status if not provided
-        $role = $request->input('role') ?? match($vehicleRequest->status) {
-            RequestStatus::SUBMITTED           => 'dept_head',
-            RequestStatus::APPROVED_DEPARTMENT => 'hrd_head',
+        $statusStr = $vehicleRequest->status instanceof RequestStatus ? $vehicleRequest->status->value : (string) $vehicleRequest->status;
+        $role = $request->input('role') ?? match($statusStr) {
+            RequestStatus::SUBMITTED->value           => 'dept_head',
+            RequestStatus::APPROVED_DEPARTMENT->value => 'hrd_head',
             default => null,
         };
 
