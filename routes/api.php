@@ -19,6 +19,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middle
 Route::get('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
 Route::get('/trip-purposes', [\App\Http\Controllers\Api\TripPurposeController::class, 'index']);
 Route::get('/destination-cities', [\App\Http\Controllers\Api\DestinationCityController::class, 'index']);
+Route::get('/ga-team-approvers', [\App\Http\Controllers\Api\GaTeamApproverController::class, 'index']);
 Route::get('/public-stats', [\App\Http\Controllers\Api\SettingController::class, 'getPublicStats']);
 // ===== FLUSH CACHE ENDPOINT (Public for easy cache clearing without root access) =====
 Route::get('/flush-cache', function () {
@@ -109,6 +110,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/security-guards', [SecurityGuardController::class, 'index']);
     Route::post('/security-guards', [SecurityGuardController::class, 'store']);
     Route::delete('/security-guards/{securityGuard}', [SecurityGuardController::class, 'destroy']);
+
+    // ===== GA TEAM APPROVERS MASTER ENDPOINTS =====
+    Route::post('/ga-team-approvers', [\App\Http\Controllers\Api\GaTeamApproverController::class, 'store']);
+    Route::put('/ga-team-approvers/{gaTeamApprover}', [\App\Http\Controllers\Api\GaTeamApproverController::class, 'update']);
+    Route::delete('/ga-team-approvers/{gaTeamApprover}', [\App\Http\Controllers\Api\GaTeamApproverController::class, 'destroy']);
+    Route::post('/ga-team-approvers/{gaTeamApprover}/toggle-active', [\App\Http\Controllers\Api\GaTeamApproverController::class, 'toggleActive']);
 
     // ===== VEHICLE ENDPOINTS =====
     Route::get('/vehicles', [VehicleController::class, 'index']);

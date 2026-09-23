@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(RolePermissionSeeder::class);
+        $this->call(GaTeamApproverSeeder::class);
 
         // Helper to resolve department_id dynamically by name
         $getDeptId = function (string $deptName): int {
