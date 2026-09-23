@@ -206,17 +206,25 @@ class RequestResource extends JsonResource
                 'phone' => $this->user?->phone,
             ],
             'approvals' => $this->whenLoaded('approvals', fn() =>
-                $this->approvals->map(fn($a) => [
-                    'id'       => $a->id,
-                    'role'     => $a->role,
-                    'status'   => $a->status,
-                    'notes'    => $a->notes,
-                    'approver' => [
-                        'id'   => $a->approver?->id,
-                        'name' => $a->approver?->name,
-                    ],
-                    'created_at' => $a->created_at,
-                ])
+                $this->approvals->map(function ($a) {
+                    $approverName = $a->approver?->name;
+                    $isGaTeam = $a->role === 'ga_team' || str_contains(strtolower($approverName ?? ''), 'gateam');
+                    if ($isGaTeam) {
+                        $specified = $this->ga_approved_by_name;
+                        $approverName = $specified ? ('GA Team oleh ' . $specified) : 'GA Team (Backup Account)';
+                    }
+                    return [
+                        'id'       => $a->id,
+                        'role'     => $a->role === 'ga_team' ? 'GA Team Backup' : $a->role,
+                        'status'   => $a->status,
+                        'notes'    => $a->notes,
+                        'approver' => [
+                            'id'   => $a->approver?->id,
+                            'name' => $approverName,
+                        ],
+                        'created_at' => $a->created_at,
+                    ];
+                })
             ),
             'operational_trip' => $this->whenLoaded('operationalTrip', fn() => $this->operationalTrip ? [
                 'id' => $this->operationalTrip->id,
