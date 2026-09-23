@@ -76,6 +76,9 @@ class Request extends Model
         'ga_approved_by_name',
         'ga_approval_source',
         'ga_approved_at',
+        'start_km',
+        'end_km',
+        'total_km',
     ];
 
     protected $casts = [

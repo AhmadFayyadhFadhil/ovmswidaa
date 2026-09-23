@@ -164,6 +164,9 @@ class RequestResource extends JsonResource
             'security_checkin_by'     => $this->security_checkin_by,
             'security_checkout_notes' => $this->security_checkout_notes,
             'security_checkin_notes'  => $this->security_checkin_notes,
+            'start_km'                => $this->start_km,
+            'end_km'                  => $this->end_km,
+            'total_km'                => $this->total_km,
             'started_at'              => $this->started_at,
             'completed_at'            => $this->completed_at,
             'is_overtime'             => $this->is_overtime,
@@ -263,6 +266,9 @@ class RequestResource extends JsonResource
                 'security_checkin_by' => $t->security_checkin_by,
                 'security_checkout_notes' => $t->security_checkout_notes,
                 'security_checkin_notes' => $t->security_checkin_notes,
+                'start_km' => $t->start_km,
+                'end_km' => $t->end_km,
+                'total_km' => $t->total_km,
             ]),
             'passengers' => $this->whenLoaded('passengers', fn() =>
                 PassengerResource::collection($this->passengers)
@@ -278,6 +284,7 @@ class RequestResource extends JsonResource
                 'name' => $this->vehicle->name,
                 'plate_number' => $this->vehicle->plate_number,
                 'type' => $this->vehicle->type,
+                'odometer' => $this->vehicle->odometer,
             ] : null,
             'assignments' => $this->relationLoaded('assignments') ? $this->assignments->map(fn($asg) => [
                 'id'          => $asg->id,

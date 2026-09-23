@@ -42,6 +42,9 @@ class RequestItinerary extends Model
         'afternoon_checkin_by',
         'afternoon_checkout_notes',
         'afternoon_checkin_notes',
+        'start_km',
+        'end_km',
+        'total_km',
     ];
 
     protected $casts = [

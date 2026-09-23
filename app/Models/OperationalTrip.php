@@ -22,6 +22,9 @@ class OperationalTrip extends Model
         'security_checkin_by',
         'security_checkout_notes',
         'security_checkin_notes',
+        'start_km',
+        'end_km',
+        'total_km',
     ];
 
     protected $casts = [
