@@ -288,7 +288,12 @@ class RequestResource extends JsonResource
             'coordinator_name'        => $this->coordinator?->name,
             'coordinator_assigned_at' => $this->coordinator_assigned_at,
             'ga_approved_by'          => $this->ga_approved_by,
-            'ga_approved_name'        => $this->gaApprover?->name,
+            'ga_approved_name'        => $this->ga_approved_by_name ?: ($this->gaApprover?->name ?? null),
+            'ga_approved_by_name'     => $this->ga_approved_by_name ?: ($this->gaApprover?->name ?? null),
+            'ga_approval_source'      => $this->ga_approval_source ?? 'primary',
+            'ga_approval_display_text'=> $this->ga_approval_source === 'ga_team' 
+                ? ('Disetujui oleh GA Team oleh ' . ($this->ga_approved_by_name ?: 'Tim GA Operasional'))
+                : ('Disetujui oleh GA Coordinator (' . ($this->ga_approved_by_name ?: ($this->gaApprover?->name ?: 'Melodi Bella Astria')) . ')'),
             'ga_approved_at'          => $this->ga_approved_at,
             'created_at'              => $this->created_at,
             'updated_at'              => $this->updated_at,

@@ -79,6 +79,7 @@ class DatabaseSeeder extends Seeder
         // Additional employees
         $employeesData = [
             ['nik' => 'SA12345', 'name' => 'Super Admin User',      'email' => 'superadmin@example.com', 'dept' => null,                         'role' => 'Admin'],
+            ['nik' => 'GATEAM',  'name' => 'GA Team (Backup Account)', 'email' => 'gateam@widatra.com', 'dept' => 'HRD & GA',                'role' => 'GA'],
             ['nik' => '1393',    'name' => 'Khasanudin',           'email' => 'khasanudin@gmail.com',   'dept' => 'Production',                 'role' => 'Employee'],
             ['nik' => '73250',   'name' => 'Dimas Subiyantoro',    'email' => 'it.factory.dimas@widatra.com', 'dept' => 'Information and Technology', 'role' => 'Employee'],
             ['nik' => '73331',   'name' => 'Muhammad Jihan Gumeular', 'email' => 'it.factory@widatra.com', 'dept' => 'Information and Technology', 'role' => 'Employee'],

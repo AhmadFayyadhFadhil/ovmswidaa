@@ -11,9 +11,9 @@ use Exception;
 
 class ApproveRequestAction
 {
-    public function execute(Request $request, string $role, string $status, ?string $notes = null): Request
+    public function execute(Request $request, string $role, string $status, ?string $notes = null, ?string $approvedByName = null): Request
     {
-        $updatedRequest = DB::transaction(function () use ($request, $role, $status, $notes) {
+        $updatedRequest = DB::transaction(function () use ($request, $role, $status, $notes, $approvedByName) {
             $user = Auth::user();
 
             // Validate approver authorization
@@ -21,11 +21,22 @@ class ApproveRequestAction
                 throw new Exception("Anda tidak berhak untuk approve/reject request ini.");
             }
 
+            // Determine if approval is executed by gaTeam backup account
+            $isGaTeamAccount = false;
+            if ($user) {
+                $nikLower = strtolower($user->nik ?? '');
+                $emailLower = strtolower($user->email ?? '');
+                $nameLower = strtolower($user->name ?? '');
+                if ($nikLower === 'gateam' || $emailLower === 'gateam@widatra.com' || str_contains($nameLower, 'gateam') || str_contains($nameLower, 'ga team')) {
+                    $isGaTeamAccount = true;
+                }
+            }
+
             // Create approval record
             RequestApproval::create([
                 'request_id' => $request->id,
                 'approver_id' => $user->id,
-                'role' => $role,
+                'role' => $isGaTeamAccount ? 'ga_team' : $role,
                 'status' => $status,
                 'notes' => $notes,
             ]);
@@ -46,6 +57,15 @@ class ApproveRequestAction
                     $updatePayload['ga_approved_by'] = $user->id;
                     $updatePayload['ga_approved_at'] = now();
                     $updatePayload['driver_response_status'] = 'accepted';
+
+                    if ($isGaTeamAccount) {
+                        $updatePayload['ga_approval_source'] = 'ga_team';
+                        $cleanApprovedName = $approvedByName ? trim($approvedByName) : '';
+                        $updatePayload['ga_approved_by_name'] = $cleanApprovedName !== '' ? $cleanApprovedName : 'Tim GA Operasional';
+                    } else {
+                        $updatePayload['ga_approval_source'] = 'primary';
+                        $updatePayload['ga_approved_by_name'] = $approvedByName ? trim($approvedByName) : ($user->name ?? 'Melodi Bella Astria');
+                    }
 
                     if (!$request->qr_code_token) {
                         $updatePayload['qr_code_token'] = 'REQ-' . time() . '-' . bin2hex(random_bytes(4));

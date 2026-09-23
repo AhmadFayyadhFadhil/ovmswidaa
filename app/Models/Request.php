@@ -73,6 +73,8 @@ class Request extends Model
         'coordinator_id',
         'coordinator_assigned_at',
         'ga_approved_by',
+        'ga_approved_by_name',
+        'ga_approval_source',
         'ga_approved_at',
     ];
 
