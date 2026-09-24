@@ -41,7 +41,7 @@ class DatabaseSeeder extends Seeder
         // Official Approvers list matching official company structure
         $officialApprovers = [
             ['nik' => '10053', 'name' => 'Evalin Jayakusli',        'email' => 'evalin@widatra.com',  'dept' => 'Legal & Compliance',         'roles' => ['Approver']],
-            ['nik' => '1430',  'name' => 'Melodi Bella Astria',     'email' => 'melody@widatra.com',  'dept' => 'Plant Management',           'roles' => ['Approver', 'GA']],
+            ['nik' => '1430',  'name' => 'Melodi Bella Astria',     'email' => 'melody@widatra.com',  'dept' => 'HRD & GA',                   'roles' => ['Approver', 'GA']],
             ['nik' => '10319', 'name' => 'Gita Thessa Lonika Putri', 'email' => 'gita@widatra.com',    'dept' => 'Regulatory Affairs & PV',    'roles' => ['Approver']],
             ['nik' => '790',   'name' => 'Hendri Yanto Prabowo',    'email' => 'hendri@widatra.com',  'dept' => 'Quality Control',            'roles' => ['Approver']],
             ['nik' => '786',   'name' => 'Rizky Bagus Kurniawan',   'email' => 'rizky@widatra.com',   'dept' => 'Production',                 'roles' => ['Approver']],

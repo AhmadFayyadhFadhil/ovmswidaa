@@ -126,7 +126,7 @@ class CreateRequestAction
                     $assignedBy = $user->id;
                     $assignedAt = now();
                 } else {
-                    $status = RequestStatus::APPROVED_DEPARTMENT;
+                    $status = RequestStatus::SUBMITTED;
                 }
             }
 
