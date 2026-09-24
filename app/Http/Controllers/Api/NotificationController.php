@@ -104,10 +104,11 @@ class NotificationController extends Controller
             ]);
 
             if ($isEmployee) {
-                // Regular employee only sees their own requests
+                // Regular employee sees their own requests and trips where they are a passenger
                 $query->where(function ($q) use ($user) {
                     $q->where('user_id', $user->id)
-                      ->orWhere('requested_by', $user->id);
+                      ->orWhere('requested_by', $user->id)
+                      ->orWhereHas('passengers', fn($pq) => $pq->where('user_id', $user->id));
                 });
             } elseif ($isCoordinator) {
                 // Coordinator sees requests waiting for allocation, pending urgent requests, active/completed trips, and personal driving assignments
