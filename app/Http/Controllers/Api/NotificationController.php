@@ -8,6 +8,7 @@ use App\Models\UserNotificationState;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use App\Enums\RequestStatus;
 
 class NotificationController extends Controller
 {
@@ -345,7 +346,10 @@ class NotificationController extends Controller
             ]);
 
         } catch (\Throwable $e) {
-            Log::error('Notification index error: ' . $e->getMessage());
+            try {
+                Log::error('Notification index error: ' . $e->getMessage());
+            } catch (\Throwable $logEx) {}
+
             return $this->jsonNoCache([
                 'status'  => 'error',
                 'message' => 'Gagal memuat notifikasi: ' . $e->getMessage(),
