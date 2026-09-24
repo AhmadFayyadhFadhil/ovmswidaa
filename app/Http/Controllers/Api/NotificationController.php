@@ -75,8 +75,7 @@ class NotificationController extends Controller
                 in_array('gahrd', $userRoles, true) ||
                 in_array('ga', $userRoles, true) ||
                 in_array('superadmin', $userRoles, true) ||
-                in_array('hrd', $userRoles, true) ||
-                (method_exists($user, 'isHrGaHead') && $user->isHrGaHead());
+                in_array('hrd', $userRoles, true);
 
             $isCoordinator = ((in_array('driver coordinator', $userRoles, true) ||
                 in_array('driver_coordinator', $userRoles, true) ||
@@ -138,10 +137,19 @@ class NotificationController extends Controller
                 });
             } elseif ($isApprover) {
                 // Approver sees requests from their department and own requests
-                $query->where(function ($q) use ($user) {
-                    $q->where('department_id', $user->department_id)
+                $deptIds = method_exists($user, 'departmentGroup') ? $user->departmentGroup() : ($user->department_id ? [$user->department_id] : []);
+                $isHrGaHead = method_exists($user, 'isHrGaHead') && $user->isHrGaHead();
+                $query->where(function ($q) use ($user, $deptIds, $isHrGaHead) {
+                    $q->whereIn('department_id', $deptIds)
                       ->orWhere('user_id', $user->id)
                       ->orWhere('requested_by', $user->id);
+
+                    if ($isHrGaHead) {
+                        $q->orWhereIn('status', [
+                            RequestStatus::APPROVED_DEPARTMENT->value,
+                            RequestStatus::ASSIGNED_BY_GA->value,
+                        ]);
+                    }
                 });
             } elseif ($isSecurity) {
                 // Security sees scheduled/assigned trips and ongoing trips
