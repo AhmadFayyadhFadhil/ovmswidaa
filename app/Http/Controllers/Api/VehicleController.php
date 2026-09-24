@@ -10,6 +10,7 @@ use App\Models\Vehicle;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use App\Enums\RequestStatus;
 
 class VehicleController extends Controller
 {
@@ -34,9 +35,9 @@ class VehicleController extends Controller
                 
                 $overlappingRequestIds = \App\Models\Request::where('id', '!=', $targetRequest->id)
                     ->whereNotIn('status', [
-                        \App\Enums\RequestStatus::REJECTED,
-                        \App\Enums\RequestStatus::COMPLETED,
-                        \App\Enums\RequestStatus::CANCELLED
+                        RequestStatus::REJECTED->value,
+                        RequestStatus::COMPLETED->value,
+                        RequestStatus::CANCELLED->value,
                     ])
                     ->where(function ($q) use ($startTime, $endTime) {
                         $q->where(function ($sub) use ($startTime, $endTime) {
