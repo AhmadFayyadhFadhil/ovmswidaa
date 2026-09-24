@@ -164,6 +164,9 @@ class RequestResource extends JsonResource
             'security_checkin_by'     => $this->security_checkin_by,
             'security_checkout_notes' => $this->security_checkout_notes,
             'security_checkin_notes'  => $this->security_checkin_notes,
+            'start_km'                => $this->start_km ?? $this->operationalTrip?->start_km ?? $trips->first()?->start_km ?? $this->itineraries?->first()?->start_km,
+            'end_km'                  => $this->end_km ?? $this->operationalTrip?->end_km ?? $trips->first()?->end_km ?? $this->itineraries?->last()?->end_km,
+            'total_km'                => $this->total_km ?? $this->operationalTrip?->total_km ?? $trips->first()?->total_km ?? ($this->itineraries ? $this->itineraries->sum('total_km') : null),
             'started_at'              => $this->started_at,
             'completed_at'            => $this->completed_at,
             'is_overtime'             => $this->is_overtime,
@@ -206,17 +209,25 @@ class RequestResource extends JsonResource
                 'phone' => $this->user?->phone,
             ],
             'approvals' => $this->whenLoaded('approvals', fn() =>
-                $this->approvals->map(fn($a) => [
-                    'id'       => $a->id,
-                    'role'     => $a->role,
-                    'status'   => $a->status,
-                    'notes'    => $a->notes,
-                    'approver' => [
-                        'id'   => $a->approver?->id,
-                        'name' => $a->approver?->name,
-                    ],
-                    'created_at' => $a->created_at,
-                ])
+                $this->approvals->map(function ($a) {
+                    $approverName = $a->approver?->name;
+                    $isGaTeam = $a->role === 'ga_team' || str_contains(strtolower($approverName ?? ''), 'gateam');
+                    if ($isGaTeam) {
+                        $specified = $this->ga_approved_by_name;
+                        $approverName = $specified ? ('GA Team oleh ' . $specified) : 'GA Team (Backup Account)';
+                    }
+                    return [
+                        'id'       => $a->id,
+                        'role'     => $a->role === 'ga_team' ? 'GA Team Backup' : $a->role,
+                        'status'   => $a->status,
+                        'notes'    => $a->notes,
+                        'approver' => [
+                            'id'   => $a->approver?->id,
+                            'name' => $approverName,
+                        ],
+                        'created_at' => $a->created_at,
+                    ];
+                })
             ),
             'operational_trip' => $this->whenLoaded('operationalTrip', fn() => $this->operationalTrip ? [
                 'id' => $this->operationalTrip->id,
@@ -255,6 +266,9 @@ class RequestResource extends JsonResource
                 'security_checkin_by' => $t->security_checkin_by,
                 'security_checkout_notes' => $t->security_checkout_notes,
                 'security_checkin_notes' => $t->security_checkin_notes,
+                'start_km' => $t->start_km,
+                'end_km' => $t->end_km,
+                'total_km' => $t->total_km,
             ]),
             'passengers' => $this->whenLoaded('passengers', fn() =>
                 PassengerResource::collection($this->passengers)
@@ -270,6 +284,7 @@ class RequestResource extends JsonResource
                 'name' => $this->vehicle->name,
                 'plate_number' => $this->vehicle->plate_number,
                 'type' => $this->vehicle->type,
+                'odometer' => $this->vehicle->odometer,
             ] : null,
             'assignments' => $this->relationLoaded('assignments') ? $this->assignments->map(fn($asg) => [
                 'id'          => $asg->id,
@@ -288,7 +303,12 @@ class RequestResource extends JsonResource
             'coordinator_name'        => $this->coordinator?->name,
             'coordinator_assigned_at' => $this->coordinator_assigned_at,
             'ga_approved_by'          => $this->ga_approved_by,
-            'ga_approved_name'        => $this->gaApprover?->name,
+            'ga_approved_name'        => $this->ga_approved_by_name ?: ($this->gaApprover?->name ?? null),
+            'ga_approved_by_name'     => $this->ga_approved_by_name ?: ($this->gaApprover?->name ?? null),
+            'ga_approval_source'      => $this->ga_approval_source ?? 'primary',
+            'ga_approval_display_text'=> $this->ga_approval_source === 'ga_team' 
+                ? ('Disetujui oleh GA Team oleh ' . ($this->ga_approved_by_name ?: 'Tim GA Operasional'))
+                : ('Disetujui oleh GA Coordinator (' . ($this->ga_approved_by_name ?: ($this->gaApprover?->name ?: 'Melodi Bella Astria')) . ')'),
             'ga_approved_at'          => $this->ga_approved_at,
             'created_at'              => $this->created_at,
             'updated_at'              => $this->updated_at,

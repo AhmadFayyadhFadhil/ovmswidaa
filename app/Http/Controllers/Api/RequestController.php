@@ -468,8 +468,9 @@ class RequestController extends Controller
         }
 
         $request->validate([
-            'role'  => 'nullable|in:dept_head,hrd_head',
-            'notes' => 'nullable|string'
+            'role'             => 'nullable|in:dept_head,hrd_head',
+            'notes'            => 'nullable|string',
+            'approved_by_name' => 'nullable|string|max:255',
         ]);
 
         $statusStr = $vehicleRequest->status instanceof RequestStatus ? $vehicleRequest->status->value : (string) $vehicleRequest->status;
@@ -485,7 +486,13 @@ class RequestController extends Controller
         }
 
         try {
-            $updatedRequest = $action->execute($vehicleRequest, $role, 'approved', $request->input('notes'));
+            $updatedRequest = $action->execute(
+                $vehicleRequest,
+                $role,
+                'approved',
+                $request->input('notes'),
+                $request->input('approved_by_name')
+            );
             
             return response()->json([
                 'status'  => 'success',
