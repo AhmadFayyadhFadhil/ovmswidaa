@@ -40,6 +40,8 @@ class AuthController extends Controller
                 'message' => 'Akun Anda belum aktif. Silakan hubungi GA Koordinator atau Administrator untuk aktivasi.',
             ], 403);
         }
+        $user->loadMissing('department');
+        $deptName = $user->department?->name ?? ($user->department_id ? \App\Models\Department::find($user->department_id)?->name : null);
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
@@ -52,7 +54,8 @@ class AuthController extends Controller
                     'name'               => $user->name,
                     'email'              => $user->email,
                     'department_id'      => $user->department_id,
-                    'department_name'    => $user->department?->name,
+                    'department_name'    => $deptName,
+                    'rank'               => $user->rank,
                     'is_department_head' => $user->is_department_head,
                     'roles'              => $user->getRoleNames(),
                     'availability_status' => $user->availability_status,
@@ -134,6 +137,9 @@ class AuthController extends Controller
             } catch (\Exception $e) {}
         }
 
+        $user->loadMissing('department');
+        $deptName = $user->department?->name ?? ($user->department_id ? \App\Models\Department::find($user->department_id)?->name : null);
+
         return response()->json([
             'status' => 'success',
             'data'   => [
@@ -146,7 +152,8 @@ class AuthController extends Controller
                 'avatar_url'         => $user->avatar ? url('storage/' . $user->avatar) : null,
                 'sim_a_photo_url'    => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
                 'department_id'      => $user->department_id,
-                'department_name'    => $user->department?->name,
+                'department_name'    => $deptName,
+                'rank'               => $user->rank,
                 'is_department_head' => $user->is_department_head,
                 'roles'              => $user->getRoleNames(),
                 'availability_status' => $user->availability_status,
