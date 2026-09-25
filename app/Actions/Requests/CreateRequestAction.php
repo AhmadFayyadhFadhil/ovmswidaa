@@ -88,6 +88,7 @@ class CreateRequestAction
                 elseif (in_array($mappedName, ['HRD', 'GA', 'HR&GA', 'HRD&GA', 'GAHRD'])) $mappedName = 'HRD & GA';
                 elseif ($mappedName === 'QA') $mappedName = 'Quality Assurance';
                 elseif ($mappedName === 'QC') $mappedName = 'Quality Control';
+                elseif (in_array(strtoupper($mappedName), ['OUTSOURCE', 'TAMU', 'GUEST', 'EKSTERNAL', 'OUTSOURCE / TAMU', 'OUTSOURCE/TAMU'])) $mappedName = 'Outsource / Tamu';
 
                 $dept = \App\Models\Department::where('name', $mappedName)
                     ->orWhere('name', 'like', '%' . $input . '%')

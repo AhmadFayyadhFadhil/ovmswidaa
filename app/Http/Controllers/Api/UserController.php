@@ -29,6 +29,7 @@ class UserController extends Controller
         'Regulatory Affairs & PV',
         'Legal & Compliance',
         'Plant Management',
+        'Outsource / Tamu',
     ];
 
     private const CATEGORY_DEPARTMENT_MAP = [
@@ -46,6 +47,9 @@ class UserController extends Controller
         'REGULATORY AFFAIRS & PV'     => ['Regulatory Affairs & PV'],
         'LEGAL & COMPLIANCE'          => ['Legal & Compliance'],
         'PLANT MANAGEMENT'            => ['Plant Management'],
+        'OUTSOURCE / TAMU'            => ['Outsource / Tamu'],
+        'OUTSOURCE'                   => ['Outsource / Tamu'],
+        'TAMU'                        => ['Outsource / Tamu'],
     ];
 
     private function isAdmin(): bool
