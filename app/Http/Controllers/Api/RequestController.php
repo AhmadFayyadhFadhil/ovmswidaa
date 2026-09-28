@@ -706,10 +706,20 @@ class RequestController extends Controller
                 'end_km'   => $endKm,
                 'total_km' => $totKm,
             ];
-            // If security already checked in gate, mark complete and release vehicle/driver!
+            // If security already checked in gate, check if all operational trips are completed
             if ($isSecurityCheckedIn) {
-                $reqUpdates['status'] = RequestStatus::COMPLETED;
-                $reqUpdates['completed_at'] = now();
+                $otherTripsPending = false;
+                if ($myTrip) {
+                    $otherTripsPending = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                        ->where('id', '!=', $myTrip->id)
+                        ->where('status', '!=', 'completed')
+                        ->exists();
+                }
+
+                if (!$otherTripsPending) {
+                    $reqUpdates['status'] = RequestStatus::COMPLETED;
+                    $reqUpdates['completed_at'] = now();
+                }
             }
             $vehicleRequest->update($reqUpdates);
 
@@ -744,23 +754,22 @@ class RequestController extends Controller
 
             // If security already checked in gate, update vehicle odometer and release!
             if ($isSecurityCheckedIn) {
-                if ($vehicle) {
-                    $vehicle->update([
-                        'status'   => 'Available',
-                        'odometer' => $endKm,
-                    ]);
-                }
                 if ($myTrip && $myTrip->vehicle) {
                     $myTrip->vehicle->update([
                         'status'   => 'Available',
                         'odometer' => $endKm,
                     ]);
+                } elseif ($vehicle) {
+                    $vehicle->update([
+                        'status'   => 'Available',
+                        'odometer' => $endKm,
+                    ]);
                 }
-                if ($vehicleRequest->driver_id) {
-                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($vehicleRequest->driver_id);
-                }
+
                 if ($myTrip && $myTrip->driver_id) {
                     \App\Services\DriverTaskQueueService::restorePendingDriverDuty($myTrip->driver_id);
+                } elseif ($vehicleRequest->driver_id) {
+                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($vehicleRequest->driver_id);
                 }
             }
         });
