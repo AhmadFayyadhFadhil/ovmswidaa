@@ -543,6 +543,75 @@ class RequestController extends Controller
         }
     }
 
+    public function recordStartKm(Request $httpRequest, VehicleRequest $vehicleRequest): JsonResponse
+    {
+        $user = Auth::user();
+
+        // Check authorization:
+        $isAssigned = $vehicleRequest->driver_id === $user->id ||
+            $vehicleRequest->operationalTrip?->driver_id === $user->id ||
+            $vehicleRequest->assignments()->where('driver_id', $user->id)->exists() ||
+            \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists() ||
+            \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists();
+
+        if (!$isAssigned && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead() && !$user->hasRoleDirect('GA')) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Admin/GA yang dapat mencatat KM Awal.'], 403);
+        }
+
+        $validated = $httpRequest->validate([
+            'start_km' => 'required|integer|min:0',
+        ]);
+
+        $startKm = (int) $validated['start_km'];
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $startKm) {
+            // Update request start_km
+            $vehicleRequest->update(['start_km' => $startKm]);
+
+            // Update operational trip for this driver
+            $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->get();
+            $myTrip = $trips->firstWhere('driver_id', $user->id) ?? $trips->first();
+            if ($myTrip) {
+                $myTrip->update(['start_km' => $startKm]);
+                if ($myTrip->vehicle && ($myTrip->vehicle->odometer === null || $startKm > $myTrip->vehicle->odometer)) {
+                    $myTrip->vehicle->update(['odometer' => $startKm]);
+                }
+            }
+
+            // Update active itinerary if present
+            if ($vehicleRequest->itineraries()->exists()) {
+                $activeIt = $vehicleRequest->itineraries()
+                    ->where(function($q) use ($user) {
+                        $q->where('driver_id', $user->id)->orWhereNull('driver_id');
+                    })
+                    ->whereIn('status', ['pending', 'assigned', 'on_going'])
+                    ->orderBy('date', 'asc')
+                    ->first();
+                if ($activeIt) {
+                    $activeIt->update(['start_km' => $startKm]);
+                    if ($activeIt->vehicle && ($activeIt->vehicle->odometer === null || $startKm > $activeIt->vehicle->odometer)) {
+                        $activeIt->vehicle->update(['odometer' => $startKm]);
+                    }
+                }
+            }
+
+            // Update request vehicle odometer if available
+            if ($vehicleRequest->vehicle && ($vehicleRequest->vehicle->odometer === null || $startKm > $vehicleRequest->vehicle->odometer)) {
+                $vehicleRequest->vehicle->update(['odometer' => $startKm]);
+            }
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Kilometer awal berhasil disimpan',
+            'data' => new RequestResource($vehicleRequest->fresh([
+                'user', 'approvals.approver', 'operationalTrip.vehicle', 'operationalTrip.driver',
+                'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver',
+                'passengers.department', 'driver', 'vehicle', 'itineraries.driver', 'itineraries.vehicle'
+            ])),
+        ], 200);
+    }
+
     public function start(VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
@@ -673,7 +742,7 @@ class RequestController extends Controller
         ], 200);
     }
 
-    public function complete(VehicleRequest $vehicleRequest): JsonResponse
+    public function complete(Request $httpRequest, VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
 
@@ -694,6 +763,21 @@ class RequestController extends Controller
             }
         }
 
+        $inputEndKm = $httpRequest->filled('end_km') ? (int) $httpRequest->input('end_km') : null;
+        if ($inputEndKm !== null && $inputEndKm < 0) {
+            return response()->json(['status' => 'error', 'message' => 'KM Akhir tidak valid.'], 422);
+        }
+
+        $stKm = $vehicleRequest->start_km ?? $vehicleRequest->operationalTrip?->start_km ?? 0;
+        if ($inputEndKm !== null && $stKm > 0 && $inputEndKm < $stKm) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "KM Akhir (" . number_format($inputEndKm, 0, ',', '.') . ") tidak boleh lebih kecil dari KM Awal (" . number_format($stKm, 0, ',', '.') . ")."
+            ], 422);
+        }
+
+        $totKm = ($inputEndKm !== null && $stKm > 0) ? max(0, $inputEndKm - $stKm) : null;
+
         $isExternalOneWay = $vehicleRequest->is_external && ($vehicleRequest->external_trip_type === 'one_way' || !$vehicleRequest->is_return_to_factory);
 
         if ($isExternalOneWay) {
@@ -709,7 +793,7 @@ class RequestController extends Controller
 
         $errorResponse = null;
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, &$errorResponse) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $inputEndKm, $totKm, &$errorResponse) {
             $itineraries = $vehicleRequest->itineraries;
             if ($itineraries->isNotEmpty()) {
                 // Find the itinerary for the logged-in driver that is currently 'on_going'
@@ -722,46 +806,57 @@ class RequestController extends Controller
                     return;
                 }
 
+                $itUpdateData = [];
+                if ($inputEndKm !== null) {
+                    $itUpdateData['end_km'] = $inputEndKm;
+                    $itUpdateData['total_km'] = $totKm;
+                }
+
                 // Determine if we are completing Sesi 1 or Sesi 2
                 if ($activeItinerary->morning_status === 'on_going') {
-                    $activeItinerary->update([
-                        'morning_status' => 'completed',
-                        'morning_checked_in_at' => now(),
-                        'morning_checkin_by' => $user->name,
-                    ]);
+                    $itUpdateData['morning_status'] = 'completed';
+                    $itUpdateData['morning_checked_in_at'] = now();
+                    $itUpdateData['morning_checkin_by'] = $user->name;
 
                     // If no afternoon destination, complete the itinerary status
                     if (empty($activeItinerary->afternoon_destination)) {
-                        $activeItinerary->update([
-                            'status' => 'completed',
-                            'security_checked_in_at' => now(),
-                        ]);
+                        $itUpdateData['status'] = 'completed';
+                        $itUpdateData['security_checked_in_at'] = now();
                     }
                 } else if ($activeItinerary->afternoon_status === 'on_going') {
-                    $activeItinerary->update([
-                        'afternoon_status' => 'completed',
-                        'afternoon_checked_in_at' => now(),
-                        'afternoon_checkin_by' => $user->name,
-                        'status' => 'completed',
-                        'security_checked_in_at' => now(),
-                    ]);
+                    $itUpdateData['afternoon_status'] = 'completed';
+                    $itUpdateData['afternoon_checked_in_at'] = now();
+                    $itUpdateData['afternoon_checkin_by'] = $user->name;
+                    $itUpdateData['status'] = 'completed';
+                    $itUpdateData['security_checked_in_at'] = now();
                 }
+
+                $activeItinerary->update($itUpdateData);
 
                 // Release driver and vehicle status safely with auto-revert queue check
                 if ($activeItinerary->driver_id) {
                     \App\Services\DriverTaskQueueService::restorePendingDriverDuty($activeItinerary->driver_id);
                 }
                 if ($activeItinerary->vehicle) {
-                    $activeItinerary->vehicle->update(['status' => 'Available']);
+                    $vData = ['status' => 'Available'];
+                    if ($inputEndKm !== null) {
+                        $vData['odometer'] = $inputEndKm;
+                    }
+                    $activeItinerary->vehicle->update($vData);
                 }
 
                 // Check if ALL itineraries in this request are completed
                 $allCompleted = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('status', '!=', 'completed')->count() === 0;
                 if ($allCompleted) {
-                    $vehicleRequest->update([
+                    $reqEndData = [
                         'status' => RequestStatus::COMPLETED,
                         'completed_at' => now(),
-                    ]);
+                    ];
+                    if ($inputEndKm !== null) {
+                        $reqEndData['end_km'] = $inputEndKm;
+                        $reqEndData['total_km'] = $totKm;
+                    }
+                    $vehicleRequest->update($reqEndData);
                 }
             } else {
                 // Regular single-day request
@@ -778,6 +873,10 @@ class RequestController extends Controller
                     'status' => RequestStatus::COMPLETED,
                     'completed_at' => now(),
                 ];
+                if ($inputEndKm !== null) {
+                    $updateData['end_km'] = $inputEndKm;
+                    $updateData['total_km'] = $totKm;
+                }
 
                 if (!$vehicleRequest->security_checked_in_at) {
                     $updateData['security_checked_in_at'] = now();
@@ -790,12 +889,21 @@ class RequestController extends Controller
                 if (!$vehicleRequest->is_external) {
                     $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
                     foreach ($trips as $trip) {
-                        $trip->update(['status' => 'completed']);
+                        $tripData = ['status' => 'completed'];
+                        if ($inputEndKm !== null) {
+                            $tripData['end_km'] = $inputEndKm;
+                            $tripData['total_km'] = $totKm;
+                        }
+                        $trip->update($tripData);
                         if ($trip->driver_id) {
                             \App\Services\DriverTaskQueueService::restorePendingDriverDuty($trip->driver_id);
                         }
                         if ($trip->vehicle) {
-                            $trip->vehicle->update(['status' => 'Available']);
+                            $vData = ['status' => 'Available'];
+                            if ($inputEndKm !== null) {
+                                $vData['odometer'] = $inputEndKm;
+                            }
+                            $trip->vehicle->update($vData);
                         }
                     }
 
@@ -803,7 +911,11 @@ class RequestController extends Controller
                         \App\Services\DriverTaskQueueService::restorePendingDriverDuty($vehicleRequest->driver_id);
                     }
                     if ($vehicleRequest->vehicle) {
-                        $vehicleRequest->vehicle->update(['status' => 'Available']);
+                        $vData = ['status' => 'Available'];
+                        if ($inputEndKm !== null) {
+                            $vData['odometer'] = $inputEndKm;
+                        }
+                        $vehicleRequest->vehicle->update($vData);
                     }
                 }
             }

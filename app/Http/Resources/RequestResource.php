@@ -144,6 +144,9 @@ class RequestResource extends JsonResource
                     'is_overtime'          => $it->is_overtime,
                     'overtime_minutes'     => $it->overtime_minutes,
                     'overtime_formatted'   => $it->overtime_formatted,
+                    'start_km'             => $it->start_km,
+                    'end_km'               => $it->end_km,
+                    'total_km'             => $it->total_km,
                     'updated_at'           => $it->updated_at,
                 ];
             }),
