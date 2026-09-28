@@ -368,174 +368,182 @@ class SecurityController extends Controller
                 }
             } else { // Check-IN
                 if ($targetTrip) {
+                    $effectiveEndKm = $inputEndKm ?? $targetTrip->end_km ?? $vehicleRequest->end_km;
                     $stKm = $targetTrip->start_km ?? $vehicleRequest->start_km ?? 0;
-                    $totKm = ($inputEndKm !== null) ? max(0, $inputEndKm - $stKm) : null;
+                    $totKm = ($effectiveEndKm !== null) ? max(0, $effectiveEndKm - $stKm) : null;
 
                     $targetTripData = [
-                        'status' => 'completed',
-                        'end_datetime' => $targetTrip->end_datetime ?? $scanTime,
                         'security_checked_in_at' => $scanTime,
-                        'security_checkin_by' => $validated['security_name'],
+                        'security_checkin_by'    => $validated['security_name'],
                         'security_checkin_notes' => $validated['notes'] ?? null,
                     ];
-                    if ($inputEndKm !== null) {
-                        $targetTripData['end_km'] = $inputEndKm;
+                    if ($effectiveEndKm !== null) {
+                        $targetTripData['status'] = 'completed';
+                        $targetTripData['end_datetime'] = $targetTrip->end_datetime ?? $scanTime;
+                        $targetTripData['end_km'] = $effectiveEndKm;
                         $targetTripData['total_km'] = $totKm;
                     }
                     $targetTrip->update($targetTripData);
 
-                    if ($targetTrip->driver_id) {
-                        \App\Services\DriverTaskQueueService::restorePendingDriverDuty($targetTrip->driver_id);
-                    }
-                    if ($targetTrip->vehicle) {
-                        $vData = ['status' => 'Available'];
-                        if ($inputEndKm !== null) {
-                            $vData['odometer'] = $inputEndKm;
+                    if ($effectiveEndKm !== null) {
+                        if ($targetTrip->driver_id) {
+                            \App\Services\DriverTaskQueueService::restorePendingDriverDuty($targetTrip->driver_id);
                         }
-                        $targetTrip->vehicle->update($vData);
+                        if ($targetTrip->vehicle) {
+                            $targetTrip->vehicle->update([
+                                'status'   => 'Available',
+                                'odometer' => $effectiveEndKm,
+                            ]);
+                        }
                     }
 
                     $allTripsCount = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->count();
                     $completedTripsCount = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('status', 'completed')->count();
 
-                    if ($completedTripsCount >= $allTripsCount) {
-                        $reqData = [
-                            'status'                 => RequestStatus::COMPLETED,
-                            'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
-                            'security_checked_in_at' => $scanTime,
-                            'security_checkin_by'    => $validated['security_name'],
-                            'security_checkin_notes' => $validated['notes'] ?? null,
-                        ];
-                        if ($inputEndKm !== null) {
-                            $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
-                            $reqData['end_km'] = $inputEndKm;
-                            $reqData['total_km'] = max(0, $inputEndKm - $stKmReq);
-                        }
-                        $vehicleRequest->update($reqData);
-                    }
-                } else if ($todayItinerary) {
-                    $driver = $todayItinerary->driver ?? $vehicleRequest->driver;
-                    $vehicle = $todayItinerary->vehicle ?? $vehicleRequest->vehicle;
-
-                    $stKm = $todayItinerary->start_km ?? $vehicleRequest->start_km ?? 0;
-                    $totKm = ($inputEndKm !== null) ? max(0, $inputEndKm - $stKm) : null;
-
-                    if ($todayItinerary->morning_status === 'on_going') {
-                        $itData = [
-                            'morning_status' => 'completed',
-                            'morning_checked_in_at' => $scanTime,
-                            'morning_checkin_by' => $validated['security_name'],
-                            'morning_checkin_notes' => $validated['notes'] ?? null,
-                        ];
-                        if ($inputEndKm !== null) {
-                            $itData['end_km'] = $inputEndKm;
-                            $itData['total_km'] = $totKm;
-                        }
-                        $todayItinerary->update($itData);
-
-                        if ($driver) {
-                            \App\Services\DriverTaskQueueService::restorePendingDriverDuty($driver->id);
-                        }
-                        if ($vehicle) {
-                            $vData = ['status' => 'Available'];
-                            if ($inputEndKm !== null) {
-                                $vData['odometer'] = $inputEndKm;
-                            }
-                            $vehicle->update($vData);
-                        }
-
-                        if (empty($todayItinerary->afternoon_destination)) {
-                            $todayItinerary->update([
-                                'status' => 'completed',
-                                'security_checked_in_at' => $scanTime,
-                            ]);
-                        }
-
-                        $allCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->count();
-                        $doneCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('status', 'completed')->count();
-                        if ($doneCount >= $allCount) {
-                            $reqData = [
-                                'status'                 => RequestStatus::COMPLETED,
-                                'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
-                                'security_checked_in_at' => $scanTime,
-                                'security_checkin_by'    => $validated['security_name'],
-                                'security_checkin_notes' => $validated['notes'] ?? null,
-                            ];
-                            if ($inputEndKm !== null) {
-                                $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
-                                $reqData['end_km'] = $inputEndKm;
-                                $reqData['total_km'] = max(0, $inputEndKm - $stKmReq);
-                            }
-                            $vehicleRequest->update($reqData);
-                        } else {
-                            $vehicleRequest->update([
-                                'status' => RequestStatus::DRIVER_ASSIGNED,
-                            ]);
-                        }
-
-                        $customMessage = 'Scan Checkin Sesi 1 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.';
-                    } else if ($todayItinerary->afternoon_status === 'on_going') {
-                        $itData = [
-                            'afternoon_status' => 'completed',
-                            'afternoon_checked_in_at' => $scanTime,
-                            'afternoon_checkin_by' => $validated['security_name'],
-                            'afternoon_checkin_notes' => $validated['notes'] ?? null,
-                            'status' => 'completed',
-                            'security_checked_in_at' => $scanTime,
-                        ];
-                        if ($inputEndKm !== null) {
-                            $itData['end_km'] = $inputEndKm;
-                            $itData['total_km'] = $totKm;
-                        }
-                        $todayItinerary->update($itData);
-
-                        if ($driver) {
-                            \App\Services\DriverTaskQueueService::restorePendingDriverDuty($driver->id);
-                        }
-                        if ($vehicle) {
-                            $vData = ['status' => 'Available'];
-                            if ($inputEndKm !== null) {
-                                $vData['odometer'] = $inputEndKm;
-                            }
-                            $vehicle->update($vData);
-                        }
-
-                        $allCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->count();
-                        $doneCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('status', 'completed')->count();
-                        if ($doneCount >= $allCount) {
-                            $reqData = [
-                                'status'                 => RequestStatus::COMPLETED,
-                                'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
-                                'security_checked_in_at' => $scanTime,
-                                'security_checkin_by'    => $validated['security_name'],
-                                'security_checkin_notes' => $validated['notes'] ?? null,
-                            ];
-                            if ($inputEndKm !== null) {
-                                $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
-                                $reqData['end_km'] = $inputEndKm;
-                                $reqData['total_km'] = max(0, $inputEndKm - $stKmReq);
-                            }
-                            $vehicleRequest->update($reqData);
-                        } else {
-                            $vehicleRequest->update([
-                                'status' => RequestStatus::DRIVER_ASSIGNED,
-                            ]);
-                        }
-
-                        $customMessage = 'Scan Checkin Sesi 2 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.';
-                    }
-                } else {
-                    $stKmReq = $vehicleRequest->start_km ?? 0;
                     $reqData = [
-                        'status'                 => RequestStatus::COMPLETED,
-                        'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
                         'security_checked_in_at' => $scanTime,
                         'security_checkin_by'    => $validated['security_name'],
                         'security_checkin_notes' => $validated['notes'] ?? null,
                     ];
-                    if ($inputEndKm !== null) {
-                        $reqData['end_km'] = $inputEndKm;
-                        $reqData['total_km'] = max(0, $inputEndKm - $stKmReq);
+                    if ($effectiveEndKm !== null && $completedTripsCount >= $allTripsCount) {
+                        $reqData['status'] = RequestStatus::COMPLETED;
+                        $reqData['completed_at'] = $vehicleRequest->completed_at ?? $scanTime;
+                        $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
+                        $reqData['end_km'] = $effectiveEndKm;
+                        $reqData['total_km'] = max(0, $effectiveEndKm - $stKmReq);
+                    }
+                    $vehicleRequest->update($reqData);
+                } else if ($todayItinerary) {
+                    $driver = $todayItinerary->driver ?? $vehicleRequest->driver;
+                    $vehicle = $todayItinerary->vehicle ?? $vehicleRequest->vehicle;
+
+                    $effectiveEndKm = $inputEndKm ?? $todayItinerary->end_km ?? $vehicleRequest->end_km;
+                    $stKm = $todayItinerary->start_km ?? $vehicleRequest->start_km ?? 0;
+                    $totKm = ($effectiveEndKm !== null) ? max(0, $effectiveEndKm - $stKm) : null;
+
+                    if ($todayItinerary->morning_status === 'on_going') {
+                        $itData = [
+                            'morning_checked_in_at' => $scanTime,
+                            'morning_checkin_by'    => $validated['security_name'],
+                            'morning_checkin_notes' => $validated['notes'] ?? null,
+                        ];
+                        if ($effectiveEndKm !== null) {
+                            $itData['morning_status'] = 'completed';
+                            $itData['end_km'] = $effectiveEndKm;
+                            $itData['total_km'] = $totKm;
+                        }
+                        $todayItinerary->update($itData);
+
+                        if ($effectiveEndKm !== null) {
+                            if ($driver) {
+                                \App\Services\DriverTaskQueueService::restorePendingDriverDuty($driver->id);
+                            }
+                            if ($vehicle) {
+                                $vehicle->update([
+                                    'status'   => 'Available',
+                                    'odometer' => $effectiveEndKm,
+                                ]);
+                            }
+                        }
+
+                        if (empty($todayItinerary->afternoon_destination)) {
+                            $upd = ['security_checked_in_at' => $scanTime];
+                            if ($effectiveEndKm !== null) {
+                                $upd['status'] = 'completed';
+                            }
+                            $todayItinerary->update($upd);
+                        }
+
+                        $allCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->count();
+                        $doneCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('status', 'completed')->count();
+                        if ($effectiveEndKm !== null && $doneCount >= $allCount) {
+                            $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
+                            $vehicleRequest->update([
+                                'status'                 => RequestStatus::COMPLETED,
+                                'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
+                                'security_checked_in_at' => $scanTime,
+                                'security_checkin_by'    => $validated['security_name'],
+                                'security_checkin_notes' => $validated['notes'] ?? null,
+                                'end_km'                 => $effectiveEndKm,
+                                'total_km'               => max(0, $effectiveEndKm - $stKmReq),
+                            ]);
+                        } else {
+                            $vehicleRequest->update([
+                                'security_checked_in_at' => $scanTime,
+                                'security_checkin_by'    => $validated['security_name'],
+                                'security_checkin_notes' => $validated['notes'] ?? null,
+                            ]);
+                        }
+
+                        $customMessage = $effectiveEndKm !== null 
+                            ? 'Scan Checkin Sesi 1 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.' 
+                            : 'Scan Checkin Sesi 1 berhasil. Menunggu driver menginput KM Akhir spidometer.';
+                    } else if ($todayItinerary->afternoon_status === 'on_going') {
+                        $itData = [
+                            'afternoon_checked_in_at' => $scanTime,
+                            'afternoon_checkin_by'    => $validated['security_name'],
+                            'afternoon_checkin_notes' => $validated['notes'] ?? null,
+                            'security_checked_in_at'  => $scanTime,
+                        ];
+                        if ($effectiveEndKm !== null) {
+                            $itData['afternoon_status'] = 'completed';
+                            $itData['status'] = 'completed';
+                            $itData['end_km'] = $effectiveEndKm;
+                            $itData['total_km'] = $totKm;
+                        }
+                        $todayItinerary->update($itData);
+
+                        if ($effectiveEndKm !== null) {
+                            if ($driver) {
+                                \App\Services\DriverTaskQueueService::restorePendingDriverDuty($driver->id);
+                            }
+                            if ($vehicle) {
+                                $vehicle->update([
+                                    'status'   => 'Available',
+                                    'odometer' => $effectiveEndKm,
+                                ]);
+                            }
+                        }
+
+                        $allCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->count();
+                        $doneCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('status', 'completed')->count();
+                        if ($effectiveEndKm !== null && $doneCount >= $allCount) {
+                            $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
+                            $vehicleRequest->update([
+                                'status'                 => RequestStatus::COMPLETED,
+                                'completed_at'           => $vehicleRequest->completed_at ?? $scanTime,
+                                'security_checked_in_at' => $scanTime,
+                                'security_checkin_by'    => $validated['security_name'],
+                                'security_checkin_notes' => $validated['notes'] ?? null,
+                                'end_km'                 => $effectiveEndKm,
+                                'total_km'               => max(0, $effectiveEndKm - $stKmReq),
+                            ]);
+                        } else {
+                            $vehicleRequest->update([
+                                'security_checked_in_at' => $scanTime,
+                                'security_checkin_by'    => $validated['security_name'],
+                                'security_checkin_notes' => $validated['notes'] ?? null,
+                            ]);
+                        }
+
+                        $customMessage = $effectiveEndKm !== null 
+                            ? 'Scan Checkin Sesi 2 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.' 
+                            : 'Scan Checkin Sesi 2 berhasil. Menunggu driver menginput KM Akhir spidometer.';
+                    }
+                } else {
+                    $stKmReq = $vehicleRequest->start_km ?? 0;
+                    $effectiveEndKm = $inputEndKm ?? $vehicleRequest->end_km;
+
+                    $reqData = [
+                        'security_checked_in_at' => $scanTime,
+                        'security_checkin_by'    => $validated['security_name'],
+                        'security_checkin_notes' => $validated['notes'] ?? null,
+                    ];
+                    if ($effectiveEndKm !== null) {
+                        $reqData['status'] = RequestStatus::COMPLETED;
+                        $reqData['completed_at'] = $vehicleRequest->completed_at ?? $scanTime;
+                        $reqData['end_km'] = $effectiveEndKm;
+                        $reqData['total_km'] = max(0, $effectiveEndKm - $stKmReq);
                     }
                     $vehicleRequest->update($reqData);
 
@@ -543,28 +551,30 @@ class SecurityController extends Controller
                         $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
                         foreach ($trips as $trip) {
                             $stTripKm = $trip->start_km ?? $stKmReq;
+                            $tripEffectiveEndKm = $effectiveEndKm ?? $trip->end_km;
                             $tData = [
-                                'status' => 'completed',
-                                'end_datetime' => $trip->end_datetime ?? $scanTime,
                                 'security_checked_in_at' => $scanTime,
-                                'security_checkin_by' => $validated['security_name'],
+                                'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                             ];
-                            if ($inputEndKm !== null) {
-                                $tData['end_km'] = $inputEndKm;
-                                $tData['total_km'] = max(0, $inputEndKm - $stTripKm);
+                            if ($tripEffectiveEndKm !== null) {
+                                $tData['status'] = 'completed';
+                                $tData['end_datetime'] = $trip->end_datetime ?? $scanTime;
+                                $tData['end_km'] = $tripEffectiveEndKm;
+                                $tData['total_km'] = max(0, $tripEffectiveEndKm - $stTripKm);
                             }
                             $trip->update($tData);
 
-                            if ($trip->driver_id) {
-                                \App\Services\DriverTaskQueueService::restorePendingDriverDuty($trip->driver_id);
-                            }
-                            if ($trip->vehicle) {
-                                $vData = ['status' => 'Available'];
-                                if ($inputEndKm !== null) {
-                                    $vData['odometer'] = $inputEndKm;
+                            if ($tripEffectiveEndKm !== null) {
+                                if ($trip->driver_id) {
+                                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($trip->driver_id);
                                 }
-                                $trip->vehicle->update($vData);
+                                if ($trip->vehicle) {
+                                    $trip->vehicle->update([
+                                        'status'   => 'Available',
+                                        'odometer' => $tripEffectiveEndKm,
+                                    ]);
+                                }
                             }
                         }
                     }

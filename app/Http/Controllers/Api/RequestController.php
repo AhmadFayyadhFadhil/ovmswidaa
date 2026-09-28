@@ -641,6 +641,154 @@ class RequestController extends Controller
         ], 200);
     }
 
+    public function recordEndKm(Request $httpRequest, VehicleRequest $vehicleRequest): JsonResponse
+    {
+        $user = Auth::user();
+
+        // Check authorization:
+        $isAssigned = $vehicleRequest->driver_id === $user->id ||
+            $vehicleRequest->operationalTrip?->driver_id === $user->id ||
+            $vehicleRequest->assignments()->where('driver_id', $user->id)->exists() ||
+            \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists() ||
+            \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists();
+
+        if (!$isAssigned && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead() && !$user->hasRoleDirect('GA')) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Admin/GA yang dapat mencatat KM Akhir.'], 403);
+        }
+
+        $validated = $httpRequest->validate([
+            'end_km' => 'required|integer|min:0',
+        ]);
+
+        $endKm = (int) $validated['end_km'];
+
+        // Retrieve assigned vehicle and trip to validate start_km
+        $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->get();
+        $myTrip = $trips->firstWhere('driver_id', $user->id) ?? $trips->first();
+
+        $vehicle = $myTrip?->vehicle 
+            ?? $vehicleRequest->vehicle 
+            ?? ($vehicleRequest->vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->vehicle_id) : null);
+
+        $stKm = $myTrip?->start_km ?? $vehicleRequest->start_km ?? 0;
+
+        $activeIt = null;
+        if ($vehicleRequest->itineraries()->exists()) {
+            $activeIt = $vehicleRequest->itineraries()
+                ->where(function($q) use ($user) {
+                    $q->where('driver_id', $user->id)->orWhereNull('driver_id');
+                })
+                ->whereIn('status', ['pending', 'assigned', 'on_going'])
+                ->orderBy('date', 'asc')
+                ->first();
+            if ($activeIt) {
+                if ($activeIt->start_km) {
+                    $stKm = $activeIt->start_km;
+                }
+                if ($activeIt->vehicle) {
+                    $vehicle = $activeIt->vehicle;
+                }
+            }
+        }
+
+        if ($stKm > 0 && $endKm < $stKm) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'KM Akhir (' . number_format($endKm, 0, ',', '.') . ' KM) tidak boleh lebih kecil dari KM Awal (' . number_format($stKm, 0, ',', '.') . ' KM).'
+            ], 422);
+        }
+
+        $totKm = max(0, $endKm - $stKm);
+        $isSecurityCheckedIn = !empty($vehicleRequest->security_checked_in_at) || ($myTrip && !empty($myTrip->security_checked_in_at));
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $endKm, $totKm, $myTrip, $vehicle, $activeIt, $isSecurityCheckedIn) {
+            $reqUpdates = [
+                'end_km'   => $endKm,
+                'total_km' => $totKm,
+            ];
+            // If security already checked in gate, mark complete and release vehicle/driver!
+            if ($isSecurityCheckedIn) {
+                $reqUpdates['status'] = RequestStatus::COMPLETED;
+                $reqUpdates['completed_at'] = now();
+            }
+            $vehicleRequest->update($reqUpdates);
+
+            if ($myTrip) {
+                $tripUpdates = [
+                    'end_km'   => $endKm,
+                    'total_km' => $totKm,
+                ];
+                if ($isSecurityCheckedIn) {
+                    $tripUpdates['status'] = 'completed';
+                    $tripUpdates['end_datetime'] = now();
+                }
+                $myTrip->update($tripUpdates);
+            }
+
+            if ($activeIt) {
+                $itUpdates = [
+                    'end_km'   => $endKm,
+                    'total_km' => $totKm,
+                ];
+                if ($isSecurityCheckedIn) {
+                    if ($activeIt->morning_status === 'on_going') {
+                        $itUpdates['morning_status'] = 'completed';
+                    }
+                    if ($activeIt->afternoon_status === 'on_going' || empty($activeIt->afternoon_destination)) {
+                        $itUpdates['afternoon_status'] = 'completed';
+                        $itUpdates['status'] = 'completed';
+                    }
+                }
+                $activeIt->update($itUpdates);
+            }
+
+            // If security already checked in gate, update vehicle odometer and release!
+            if ($isSecurityCheckedIn) {
+                if ($vehicle) {
+                    $vehicle->update([
+                        'status'   => 'Available',
+                        'odometer' => $endKm,
+                    ]);
+                }
+                if ($myTrip && $myTrip->vehicle) {
+                    $myTrip->vehicle->update([
+                        'status'   => 'Available',
+                        'odometer' => $endKm,
+                    ]);
+                }
+                if ($vehicleRequest->driver_id) {
+                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($vehicleRequest->driver_id);
+                }
+                if ($myTrip && $myTrip->driver_id) {
+                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($myTrip->driver_id);
+                }
+            }
+        });
+
+        // Trigger trip completed email if completed
+        try {
+            if ($vehicleRequest->fresh()->status === RequestStatus::COMPLETED) {
+                \App\Services\EmailNotificationService::sendTripCompleted($vehicleRequest);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Failed to send trip completed email for Request #{$vehicleRequest->id}: " . $e->getMessage());
+        }
+
+        $msg = $isSecurityCheckedIn 
+            ? 'KM Akhir berhasil disimpan. Rangkaian perjalanan telah selesai (COMPLETED).' 
+            : 'KM Akhir berhasil disimpan. Silakan tunjukkan QR Code ke petugas Security saat masuk gerbang pabrik.';
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => $msg,
+            'data'    => new RequestResource($vehicleRequest->fresh([
+                'user', 'approvals.approver', 'operationalTrip.vehicle', 'operationalTrip.driver',
+                'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver',
+                'passengers.department', 'driver', 'vehicle', 'itineraries.driver', 'itineraries.vehicle'
+            ])),
+        ], 200);
+    }
+
     public function start(VehicleRequest $vehicleRequest): JsonResponse
     {
         $user = Auth::user();
@@ -816,8 +964,15 @@ class RequestController extends Controller
             if (!$isEnRoute) {
                 return response()->json(['status' => 'error', 'message' => 'Perjalanan sewa eksternal drop-off hanya dapat diselesaikan jika sudah mulai berjalan (on_going) atau telah di-scan keluar oleh security.'], 422);
             }
-        } else if (($vehicleRequest->status->value ?? (string)$vehicleRequest->status) !== RequestStatus::ON_GOING->value) {
-            return response()->json(['status' => 'error', 'message' => 'Perjalanan hanya dapat diselesaikan jika sedang berjalan (on_going).'], 422);
+        } else {
+            $currentStatus = $vehicleRequest->status->value ?? (string)$vehicleRequest->status;
+            $canComplete = $currentStatus === RequestStatus::ON_GOING->value 
+                || $currentStatus === 'on_going' 
+                || !empty($vehicleRequest->security_checked_in_at);
+
+            if (!$canComplete) {
+                return response()->json(['status' => 'error', 'message' => 'Perjalanan hanya dapat diselesaikan jika sedang berjalan (on_going) atau telah melewati gate masuk security.'], 422);
+            }
         }
 
         $errorResponse = null;
