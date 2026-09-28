@@ -564,16 +564,43 @@ class RequestController extends Controller
 
         $startKm = (int) $validated['start_km'];
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $startKm) {
+        // Retrieve assigned vehicle to validate against odometer
+        $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->get();
+        $myTrip = $trips->firstWhere('driver_id', $user->id) ?? $trips->first();
+
+        $vehicle = $myTrip?->vehicle 
+            ?? $vehicleRequest->vehicle 
+            ?? ($vehicleRequest->vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->vehicle_id) : null);
+
+        if (!$vehicle && $vehicleRequest->itineraries()->exists()) {
+            $activeIt = $vehicleRequest->itineraries()
+                ->where(function($q) use ($user) {
+                    $q->where('driver_id', $user->id)->orWhereNull('driver_id');
+                })
+                ->whereIn('status', ['pending', 'assigned', 'on_going'])
+                ->orderBy('date', 'asc')
+                ->first();
+            $vehicle = $activeIt?->vehicle;
+        }
+
+        // Enforce validation: KM Awal cannot be less than the vehicle's last recorded odometer
+        if ($vehicle && $vehicle->odometer !== null && $vehicle->odometer > 0) {
+            if ($startKm < $vehicle->odometer) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'KM Awal (' . number_format($startKm, 0, ',', '.') . ' KM) tidak boleh lebih kecil dari Odometer terakhir kendaraan (' . number_format($vehicle->odometer, 0, ',', '.') . ' KM).'
+                ], 422);
+            }
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $startKm, $myTrip, $vehicle) {
             // Update request start_km
             $vehicleRequest->update(['start_km' => $startKm]);
 
             // Update operational trip for this driver
-            $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->get();
-            $myTrip = $trips->firstWhere('driver_id', $user->id) ?? $trips->first();
             if ($myTrip) {
                 $myTrip->update(['start_km' => $startKm]);
-                if ($myTrip->vehicle && ($myTrip->vehicle->odometer === null || $startKm > $myTrip->vehicle->odometer)) {
+                if ($myTrip->vehicle && ($myTrip->vehicle->odometer === null || $startKm >= $myTrip->vehicle->odometer)) {
                     $myTrip->vehicle->update(['odometer' => $startKm]);
                 }
             }
@@ -589,15 +616,17 @@ class RequestController extends Controller
                     ->first();
                 if ($activeIt) {
                     $activeIt->update(['start_km' => $startKm]);
-                    if ($activeIt->vehicle && ($activeIt->vehicle->odometer === null || $startKm > $activeIt->vehicle->odometer)) {
+                    if ($activeIt->vehicle && ($activeIt->vehicle->odometer === null || $startKm >= $activeIt->vehicle->odometer)) {
                         $activeIt->vehicle->update(['odometer' => $startKm]);
                     }
                 }
             }
 
             // Update request vehicle odometer if available
-            if ($vehicleRequest->vehicle && ($vehicleRequest->vehicle->odometer === null || $startKm > $vehicleRequest->vehicle->odometer)) {
+            if ($vehicleRequest->vehicle && ($vehicleRequest->vehicle->odometer === null || $startKm >= $vehicleRequest->vehicle->odometer)) {
                 $vehicleRequest->vehicle->update(['odometer' => $startKm]);
+            } elseif ($vehicle && ($vehicle->odometer === null || $startKm >= $vehicle->odometer)) {
+                $vehicle->update(['odometer' => $startKm]);
             }
         });
 
