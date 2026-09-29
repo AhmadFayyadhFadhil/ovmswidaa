@@ -172,6 +172,7 @@ class RequestResource extends JsonResource
             'total_km'                => $this->total_km ?? $this->operationalTrip?->total_km ?? $trips->first()?->total_km ?? ($this->itineraries ? $this->itineraries->sum('total_km') : null),
             'started_at'              => $this->started_at,
             'completed_at'            => $this->completed_at,
+            'pending_previous_trip'   => \App\Services\TripAvailabilityGuardService::getLockForRequest($this->resource, $user?->id),
             'is_overtime'             => $this->is_overtime,
             'overtime_minutes'        => $this->overtime_minutes,
             'overtime_formatted'      => $this->overtime_formatted,

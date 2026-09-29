@@ -251,9 +251,23 @@ class AssignmentController extends Controller
                 }
             }
 
+            $warningNotes = [];
+            foreach ($vehicleIds as $vId) {
+                $unf = \App\Services\TripAvailabilityGuardService::getUnfinishedTripForVehicle((int)$vId, (int)$vehicleRequest->id);
+                if ($unf) {
+                    $warningNotes[] = $unf['message'];
+                }
+            }
+
+            $successMsg = 'Kendaraan berhasil di-assign ke driver.';
+            if (!empty($warningNotes)) {
+                $successMsg .= ' Catatan Antrean: ' . implode(' ', $warningNotes);
+            }
+
             return response()->json([
                 'status'  => 'success',
-                'message' => 'Kendaraan berhasil di-assign ke driver',
+                'message' => $successMsg,
+                'warning' => !empty($warningNotes) ? implode(' ', $warningNotes) : null,
                 'data'    => $assignment ? new AssignmentResource($assignment->fresh(['request.user', 'request.passengers', 'request.driver', 'request.vehicle', 'request.assignments.driver', 'driver', 'assignedBy'])) : [
                     'id' => null,
                     'request' => $vehicleRequest->fresh(['user', 'passengers', 'driver', 'vehicle']),

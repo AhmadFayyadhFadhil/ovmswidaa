@@ -583,6 +583,15 @@ class RequestController extends Controller
             $vehicle = $activeIt?->vehicle;
         }
 
+        // Enforce validation: Check if vehicle or driver is locked by an uncompleted previous trip
+        $lockInfo = \App\Services\TripAvailabilityGuardService::getLockForRequest($vehicleRequest, $user->id);
+        if ($lockInfo && !empty($lockInfo['is_locked'])) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $lockInfo['message']
+            ], 422);
+        }
+
         // Enforce validation: KM Awal cannot be less than the vehicle's last recorded odometer
         if ($vehicle && $vehicle->odometer !== null && $vehicle->odometer > 0) {
             if ($startKm < $vehicle->odometer) {
@@ -830,6 +839,14 @@ class RequestController extends Controller
 
             if (empty($vehicleRequest->driver_id) && empty($vehicleRequest->vehicle_id) && !$vehicleRequest->itineraries()->exists()) {
                 return response()->json(['status' => 'error', 'message' => 'Tidak dapat memulai perjalanan tanpa driver atau kendaraan.'], 422);
+            }
+
+            $lockInfo = \App\Services\TripAvailabilityGuardService::getLockForRequest($vehicleRequest, $user->id);
+            if ($lockInfo && !empty($lockInfo['is_locked'])) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => $lockInfo['message']
+                ], 422);
             }
         }
 
