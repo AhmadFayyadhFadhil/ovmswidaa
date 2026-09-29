@@ -140,6 +140,28 @@ class AuthController extends Controller
         $user->loadMissing('department');
         $deptName = $user->department?->name ?? ($user->department_id ? \App\Models\Department::find($user->department_id)?->name : null);
 
+        $simStatus = 'not_set';
+        $simExpiryDaysLeft = null;
+        $simExpiryDateStr = null;
+
+        if ($user->sim_expiry_date) {
+            $simExpiryDateStr = $user->sim_expiry_date instanceof \DateTimeInterface 
+                ? $user->sim_expiry_date->format('Y-m-d') 
+                : date('Y-m-d', strtotime((string)$user->sim_expiry_date));
+            
+            $today = \Carbon\Carbon::today();
+            $expiry = \Carbon\Carbon::parse($user->sim_expiry_date)->startOfDay();
+            $simExpiryDaysLeft = (int) $today->diffInDays($expiry, false);
+
+            if ($simExpiryDaysLeft < 0) {
+                $simStatus = 'expired';
+            } elseif ($simExpiryDaysLeft <= 30) {
+                $simStatus = 'expiring_soon';
+            } else {
+                $simStatus = 'valid';
+            }
+        }
+
         return response()->json([
             'status' => 'success',
             'data'   => [
@@ -150,7 +172,12 @@ class AuthController extends Controller
                 'phone'              => $user->phone,
                 'location'           => $user->location ?: 'Pandaan Head Office',
                 'avatar_url'         => $user->avatar ? url('storage/' . $user->avatar) : null,
-                'sim_a_photo_url'    => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
+                'sim_number'          => $user->sim_number,
+                'sim_type'            => $user->sim_type ?? 'SIM A',
+                'sim_expiry_date'     => $simExpiryDateStr,
+                'sim_status'          => $simStatus,
+                'sim_expiry_days_left' => $simExpiryDaysLeft,
+                'sim_a_photo_url'     => null,
                 'department_id'      => $user->department_id,
                 'department_name'    => $deptName,
                 'rank'               => $user->rank,
