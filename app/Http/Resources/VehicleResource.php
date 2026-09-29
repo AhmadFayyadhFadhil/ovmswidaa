@@ -27,6 +27,8 @@ class VehicleResource extends JsonResource
             $statusLabel = 'Tidak Aktif';
         }
 
+        $activeTripInfo = \App\Services\TripAvailabilityGuardService::getUnfinishedTripForVehicle((int)$this->id);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -36,6 +38,11 @@ class VehicleResource extends JsonResource
             'odometer' => $this->odometer,
             'status' => $this->status,
             'status_label' => $statusLabel,
+            'active_trip_info' => $activeTripInfo ? [
+                'request_id'   => $activeTripInfo['request_id'],
+                'driver_name'  => $activeTripInfo['driver_name'],
+                'message'      => $activeTripInfo['message'],
+            ] : null,
             'photo_url' => $this->photo ? url('storage/' . $this->photo) : null,
             'stnk_photo_url' => $this->stnk_photo ? url('storage/' . $this->stnk_photo) : null,
             'last_maintained' => $this->last_maintained,

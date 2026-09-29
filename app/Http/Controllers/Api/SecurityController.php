@@ -173,6 +173,19 @@ class SecurityController extends Controller
                             'message' => 'Perjalanan ini sudah selesai (completed) dan tidak bisa di-checkout.',
                         ], 422);
                     }
+
+                    if (!$vehicleRequest->is_external) {
+                        $targetVehicleId = $targetTrip?->vehicle_id ?? $vehicleRequest->vehicle_id;
+                        if ($targetVehicleId) {
+                            $unfinished = \App\Services\TripAvailabilityGuardService::getUnfinishedTripForVehicle((int)$targetVehicleId, (int)$vehicleRequest->id);
+                            if ($unfinished) {
+                                return response()->json([
+                                    'status'  => 'error',
+                                    'message' => 'Check-out gagal: ' . $unfinished['message']
+                                ], 422);
+                            }
+                        }
+                    }
                 } else { // checkin
                     if ($vehicleRequest->security_checked_in_at !== null) {
                         return response()->json([
