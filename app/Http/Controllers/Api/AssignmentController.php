@@ -225,6 +225,12 @@ class AssignmentController extends Controller
             });
 
             $assignment = null;
+            $targetStartTime = !empty($validated['start_time']) 
+                ? $validated['start_time'] 
+                : $vehicleRequest->start_time;
+            $reqDateStr = $targetStartTime ? \Carbon\Carbon::parse($targetStartTime)->toDateString() : now()->toDateString();
+            $todayStr = now()->toDateString();
+
             foreach ($driverIds as $index => $driverId) {
                 $vId = $vehicleIds[$index] ?? $vehicleIds[0];
                 $dInt = (int)$driverId;
@@ -233,6 +239,27 @@ class AssignmentController extends Controller
                 $driver = \App\Models\User::find($dInt);
                 if (!$driver) {
                     return response()->json(['status' => 'error', 'message' => 'Driver yang dipilih tidak ditemukan'], 422);
+                }
+
+                // Validasi Masa Berlaku SIM Driver
+                if ($driver->sim_expiry_date) {
+                    $simExpiryDate = \Carbon\Carbon::parse($driver->sim_expiry_date)->toDateString();
+                    $simExpiryFormatted = \Carbon\Carbon::parse($driver->sim_expiry_date)->format('d/m/Y');
+
+                    if ($simExpiryDate < $todayStr) {
+                        return response()->json([
+                            'status'  => 'error',
+                            'message' => "Driver {$driver->name} tidak dapat ditugaskan karena masa berlaku SIM telah kedaluwarsa ({$simExpiryFormatted}). Harap perbarui data SIM driver terlebih dahulu."
+                        ], 422);
+                    }
+
+                    if ($reqDateStr > $simExpiryDate) {
+                        $reqDateFormatted = \Carbon\Carbon::parse($reqDateStr)->format('d/m/Y');
+                        return response()->json([
+                            'status'  => 'error',
+                            'message' => "Driver {$driver->name} tidak dapat ditugaskan untuk perjalanan tanggal {$reqDateFormatted} karena masa berlaku SIM berakhir pada tanggal {$simExpiryFormatted}."
+                        ], 422);
+                    }
                 }
 
                 $asg = $action->execute($vehicleRequest, $dInt, $vInt, $validated['notes'] ?? null, $validated);
@@ -417,10 +444,27 @@ class AssignmentController extends Controller
                     $vehicleId = $asg['vehicle_id'] ?? null;
 
                     if (!$isExternal && $driverId) {
-                        // Check driver conflict on this itinerary's date
+                        // Check driver SIM expiry
                         $driver = \App\Models\User::find($driverId);
                         $driverName = $driver ? $driver->name : 'Driver';
                         $itDateStr = $itinerary->date ? $itinerary->date->format('Y-m-d') : null;
+                        $todayStr = now()->toDateString();
+
+                        if ($driver && $driver->sim_expiry_date) {
+                            $simExpiryDate = \Carbon\Carbon::parse($driver->sim_expiry_date)->toDateString();
+                            $simExpiryFormatted = \Carbon\Carbon::parse($driver->sim_expiry_date)->format('d/m/Y');
+
+                            if ($simExpiryDate < $todayStr) {
+                                throw new \Exception("Driver {$driverName} tidak dapat ditugaskan karena masa berlaku SIM telah kedaluwarsa ({$simExpiryFormatted}).");
+                            }
+
+                            if ($itDateStr && $itDateStr > $simExpiryDate) {
+                                $itDateFormatted = \Carbon\Carbon::parse($itDateStr)->format('d/m/Y');
+                                throw new \Exception("Driver {$driverName} tidak dapat ditugaskan untuk jadwal tanggal {$itDateFormatted} karena masa berlaku SIM berakhir pada tanggal {$simExpiryFormatted}.");
+                            }
+                        }
+
+                        // Check driver conflict on this itinerary's date
 
                         $conflictingDriverItinerary = \App\Models\RequestItinerary::where('driver_id', $driverId)
                             ->where('request_id', '!=', $vehicleRequest->id)

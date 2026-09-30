@@ -359,7 +359,6 @@ class UserController extends Controller
                 'rank'            => 'required_if:role,Approver|nullable|string|max:255',
                 'department_id'   => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
-                'sim_a_photo'     => ['nullable'],
             ]);
 
             $rawRole = trim((string)$validated['role']);
@@ -386,9 +385,6 @@ class UserController extends Controller
                 ], 422);
             }
 
-            // SIM A photo is optional for Driver role
-            // Photo will be stored if provided
-
             if (in_array($role, ['Approver', 'GA']) && !empty($validated['is_department_head'] ?? false) && empty($validated['department_id'] ?? null)) {
                 return response()->json([
                     'status'  => 'error',
@@ -411,14 +407,6 @@ class UserController extends Controller
                 'is_active'          => true,
                 'can_request'        => true,
             ];
-
-            $simFile = $request->file('sim_a_photo') ?? $request->file('sim_photo') ?? $request->file('photo');
-            if ($simFile) {
-                $simPath = $this->storePublicFileSafely($simFile, 'users/sim');
-                if ($simPath) {
-                    $data['sim_a_photo'] = $simPath;
-                }
-            }
 
             $user = User::create($data);
 
@@ -474,7 +462,7 @@ class UserController extends Controller
             );
 
             $isDutyStatusOnly = ($request->has('availability_status') || $request->has('status')) &&
-                !$request->hasAny(['name', 'email', 'password', 'role', 'nik', 'rank', 'department_id', 'sim_a_photo']);
+                !$request->hasAny(['name', 'email', 'password', 'role', 'nik', 'rank', 'department_id', 'sim_number', 'sim_expiry_date']);
 
             if (!$isGaOrHrHead && !$this->isAdmin()) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
@@ -526,7 +514,6 @@ class UserController extends Controller
                 'rank'            => 'required_if:role,Approver|nullable|string|max:255',
                 'department_id'   => ['nullable', 'integer', 'exists:departments,id'],
                 'is_department_head' => 'boolean',
-                'sim_a_photo'     => ['nullable'],
             ]);
 
             $rawRole = isset($validated['role']) ? trim((string)$validated['role']) : null;
@@ -567,14 +554,6 @@ class UserController extends Controller
             }
 
             unset($validated['role']);
-
-            $simFile = $request->file('sim_a_photo') ?? $request->file('sim_photo') ?? $request->file('photo');
-            if ($simFile) {
-                $simPath = $this->storePublicFileSafely($simFile, 'users/sim');
-                if ($simPath) {
-                    $validated['sim_a_photo'] = $simPath;
-                }
-            }
 
             $user->update($validated);
 
@@ -929,7 +908,7 @@ class UserController extends Controller
             'availability_status' => $computedStatus ?? 'available',
             'is_department_head'  => $user->is_department_head ?? false,
             'avatar_url'          => $user->avatar ? url('storage/' . $user->avatar) : null,
-            'sim_a_photo_url'     => $user->sim_a_photo ? url('storage/' . $user->sim_a_photo) : null,
+            'sim_a_photo_url'     => null,
             'is_active'           => $user->is_active ?? false,
             'can_request'         => $user->can_request ?? false,
             'availability_start'  => $user->availability_start,

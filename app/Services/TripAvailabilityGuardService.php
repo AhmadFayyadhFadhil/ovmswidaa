@@ -302,6 +302,25 @@ class TripAvailabilityGuardService
 
         // Check driver lock
         if ($driverId) {
+            // Check if driver SIM has expired
+            $driverUser = \App\Models\User::find($driverId);
+            if ($driverUser && $driverUser->sim_expiry_date) {
+                $todayStr = now()->toDateString();
+                $simExpiryDate = \Carbon\Carbon::parse($driverUser->sim_expiry_date)->toDateString();
+                if ($simExpiryDate < $todayStr) {
+                    $simExpiryFormatted = \Carbon\Carbon::parse($driverUser->sim_expiry_date)->format('d/m/Y');
+                    return [
+                        'is_locked'         => true,
+                        'lock_type'         => 'driver_sim_expired',
+                        'vehicle_name'      => null,
+                        'plate_number'      => null,
+                        'other_request_id'  => null,
+                        'other_driver_name' => $driverUser->name,
+                        'message'           => "Masa berlaku SIM Driver {$driverUser->name} telah kedaluwarsa ({$simExpiryFormatted}). Driver tidak diizinkan memulai perjalanan sampai SIM diperpanjang.",
+                    ];
+                }
+            }
+
             $dLock = self::getUnfinishedTripForDriver((int)$driverId, (int)$request->id);
             if ($dLock) {
                 return [
