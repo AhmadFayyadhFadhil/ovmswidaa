@@ -69,6 +69,11 @@ class ClearRequestHistory extends Command
                 $this->line('  ✓ Table [user_notification_states] truncated (Notification badges reset to 0)');
             }
 
+            if (DB::getSchemaBuilder()->hasTable('notifications')) {
+                DB::table('notifications')->truncate();
+                $this->line('  ✓ Table [notifications] truncated');
+            }
+
             if (DB::getSchemaBuilder()->hasTable('audit_logs')) {
                 DB::table('audit_logs')->truncate();
                 $this->line('  ✓ Table [audit_logs] truncated');
@@ -93,13 +98,42 @@ class ClearRequestHistory extends Command
                 $this->line("  ✓ All driver availability statuses reset to 'available' and notification states cleared");
             }
 
-            // 4. Reset vehicle operational statuses
+            // 4. Reset vehicle operational statuses (Preserve Maintenance and Retired)
             if (DB::getSchemaBuilder()->hasTable('vehicles')) {
-                DB::table('vehicles')->whereNotNull('id')->update(['status' => 'Available']);
-                $this->line("  ✓ All vehicle statuses reset to 'Available'");
+                DB::table('vehicles')->whereNotIn('status', ['Maintenance', 'Retired'])->update(['status' => 'Available']);
+                $this->line("  ✓ All operational vehicle statuses reset to 'Available' (Maintenance & Retired preserved)");
             }
 
-            // 5. Create initial clean audit log entry
+            // 5. Clean temporary request attachments from storage
+            try {
+                $attachmentPaths = [
+                    storage_path('app/public/requests/itineraries'),
+                    storage_path('app/public/external_trips'),
+                ];
+                foreach ($attachmentPaths as $dirPath) {
+                    if (is_dir($dirPath)) {
+                        $files = glob($dirPath . '/*');
+                        foreach ($files as $file) {
+                            if (is_file($file) && !str_starts_with(basename($file), '.')) {
+                                @unlink($file);
+                            }
+                        }
+                    }
+                }
+                $this->line('  ✓ Temporary request attachment files purged from storage');
+            } catch (\Throwable $fileErr) {
+                // Non-fatal
+            }
+
+            // 6. Flush application cache
+            try {
+                \Illuminate\Support\Facades\Cache::flush();
+                $this->line('  ✓ Application cache cleared');
+            } catch (\Throwable $cacheErr) {
+                // Non-fatal
+            }
+
+            // 7. Create initial clean audit log entry
             if (DB::getSchemaBuilder()->hasTable('audit_logs')) {
                 try {
                     DB::table('audit_logs')->insert([
