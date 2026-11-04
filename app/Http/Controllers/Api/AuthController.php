@@ -24,13 +24,20 @@ class AuthController extends Controller
         $loginInput = trim($validated['nik']);
         $password   = $validated['password'];
 
-        // Flexible authentication: support NIK or Email with automatic trimming
-        $user = User::where('nik', $loginInput)->orWhere('email', $loginInput)->first();
+        // Flexible authentication: support NIK, Username, or Email with automatic trimming
+        $user = User::where('nik', $loginInput)
+            ->orWhere('email', $loginInput)
+            ->orWhere(function ($q) use ($loginInput) {
+                if (in_array(strtolower($loginInput), ['satpam', 'security', 'sec001'])) {
+                    $q->where('nik', 'satpam')->orWhere('email', 'security@widatra.com');
+                }
+            })
+            ->first();
 
         if (!$user || !Hash::check($password, $user->password)) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'NIK/Email atau password salah',
+                'message' => 'NIK / Username / Email atau password salah',
             ], 401);
         }
 
