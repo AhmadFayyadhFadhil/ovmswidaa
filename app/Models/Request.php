@@ -46,6 +46,7 @@ class Request extends Model
         'security_checkin_by',
         'security_checkout_notes',
         'security_checkin_notes',
+        'additional_passengers',
         'external_fleet_info',
         'external_photo_path',
         'external_trip_type',

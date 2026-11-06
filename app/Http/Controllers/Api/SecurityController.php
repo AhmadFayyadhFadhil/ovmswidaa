@@ -23,6 +23,7 @@ class SecurityController extends Controller
             'scanned_at'    => 'nullable|string',
             'start_km'      => 'nullable|numeric|min:0',
             'end_km'        => 'nullable|numeric|min:0',
+            'additional_passengers' => 'nullable|string|max:1000',
         ]);
 
         $vehicleRequest = $this->findRequestByToken($validated['qr_code_token']);
@@ -223,6 +224,7 @@ class SecurityController extends Controller
 
             $inputStartKm = isset($validated['start_km']) && $validated['start_km'] !== '' ? (int)$validated['start_km'] : null;
             $inputEndKm   = isset($validated['end_km']) && $validated['end_km'] !== '' ? (int)$validated['end_km'] : null;
+            $additionalPassengers = !empty($validated['additional_passengers']) ? trim($validated['additional_passengers']) : null;
 
             if ($validated['type'] === 'checkout') {
                 if ($targetTrip) {
@@ -235,6 +237,9 @@ class SecurityController extends Controller
                     ];
                     if ($inputStartKm !== null) {
                         $targetTripData['start_km'] = $inputStartKm;
+                    }
+                    if ($additionalPassengers !== null) {
+                        $targetTripData['additional_passengers'] = $additionalPassengers;
                     }
                     $targetTrip->update($targetTripData);
 
@@ -260,6 +265,9 @@ class SecurityController extends Controller
                         if ($inputStartKm !== null) {
                             $reqData['start_km'] = $inputStartKm;
                         }
+                        if ($additionalPassengers !== null) {
+                            $reqData['additional_passengers'] = $additionalPassengers;
+                        }
                         $vehicleRequest->update($reqData);
                     }
                 } else if ($todayItinerary) {
@@ -278,6 +286,9 @@ class SecurityController extends Controller
                         ];
                         if ($inputStartKm !== null) {
                             $itData['start_km'] = $inputStartKm;
+                        }
+                        if ($additionalPassengers !== null) {
+                            $itData['additional_passengers'] = $additionalPassengers;
                         }
                         $todayItinerary->update($itData);
 
@@ -302,6 +313,9 @@ class SecurityController extends Controller
                         if ($inputStartKm !== null) {
                             $reqData['start_km'] = $inputStartKm;
                         }
+                        if ($additionalPassengers !== null) {
+                            $reqData['additional_passengers'] = $additionalPassengers;
+                        }
                         $vehicleRequest->update($reqData);
 
                         $customMessage = 'Scan Checkout Sesi 1 (' . ($todayItinerary->morning_destination ?? 'Perjalanan Pagi') . ') berhasil. Status Driver & Mobil: ON TRIP.';
@@ -316,6 +330,9 @@ class SecurityController extends Controller
                         ];
                         if ($inputStartKm !== null) {
                             $itData['start_km'] = $inputStartKm;
+                        }
+                        if ($additionalPassengers !== null) {
+                            $itData['additional_passengers'] = $additionalPassengers;
                         }
                         $todayItinerary->update($itData);
 
@@ -334,6 +351,9 @@ class SecurityController extends Controller
                         if ($inputStartKm !== null) {
                             $reqData['start_km'] = $inputStartKm;
                         }
+                        if ($additionalPassengers !== null) {
+                            $reqData['additional_passengers'] = $additionalPassengers;
+                        }
                         $vehicleRequest->update($reqData);
 
                         $customMessage = 'Scan Checkout Sesi 2 (' . ($todayItinerary->afternoon_destination ?? 'Perjalanan Sore') . ') berhasil. Status Driver & Mobil: ON TRIP.';
@@ -349,6 +369,9 @@ class SecurityController extends Controller
                     if ($inputStartKm !== null) {
                         $reqData['start_km'] = $inputStartKm;
                     }
+                    if ($additionalPassengers !== null) {
+                        $reqData['additional_passengers'] = $additionalPassengers;
+                    }
                     $vehicleRequest->update($reqData);
 
                     if (!$vehicleRequest->is_external) {
@@ -363,6 +386,9 @@ class SecurityController extends Controller
                             ];
                             if ($inputStartKm !== null) {
                                 $tData['start_km'] = $inputStartKm;
+                            }
+                            if ($additionalPassengers !== null) {
+                                $tData['additional_passengers'] = $additionalPassengers;
                             }
                             $trip->update($tData);
 
@@ -440,10 +466,12 @@ class SecurityController extends Controller
                             'morning_checkin_by'    => $validated['security_name'],
                             'morning_checkin_notes' => $validated['notes'] ?? null,
                         ];
-                        if ($effectiveEndKm !== null) {
+                        if ($effectiveEndKm !== null || $vehicleRequest->is_external) {
                             $itData['morning_status'] = 'completed';
-                            $itData['end_km'] = $effectiveEndKm;
-                            $itData['total_km'] = $totKm;
+                            if ($effectiveEndKm !== null) {
+                                $itData['end_km'] = $effectiveEndKm;
+                                $itData['total_km'] = $totKm;
+                            }
                         }
                         $todayItinerary->update($itData);
 
@@ -461,7 +489,7 @@ class SecurityController extends Controller
 
                         if (empty($todayItinerary->afternoon_destination)) {
                             $upd = ['security_checked_in_at' => $scanTime];
-                            if ($effectiveEndKm !== null) {
+                            if ($effectiveEndKm !== null || $vehicleRequest->is_external) {
                                 $upd['status'] = 'completed';
                             }
                             $todayItinerary->update($upd);
@@ -469,7 +497,7 @@ class SecurityController extends Controller
 
                         $allCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->count();
                         $doneCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('status', 'completed')->count();
-                        if ($effectiveEndKm !== null && $doneCount >= $allCount) {
+                        if (($effectiveEndKm !== null || $vehicleRequest->is_external) && $doneCount >= $allCount) {
                             $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
                             $vehicleRequest->update([
                                 'status'                 => RequestStatus::COMPLETED,
@@ -478,7 +506,7 @@ class SecurityController extends Controller
                                 'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                                 'end_km'                 => $effectiveEndKm,
-                                'total_km'               => max(0, $effectiveEndKm - $stKmReq),
+                                'total_km'               => $effectiveEndKm !== null ? max(0, $effectiveEndKm - $stKmReq) : null,
                             ]);
                         } else {
                             $vehicleRequest->update([
@@ -488,8 +516,8 @@ class SecurityController extends Controller
                             ]);
                         }
 
-                        $customMessage = $effectiveEndKm !== null 
-                            ? 'Scan Checkin Sesi 1 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.' 
+                        $customMessage = ($effectiveEndKm !== null || $vehicleRequest->is_external)
+                            ? 'Scan Checkin Sesi 1 berhasil. Status perjalanan telah diperbarui.' 
                             : 'Scan Checkin Sesi 1 berhasil. Menunggu driver menginput KM Akhir spidometer.';
                     } else if ($todayItinerary->afternoon_status === 'on_going') {
                         $itData = [
@@ -498,11 +526,13 @@ class SecurityController extends Controller
                             'afternoon_checkin_notes' => $validated['notes'] ?? null,
                             'security_checked_in_at'  => $scanTime,
                         ];
-                        if ($effectiveEndKm !== null) {
+                        if ($effectiveEndKm !== null || $vehicleRequest->is_external) {
                             $itData['afternoon_status'] = 'completed';
                             $itData['status'] = 'completed';
-                            $itData['end_km'] = $effectiveEndKm;
-                            $itData['total_km'] = $totKm;
+                            if ($effectiveEndKm !== null) {
+                                $itData['end_km'] = $effectiveEndKm;
+                                $itData['total_km'] = $totKm;
+                            }
                         }
                         $todayItinerary->update($itData);
 
@@ -520,7 +550,7 @@ class SecurityController extends Controller
 
                         $allCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->count();
                         $doneCount = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('status', 'completed')->count();
-                        if ($effectiveEndKm !== null && $doneCount >= $allCount) {
+                        if (($effectiveEndKm !== null || $vehicleRequest->is_external) && $doneCount >= $allCount) {
                             $stKmReq = $vehicleRequest->start_km ?? $stKm ?? 0;
                             $vehicleRequest->update([
                                 'status'                 => RequestStatus::COMPLETED,
@@ -529,7 +559,7 @@ class SecurityController extends Controller
                                 'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
                                 'end_km'                 => $effectiveEndKm,
-                                'total_km'               => max(0, $effectiveEndKm - $stKmReq),
+                                'total_km'               => $effectiveEndKm !== null ? max(0, $effectiveEndKm - $stKmReq) : null,
                             ]);
                         } else {
                             $vehicleRequest->update([
@@ -539,8 +569,8 @@ class SecurityController extends Controller
                             ]);
                         }
 
-                        $customMessage = $effectiveEndKm !== null 
-                            ? 'Scan Checkin Sesi 2 berhasil. Status Driver & Mobil diperbarui menjadi Standby / Tersedia.' 
+                        $customMessage = ($effectiveEndKm !== null || $vehicleRequest->is_external)
+                            ? 'Scan Checkin Sesi 2 berhasil. Seluruh sesi perjalanan telah selesai.' 
                             : 'Scan Checkin Sesi 2 berhasil. Menunggu driver menginput KM Akhir spidometer.';
                     }
                 } else {
@@ -552,11 +582,13 @@ class SecurityController extends Controller
                         'security_checkin_by'    => $validated['security_name'],
                         'security_checkin_notes' => $validated['notes'] ?? null,
                     ];
-                    if ($effectiveEndKm !== null) {
+                    if ($effectiveEndKm !== null || $vehicleRequest->is_external) {
                         $reqData['status'] = RequestStatus::COMPLETED;
                         $reqData['completed_at'] = $vehicleRequest->completed_at ?? $scanTime;
-                        $reqData['end_km'] = $effectiveEndKm;
-                        $reqData['total_km'] = max(0, $effectiveEndKm - $stKmReq);
+                        if ($effectiveEndKm !== null) {
+                            $reqData['end_km'] = $effectiveEndKm;
+                            $reqData['total_km'] = max(0, $effectiveEndKm - $stKmReq);
+                        }
                     }
                     $vehicleRequest->update($reqData);
 

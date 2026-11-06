@@ -346,6 +346,30 @@ class NotificationController extends Controller
                     'rawStatus'   => $rawStatus,
                     'actionUrl'   => $actionUrl,
                 ];
+
+                // Poin 12: Hasil rating bintang & ulasan memicu notifikasi ke Driver Coordinator & Tim GA
+                if (($isAdminOrGA || $isCoordinator) && $r->rating && (int)$r->rating > 0) {
+                    $ratingNotifId = "req-{$r->id}-rated";
+                    if (!in_array($ratingNotifId, $deletedIds, true)) {
+                        $starCount = min(5, max(1, (int)$r->rating));
+                        $stars = str_repeat('⭐', $starCount);
+                        $notesText = $r->rating_notes ? " Ulasan: \"{$r->rating_notes}\"" : "";
+                        $rateDate = $r->rated_at ? \Carbon\Carbon::parse($r->rated_at)->format('d M Y') : $dateStr;
+
+                        $notifications[] = [
+                            'id'          => $ratingNotifId,
+                            'title'       => "Penilaian Driver #REQ-{$r->id}: {$stars} ({$r->rating}/5)",
+                            'description' => "Pemohon {$employeeName} telah menilai performa driver (" . ($driverName ?: 'Driver') . ") untuk trip ke {$dest}.{$notesText}",
+                            'timeAgo'     => $rateDate,
+                            'severity'    => ((int)$r->rating <= 2) ? 'high' : 'info',
+                            'category'    => 'Operational',
+                            'isRead'      => in_array($ratingNotifId, $readIds, true),
+                            'metadata'    => "REQ ID: #{$r->id}",
+                            'rawStatus'   => 'rated',
+                            'actionUrl'   => '/gahrd/requests?id=' . $r->id,
+                        ];
+                    }
+                }
             }
 
             return $this->jsonNoCache([
