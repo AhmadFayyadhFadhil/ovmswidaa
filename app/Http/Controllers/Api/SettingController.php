@@ -45,13 +45,14 @@ class SettingController extends Controller
             'push_notifs' => 'pushNotifs',
             'digest_mode' => 'digestMode',
             'company_logo' => 'companyLogo',
+            'login_hero_image' => 'loginHeroImage',
             'min_lead_time_hours' => 'minLeadTimeHours',
         ];
 
         foreach ($settings as $setting) {
             $frontendKey = $keyMap[$setting->key] ?? $setting->key;
             $value = $setting->value;
-            if ($setting->key === 'company_logo' && $value) {
+            if (in_array($setting->key, ['company_logo', 'login_hero_image']) && $value) {
                 $filename = basename($value);
                 $fullPath = storage_path('app/public/settings/' . $filename);
                 $value = (file_exists($fullPath) || file_exists(public_path('storage/settings/' . $filename)))
@@ -337,10 +338,20 @@ class SettingController extends Controller
                     $logoUrl = '/storage/settings/' . $filename;
                 }
             }
+            $hero = Setting::getValue('login_hero_image');
+            $heroUrl = null;
+            if ($hero) {
+                $heroFilename = basename($hero);
+                $heroFullPath = storage_path('app/public/settings/' . $heroFilename);
+                if (file_exists($heroFullPath) || file_exists(public_path('storage/settings/' . $heroFilename))) {
+                    $heroUrl = '/storage/settings/' . $heroFilename;
+                }
+            }
         } catch (\Throwable $e) {
             $systemName = 'OVMS';
             $companyName = 'PT Widarta Bhakti';
             $logoUrl = null;
+            $heroUrl = null;
         }
 
         return response()->json([
@@ -352,6 +363,7 @@ class SettingController extends Controller
                 'system_name' => $systemName,
                 'company_name' => $companyName,
                 'company_logo' => $logoUrl,
+                'login_hero_image' => $heroUrl,
             ]
         ]);
     }
