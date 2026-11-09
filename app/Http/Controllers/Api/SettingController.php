@@ -121,6 +121,7 @@ class SettingController extends Controller
             'pushNotifs' => 'push_notifs',
             'digestMode' => 'digest_mode',
             'companyLogo' => 'company_logo',
+            'loginHeroImage' => 'login_hero_image',
             'minLeadTimeHours' => 'min_lead_time_hours',
         ];
 
@@ -136,11 +137,17 @@ class SettingController extends Controller
                         ]
                     );
                     if ($setting) {
-                        // Ignore full URL for company logo if it was not changed (starts with http)
-                        if ($dbKey === 'company_logo' && str_starts_with($value, 'http')) {
+                        // Ignore full URL for logo or hero if not changed (starts with http)
+                        if (in_array($dbKey, ['company_logo', 'login_hero_image']) && is_string($value) && str_starts_with($value, 'http')) {
                             continue;
                         }
                         
+                        if ($dbKey === 'login_hero_image' && empty($value)) {
+                            $setting->value = null;
+                            $setting->save();
+                            continue;
+                        }
+
                         if ($setting->type === 'boolean') {
                             $setting->value = $value ? '1' : '0';
                         } else {
@@ -229,6 +236,119 @@ class SettingController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Gagal mengunggah logo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload login hero image.
+     */
+    public function uploadLoginHero(Request $request): JsonResponse
+    {
+        if (!$this->checkAdmin()) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        if (!$request->hasFile('hero') && !$request->hasFile('image')) {
+            return response()->json(['status' => 'error', 'message' => 'File gambar login wajib diunggah'], 422);
+        }
+
+        try {
+            $file = $request->file('hero') ?? $request->file('image');
+            $originalName = $file->getClientOriginalName();
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                $ext = 'jpg';
+            }
+
+            $filename = 'login_hero_' . time() . '.' . $ext;
+
+            // Target 1: storage/app/public/settings
+            $storageDir = storage_path('app/public/settings');
+            if (!file_exists($storageDir)) {
+                @mkdir($storageDir, 0777, true);
+            }
+            $storagePath = $storageDir . '/' . $filename;
+
+            // Target 2: public/api/assets/settings (Nginx static dir)
+            $publicAssetDir = public_path('api/assets/settings');
+            if (!file_exists($publicAssetDir)) {
+                @mkdir($publicAssetDir, 0777, true);
+            }
+            $publicAssetPath = $publicAssetDir . '/' . $filename;
+
+            // Target 3: public/storage/settings
+            $pubStorageDir = public_path('storage/settings');
+            if (!file_exists($pubStorageDir)) {
+                @mkdir($pubStorageDir, 0777, true);
+            }
+            $pubStoragePath = $pubStorageDir . '/' . $filename;
+
+            if (!@move_uploaded_file($file->getRealPath(), $storagePath)) {
+                if (!@copy($file->getRealPath(), $storagePath)) {
+                    throw new \Exception("Gagal menyalin file gambar ke storage.");
+                }
+            }
+            @copy($storagePath, $publicAssetPath);
+            @copy($storagePath, $pubStoragePath);
+
+            $dbPath = 'settings/' . $filename;
+
+            // Save path to setting DB
+            $setting = Setting::firstOrCreate(['key' => 'login_hero_image'], [
+                'type' => 'string',
+                'group' => 'company'
+            ]);
+            $setting->value = $dbPath;
+            $setting->save();
+
+            // Clear branding cache
+            Cache::forget('ovms_branding_config');
+            Cache::flush();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Foto banner halaman login berhasil diperbarui',
+                'data' => [
+                    'hero_url' => asset('storage/settings/' . $filename)
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Login Hero Upload Error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mengunggah foto banner login: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete/reset login hero image to default.
+     */
+    public function deleteLoginHero(): JsonResponse
+    {
+        if (!$this->checkAdmin()) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        try {
+            $setting = Setting::where('key', 'login_hero_image')->first();
+            if ($setting) {
+                $setting->value = null;
+                $setting->save();
+            }
+
+            Cache::forget('ovms_branding_config');
+            Cache::flush();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Foto banner login berhasil direset ke default sistem'
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal mereset foto banner: ' . $e->getMessage()
             ], 500);
         }
     }

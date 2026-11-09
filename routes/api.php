@@ -163,6 +163,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/destination-cities/{destinationCity}', [\App\Http\Controllers\Api\DestinationCityController::class, 'update']);
     Route::delete('/destination-cities/{destinationCity}', [\App\Http\Controllers\Api\DestinationCityController::class, 'destroy']);
     Route::post('/system-config/logo', [\App\Http\Controllers\Api\SettingController::class, 'uploadLogo']);
+    Route::post('/system-config/login-hero', [\App\Http\Controllers\Api\SettingController::class, 'uploadLoginHero']);
+    Route::delete('/system-config/login-hero', [\App\Http\Controllers\Api\SettingController::class, 'deleteLoginHero']);
     Route::get('/system-config/stats', [\App\Http\Controllers\Api\SettingController::class, 'getStats']);
     Route::post('/system-config/purge-logs', [\App\Http\Controllers\Api\SettingController::class, 'purgeLogs']);
     Route::post('/system-config/flush-cache', [\App\Http\Controllers\Api\SettingController::class, 'flushCache']);
