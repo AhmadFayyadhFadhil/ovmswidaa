@@ -42,6 +42,7 @@ class RequestItinerary extends Model
         'afternoon_checkin_by',
         'afternoon_checkout_notes',
         'afternoon_checkin_notes',
+        'additional_passengers',
         'start_km',
         'end_km',
         'total_km',

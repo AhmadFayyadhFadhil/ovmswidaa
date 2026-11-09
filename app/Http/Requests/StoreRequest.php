@@ -51,10 +51,15 @@ class StoreRequest extends FormRequest
     public function rules(): array
     {
         $user = $this->user();
-        $isGA = $user->hasRoleDirect(['GA', 'ga', 'Admin', 'admin']) || $user->isHrGaHead();
+        $email = strtolower($user->email ?? '');
+        $isPrivileged = $user->hasRoleDirect(['GA', 'ga', 'Admin', 'admin', 'Driver Coordinator', 'driver coordinator', 'coordinator']) 
+            || $user->isHrGaHead()
+            || str_contains($email, 'gateam')
+            || str_contains($email, 'melodi')
+            || str_contains($email, 'winaryo');
         $minLeadTime = (int)\App\Models\Setting::getValue('min_lead_time_hours', 24);
         
-        if ($isGA) {
+        if ($isPrivileged) {
             $startTimeRule = 'required|date';
         } else {
             $minTime = now()->addHours($minLeadTime);

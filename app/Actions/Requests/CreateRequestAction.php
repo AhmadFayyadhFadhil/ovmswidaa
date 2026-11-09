@@ -44,6 +44,11 @@ class CreateRequestAction
                 $name = trim($passengerData['name']);
                 $lowerName = strtolower($name);
 
+                // Allow logistics/document delivery without physical passenger conflict
+                if (str_contains($lowerName, 'tanpa penumpang')) {
+                    continue;
+                }
+
                 if (in_array($lowerName, $seenNames, true)) {
                     throw new \Exception("Nama penumpang '{$name}' tidak boleh diduplikasi dalam satu pengajuan.");
                 }
@@ -73,7 +78,12 @@ class CreateRequestAction
 
         $createdRequest = DB::transaction(function () use ($data) {
             $user = auth()->user();
-            $isGA = $user->hasRoleDirect('GA') || $user->hasRoleDirect('Admin') || $user->isHrGaHead();
+            $email = strtolower($user->email ?? '');
+            $isGA = $user->hasRoleDirect(['GA', 'ga', 'Admin', 'admin', 'Driver Coordinator', 'driver coordinator', 'coordinator']) 
+                || $user->isHrGaHead()
+                || str_contains($email, 'gateam')
+                || str_contains($email, 'melodi')
+                || str_contains($email, 'winaryo');
             
             // Helper to safely resolve department_id to integer ID in departments table
             $resolveDeptId = function ($input) use ($user) {

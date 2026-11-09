@@ -114,6 +114,7 @@ class RequestResource extends JsonResource
                     'afternoon_time'       => $it->afternoon_time,
                     'afternoon_destination'=> $it->afternoon_destination,
                     'passengers_notes'     => $it->passengers_notes,
+                    'additional_passengers'=> $it->additional_passengers,
                     'driver_id'            => $it->driver_id,
                     'driver_name'          => $it->driver?->name,
                     'driver_email'         => $it->driver?->email,
@@ -160,6 +161,7 @@ class RequestResource extends JsonResource
             'estimated_duration'=> $this->estimated_duration,
             'is_external'       => $this->is_external,
             'third_party_cost'  => $this->third_party_cost,
+            'additional_passengers' => $this->additional_passengers ?? $this->operationalTrip?->additional_passengers ?? $trips->first()?->additional_passengers ?? $this->itineraries?->first()?->additional_passengers,
             'qr_code_token'     => $this->qr_code_token,
             'security_checked_out_at' => $this->security_checked_out_at ? ($this->security_checked_out_at instanceof \DateTimeInterface ? $this->security_checked_out_at->format('Y-m-d H:i:s') : (string)$this->security_checked_out_at) : null,
             'security_checked_in_at'  => $this->security_checked_in_at ? ($this->security_checked_in_at instanceof \DateTimeInterface ? $this->security_checked_in_at->format('Y-m-d H:i:s') : (string)$this->security_checked_in_at) : null,
@@ -248,9 +250,11 @@ class RequestResource extends JsonResource
                     'type' => $this->operationalTrip->vehicle?->type,
                 ],
                 'status' => $this->operationalTrip->status,
+                'additional_passengers' => $this->operationalTrip->additional_passengers,
             ] : null),
             'operational_trips' => $trips->map(fn($t) => [
                 'id' => $t->id,
+                'additional_passengers' => $t->additional_passengers,
                 'driver' => [
                     'id' => $t->driver?->id,
                     'name' => $t->driver?->name,

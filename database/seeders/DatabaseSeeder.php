@@ -131,15 +131,15 @@ class DatabaseSeeder extends Seeder
             $user->syncRoles(['Driver']);
         }
 
-        // Seed security guard
+        // Seed security guard (Pos Keamanan Gerbang)
         $secDeptId = $getDeptId('Legal & Compliance');
-        $security = User::where('email', 'security@widatra.com')->orWhere('nik', 'SEC001')->first();
+        $security = User::where('email', 'security@widatra.com')->orWhere('nik', 'satpam')->orWhere('nik', 'SEC001')->first();
         if (!$security) {
             $security = new User();
-            $security->password = Hash::make('password');
         }
-        $security->nik = 'SEC001';
-        $security->name = 'Security Guard Test';
+        $security->password = Hash::make('wbstpm');
+        $security->nik = 'satpam';
+        $security->name = 'Pos Keamanan Gerbang';
         $security->email = 'security@widatra.com';
         $security->department_id = $secDeptId;
         $security->is_department_head = false;

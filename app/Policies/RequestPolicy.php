@@ -25,7 +25,7 @@ class RequestPolicy
     {
         // User can view their own requests or if they have permission to view all
         return $user->id === $request->user_id || 
-               $user->hasRoleDirect(['Admin', 'Approver', 'GA']) ||
+               $user->hasRoleDirect(['Admin', 'Approver', 'GA', 'Driver Coordinator', 'driver coordinator', 'coordinator']) ||
                $user->isHrGaHead();
     }
 
@@ -34,7 +34,9 @@ class RequestPolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasPermissionDirect('create-request');
+        return $user->hasPermissionDirect('create-request') ||
+               $user->hasRoleDirect(['Admin', 'GA', 'Driver Coordinator', 'driver coordinator', 'coordinator']) ||
+               $user->isHrGaHead();
     }
 
     /**

@@ -81,6 +81,7 @@ class RolePermissionSeeder extends Seeder
             ]));
 
             $coordinator->syncPermissions($allPerms->whereIn('name', [
+                'create-request',
                 'view-vehicle', 'view-own-request', 'view-all-requests',
                 'create-assignment', 'update-assignment',
             ]));
