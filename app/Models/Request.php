@@ -261,6 +261,33 @@ class Request extends Model
     public function syncStatus()
     {
         if ($this->trip_mode === 'split_drop_pickup') {
+            // Self-healing 1: sinkronkan data security_checked_* ke departure_checked_* jika departure_checked_* masih kosong
+            if ($this->departure_checked_out_at === null && $this->security_checked_out_at !== null) {
+                $this->departure_checked_out_at = $this->security_checked_out_at;
+                $this->departure_checkout_by    = $this->departure_checkout_by ?? $this->security_checkout_by;
+                $this->departure_start_km       = $this->departure_start_km ?? $this->start_km;
+                $this->update([
+                    'departure_checked_out_at' => $this->departure_checked_out_at,
+                    'departure_checkout_by'    => $this->departure_checkout_by,
+                    'departure_start_km'       => $this->departure_start_km,
+                ]);
+            }
+            if ($this->departure_checked_in_at === null && $this->security_checked_in_at !== null && $this->return_checked_out_at === null) {
+                $this->departure_checked_in_at  = $this->security_checked_in_at;
+                $this->departure_checkin_by     = $this->departure_checkin_by ?? $this->security_checkin_by;
+                $this->departure_end_km         = $this->departure_end_km ?? $this->end_km;
+                if ($this->departure_start_km !== null && $this->departure_end_km !== null) {
+                    $this->departure_total_km   = max(0, (int)$this->departure_end_km - (int)$this->departure_start_km);
+                }
+                $this->update([
+                    'departure_checked_in_at' => $this->departure_checked_in_at,
+                    'departure_checkin_by'    => $this->departure_checkin_by,
+                    'departure_end_km'        => $this->departure_end_km,
+                    'departure_total_km'      => $this->departure_total_km,
+                ]);
+            }
+
+            // Self-healing 2: tentukan status riil berdasarkan fase gerbang
             if ($this->return_checked_in_at !== null) {
                 if ($this->status !== RequestStatus::COMPLETED) {
                     $this->update(['status' => RequestStatus::COMPLETED, 'completed_at' => $this->completed_at ?? now()]);
@@ -281,6 +308,12 @@ class Request extends Model
                 if ($this->status !== RequestStatus::ON_GOING) {
                     $this->update(['status' => RequestStatus::ON_GOING]);
                     $this->status = RequestStatus::ON_GOING;
+                }
+            } else {
+                // Belum pernah checkout gerbang sama sekali -> status HARUS driver_assigned (Terjadwal), BUKAN on_going!
+                if ($this->status === RequestStatus::ON_GOING) {
+                    $this->update(['status' => RequestStatus::DRIVER_ASSIGNED]);
+                    $this->status = RequestStatus::DRIVER_ASSIGNED;
                 }
             }
             return;

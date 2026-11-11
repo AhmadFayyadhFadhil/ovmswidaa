@@ -178,8 +178,8 @@ class RequestResource extends JsonResource
             'split_trip_stage'        => ($this->trip_mode === 'split_drop_pickup') ? (
                 $this->return_checked_in_at ? 'completed' : (
                     $this->return_checked_out_at ? 'return_ongoing' : (
-                        $this->departure_checked_in_at ? 'waiting_pickup' : (
-                            $this->departure_checked_out_at ? 'departure_ongoing' : 'scheduled'
+                        ($this->departure_checked_in_at || ($this->security_checked_in_at && !$this->return_checked_out_at)) ? 'waiting_pickup' : (
+                            ($this->departure_checked_out_at || $this->security_checked_out_at) ? 'departure_ongoing' : 'scheduled'
                         )
                     )
                 )
@@ -187,17 +187,17 @@ class RequestResource extends JsonResource
             'split_trip_status_label' => ($this->trip_mode === 'split_drop_pickup') ? (
                 $this->return_checked_in_at ? 'Selesai' : (
                     $this->return_checked_out_at ? 'Sedang Berjalan (Penjemputan)' : (
-                        $this->departure_checked_in_at ? 'Terjadwal Jemput' : (
-                            $this->departure_checked_out_at ? 'Sedang Berjalan (Pengantaran)' : 'Terjadwal'
+                        ($this->departure_checked_in_at || ($this->security_checked_in_at && !$this->return_checked_out_at)) ? 'Terjadwal Jemput' : (
+                            ($this->departure_checked_out_at || $this->security_checked_out_at) ? 'Sedang Berjalan (Pengantaran)' : 'Terjadwal'
                         )
                     )
                 )
             ) : null,
-            'departure_start_km'      => $this->departure_start_km,
-            'departure_end_km'        => $this->departure_end_km,
+            'departure_start_km'      => $this->departure_start_km ?? $this->start_km,
+            'departure_end_km'        => $this->departure_end_km ?? ($this->departure_checked_in_at || ($this->security_checked_in_at && !$this->return_checked_out_at) ? $this->end_km : null),
             'departure_total_km'      => $this->departure_total_km,
-            'departure_checked_out_at'=> $this->departure_checked_out_at ? ($this->departure_checked_out_at instanceof \DateTimeInterface ? $this->departure_checked_out_at->format('Y-m-d H:i:s') : (string)$this->departure_checked_out_at) : null,
-            'departure_checked_in_at' => $this->departure_checked_in_at ? ($this->departure_checked_in_at instanceof \DateTimeInterface ? $this->departure_checked_in_at->format('Y-m-d H:i:s') : (string)$this->departure_checked_in_at) : null,
+            'departure_checked_out_at'=> ($this->departure_checked_out_at ?? $this->security_checked_out_at) ? (($this->departure_checked_out_at ?? $this->security_checked_out_at) instanceof \DateTimeInterface ? ($this->departure_checked_out_at ?? $this->security_checked_out_at)->format('Y-m-d H:i:s') : (string)($this->departure_checked_out_at ?? $this->security_checked_out_at)) : null,
+            'departure_checked_in_at' => ($this->departure_checked_in_at ?? ($this->return_checked_out_at ? null : $this->security_checked_in_at)) ? (($this->departure_checked_in_at ?? ($this->return_checked_out_at ? null : $this->security_checked_in_at)) instanceof \DateTimeInterface ? ($this->departure_checked_in_at ?? ($this->return_checked_out_at ? null : $this->security_checked_in_at))->format('Y-m-d H:i:s') : (string)($this->departure_checked_in_at ?? ($this->return_checked_out_at ? null : $this->security_checked_in_at))) : null,
             'departure_checkout_by'   => $this->departure_checkout_by,
             'departure_checkin_by'    => $this->departure_checkin_by,
             'return_departure_time'   => $this->return_departure_time ? ($this->return_departure_time instanceof \DateTimeInterface ? $this->return_departure_time->format('Y-m-d H:i:s') : (string)$this->return_departure_time) : null,

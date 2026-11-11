@@ -785,7 +785,7 @@ class RequestController extends Controller
                     $reqUpdates = [
                         'departure_end_km'   => $depEffectiveEndKm,
                         'departure_total_km' => $depTotKm,
-                        'status'             => RequestStatus::ON_GOING,
+                        'status'             => RequestStatus::DRIVER_ASSIGNED,
                     ];
                     $vehicleRequest->update($reqUpdates);
 
