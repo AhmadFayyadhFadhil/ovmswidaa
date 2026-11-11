@@ -523,6 +523,7 @@ class RequestController extends Controller
         $role = $request->input('role') ?? match($statusStr) {
             RequestStatus::SUBMITTED->value           => 'dept_head',
             RequestStatus::APPROVED_DEPARTMENT->value => 'hrd_head',
+            RequestStatus::ASSIGNED_BY_GA->value      => 'hrd_head',
             default => null,
         };
 

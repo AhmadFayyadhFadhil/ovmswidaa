@@ -11,7 +11,17 @@ class CreateRequestAction
 {
     public function execute(array $data): Request
     {
-        // Check daily request quota limit
+        $authUser = auth()->user();
+        $authEmail = strtolower($authUser->email ?? '');
+        $isPrivileged = $authUser && (
+            $authUser->hasRoleDirect(['GA', 'ga', 'Admin', 'admin', 'Driver Coordinator', 'driver coordinator', 'coordinator']) 
+            || $authUser->isHrGaHead()
+            || str_contains($authEmail, 'gateam')
+            || str_contains($authEmail, 'melodi')
+            || str_contains($authEmail, 'winaryo')
+        );
+
+        // Check daily request quota limit (exempt privileged users: Admin, GA, Coordinator)
         $maxRequests = (int) \App\Models\Setting::getValue('max_requests_per_day', 10);
         $date = date('Y-m-d', strtotime($data['start_time']));
         
@@ -28,7 +38,7 @@ class CreateRequestAction
                 RequestStatus::COMPLETED->value,
             ])->count();
 
-        if ($count >= $maxRequests) {
+        if (!$isPrivileged && $count >= $maxRequests) {
             throw new \Exception("Pengajuan gagal. Kuota maksimal request untuk tanggal {$date} telah penuh ({$maxRequests} request).");
         }
 
