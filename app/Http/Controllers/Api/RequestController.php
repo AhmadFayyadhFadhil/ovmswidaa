@@ -253,6 +253,7 @@ class RequestController extends Controller
             !$user->hasRoleDirect(['Driver Coordinator', 'driver coordinator']) &&
             !$user->hasRoleDirect('Security') && 
             $vehicleRequest->driver_id !== $user->id && 
+            $vehicleRequest->return_driver_id !== $user->id && 
             $vehicleRequest->operationalTrip?->driver_id !== $user->id &&
             !$vehicleRequest->assignments()->where('driver_id', $user->id)->exists() &&
             !$vehicleRequest->itineraries()->where('driver_id', $user->id)->exists() &&
@@ -272,6 +273,8 @@ class RequestController extends Controller
             'passengers.department',
             'driver',
             'vehicle',
+            'returnDriver',
+            'returnVehicle',
             'itineraries.driver',
             'itineraries.vehicle',
         ]);
@@ -557,6 +560,7 @@ class RequestController extends Controller
 
         // Check authorization:
         $isAssigned = $vehicleRequest->driver_id === $user->id ||
+            $vehicleRequest->return_driver_id === $user->id ||
             $vehicleRequest->operationalTrip?->driver_id === $user->id ||
             $vehicleRequest->assignments()->where('driver_id', $user->id)->exists() ||
             \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists() ||
@@ -576,9 +580,16 @@ class RequestController extends Controller
         $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->get();
         $myTrip = $trips->firstWhere('driver_id', $user->id) ?? $trips->first();
 
-        $vehicle = $myTrip?->vehicle 
-            ?? $vehicleRequest->vehicle 
-            ?? ($vehicleRequest->vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->vehicle_id) : null);
+        $vehicle = null;
+        if ($vehicleRequest->trip_mode === 'split_drop_pickup' && (int)$user->id === (int)$vehicleRequest->return_driver_id) {
+            $vehicle = $vehicleRequest->returnVehicle 
+                ?? ($vehicleRequest->return_vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->return_vehicle_id) : null)
+                ?? $myTrip?->vehicle;
+        } else {
+            $vehicle = $myTrip?->vehicle 
+                ?? $vehicleRequest->vehicle 
+                ?? ($vehicleRequest->vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->vehicle_id) : null);
+        }
 
         if (!$vehicle && $vehicleRequest->itineraries()->exists()) {
             $activeIt = $vehicleRequest->itineraries()
@@ -611,39 +622,69 @@ class RequestController extends Controller
         }
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $startKm, $myTrip, $vehicle) {
-            // Update request start_km
-            $vehicleRequest->update(['start_km' => $startKm]);
+            if ($vehicleRequest->trip_mode === 'split_drop_pickup') {
+                $isDepartureDriver = ((int)$user->id === (int)$vehicleRequest->driver_id);
+                $isReturnDriver = ((int)$user->id === (int)$vehicleRequest->return_driver_id);
+                $isDepartureDone = !empty($vehicleRequest->departure_checked_in_at);
 
-            // Update operational trip for this driver
-            if ($myTrip) {
-                $myTrip->update(['start_km' => $startKm]);
-                if ($myTrip->vehicle && ($myTrip->vehicle->odometer === null || $startKm >= $myTrip->vehicle->odometer)) {
-                    $myTrip->vehicle->update(['odometer' => $startKm]);
-                }
-            }
-
-            // Update active itinerary if present
-            if ($vehicleRequest->itineraries()->exists()) {
-                $activeIt = $vehicleRequest->itineraries()
-                    ->where(function($q) use ($user) {
-                        $q->where('driver_id', $user->id)->orWhereNull('driver_id');
-                    })
-                    ->whereIn('status', ['pending', 'assigned', 'on_going'])
-                    ->orderBy('date', 'asc')
-                    ->first();
-                if ($activeIt) {
-                    $activeIt->update(['start_km' => $startKm]);
-                    if ($activeIt->vehicle && ($activeIt->vehicle->odometer === null || $startKm >= $activeIt->vehicle->odometer)) {
-                        $activeIt->vehicle->update(['odometer' => $startKm]);
+                if (!$isDepartureDone || ($isDepartureDriver && !$isReturnDriver)) {
+                    $vehicleRequest->update([
+                        'departure_start_km' => $startKm,
+                        'start_km'           => $startKm,
+                    ]);
+                    if ($myTrip) {
+                        $myTrip->update(['start_km' => $startKm]);
+                    }
+                    if ($vehicleRequest->vehicle && ($vehicleRequest->vehicle->odometer === null || $startKm >= $vehicleRequest->vehicle->odometer)) {
+                        $vehicleRequest->vehicle->update(['odometer' => $startKm]);
+                    }
+                } else {
+                    $vehicleRequest->update([
+                        'return_start_km' => $startKm,
+                    ]);
+                    if ($myTrip) {
+                        $myTrip->update(['start_km' => $startKm]);
+                    }
+                    $retVeh = $vehicleRequest->returnVehicle ?? $vehicle;
+                    if ($retVeh && ($retVeh->odometer === null || $startKm >= $retVeh->odometer)) {
+                        $retVeh->update(['odometer' => $startKm]);
                     }
                 }
-            }
+            } else {
+                // Update request start_km
+                $vehicleRequest->update(['start_km' => $startKm]);
 
-            // Update request vehicle odometer if available
-            if ($vehicleRequest->vehicle && ($vehicleRequest->vehicle->odometer === null || $startKm >= $vehicleRequest->vehicle->odometer)) {
-                $vehicleRequest->vehicle->update(['odometer' => $startKm]);
-            } elseif ($vehicle && ($vehicle->odometer === null || $startKm >= $vehicle->odometer)) {
-                $vehicle->update(['odometer' => $startKm]);
+                // Update operational trip for this driver
+                if ($myTrip) {
+                    $myTrip->update(['start_km' => $startKm]);
+                    if ($myTrip->vehicle && ($myTrip->vehicle->odometer === null || $startKm >= $myTrip->vehicle->odometer)) {
+                        $myTrip->vehicle->update(['odometer' => $startKm]);
+                    }
+                }
+
+                // Update active itinerary if present
+                if ($vehicleRequest->itineraries()->exists()) {
+                    $activeIt = $vehicleRequest->itineraries()
+                        ->where(function($q) use ($user) {
+                            $q->where('driver_id', $user->id)->orWhereNull('driver_id');
+                        })
+                        ->whereIn('status', ['pending', 'assigned', 'on_going'])
+                        ->orderBy('date', 'asc')
+                        ->first();
+                    if ($activeIt) {
+                        $activeIt->update(['start_km' => $startKm]);
+                        if ($activeIt->vehicle && ($activeIt->vehicle->odometer === null || $startKm >= $activeIt->vehicle->odometer)) {
+                            $activeIt->vehicle->update(['odometer' => $startKm]);
+                        }
+                    }
+                }
+
+                // Update request vehicle odometer if available
+                if ($vehicleRequest->vehicle && ($vehicleRequest->vehicle->odometer === null || $startKm >= $vehicleRequest->vehicle->odometer)) {
+                    $vehicleRequest->vehicle->update(['odometer' => $startKm]);
+                } elseif ($vehicle && ($vehicle->odometer === null || $startKm >= $vehicle->odometer)) {
+                    $vehicle->update(['odometer' => $startKm]);
+                }
             }
         });
 
@@ -653,7 +694,8 @@ class RequestController extends Controller
             'data' => new RequestResource($vehicleRequest->fresh([
                 'user', 'approvals.approver', 'operationalTrip.vehicle', 'operationalTrip.driver',
                 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver',
-                'passengers.department', 'driver', 'vehicle', 'itineraries.driver', 'itineraries.vehicle'
+                'passengers.department', 'driver', 'vehicle', 'returnDriver', 'returnVehicle',
+                'itineraries.driver', 'itineraries.vehicle'
             ])),
         ], 200);
     }
@@ -664,6 +706,7 @@ class RequestController extends Controller
 
         // Check authorization:
         $isAssigned = $vehicleRequest->driver_id === $user->id ||
+            $vehicleRequest->return_driver_id === $user->id ||
             $vehicleRequest->operationalTrip?->driver_id === $user->id ||
             $vehicleRequest->assignments()->where('driver_id', $user->id)->exists() ||
             \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists() ||
@@ -683,11 +726,20 @@ class RequestController extends Controller
         $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->get();
         $myTrip = $trips->firstWhere('driver_id', $user->id) ?? $trips->first();
 
-        $vehicle = $myTrip?->vehicle 
-            ?? $vehicleRequest->vehicle 
-            ?? ($vehicleRequest->vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->vehicle_id) : null);
-
-        $stKm = $myTrip?->start_km ?? $vehicleRequest->start_km ?? 0;
+        $vehicle = null;
+        if ($vehicleRequest->trip_mode === 'split_drop_pickup' && (int)$user->id === (int)$vehicleRequest->return_driver_id) {
+            $vehicle = $vehicleRequest->returnVehicle 
+                ?? ($vehicleRequest->return_vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->return_vehicle_id) : null)
+                ?? $myTrip?->vehicle;
+            $stKm = $vehicleRequest->return_start_km ?? $myTrip?->start_km ?? 0;
+        } else {
+            $vehicle = $myTrip?->vehicle 
+                ?? $vehicleRequest->vehicle 
+                ?? ($vehicleRequest->vehicle_id ? \App\Models\Vehicle::find($vehicleRequest->vehicle_id) : null);
+            $stKm = ($vehicleRequest->trip_mode === 'split_drop_pickup')
+                ? ($vehicleRequest->departure_start_km ?? $vehicleRequest->start_km ?? 0)
+                : ($myTrip?->start_km ?? $vehicleRequest->start_km ?? 0);
+        }
 
         $activeIt = null;
         if ($vehicleRequest->itineraries()->exists()) {

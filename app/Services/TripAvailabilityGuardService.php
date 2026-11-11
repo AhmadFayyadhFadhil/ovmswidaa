@@ -277,8 +277,12 @@ class TripAvailabilityGuardService
         $trips = $request->relationLoaded('operationalTrips') ? $request->operationalTrips : $request->operationalTrips()->get();
         $myTrip = $currentUserId ? ($trips->firstWhere('driver_id', $currentUserId) ?? $trips->first()) : $trips->first();
 
-        $vehicleId = $myTrip?->vehicle_id 
-            ?? $request->vehicle_id;
+        $vehicleId = null;
+        if ($request->trip_mode === 'split_drop_pickup' && $currentUserId && (int)$currentUserId === (int)$request->return_driver_id) {
+            $vehicleId = $request->return_vehicle_id ?? $myTrip?->vehicle_id ?? $request->vehicle_id;
+        } else {
+            $vehicleId = $myTrip?->vehicle_id ?? $request->vehicle_id;
+        }
 
         $driverId = $currentUserId 
             ?? $myTrip?->driver_id 
