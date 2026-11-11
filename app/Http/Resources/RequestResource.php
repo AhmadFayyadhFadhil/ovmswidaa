@@ -171,7 +171,45 @@ class RequestResource extends JsonResource
             'security_checkin_notes'  => $this->security_checkin_notes,
             'start_km'                => $this->start_km ?? $this->operationalTrip?->start_km ?? $trips->first()?->start_km ?? $this->itineraries?->first()?->start_km,
             'end_km'                  => $this->end_km ?? $this->operationalTrip?->end_km ?? $trips->first()?->end_km ?? $this->itineraries?->last()?->end_km,
-            'total_km'                => $this->total_km ?? $this->operationalTrip?->total_km ?? $trips->first()?->total_km ?? ($this->itineraries ? $this->itineraries->sum('total_km') : null),
+            'total_km'                => ($this->trip_mode === 'split_drop_pickup')
+                ? (($this->departure_total_km ?? 0) + ($this->return_total_km ?? 0) ?: ($this->total_km ?? null))
+                : ($this->total_km ?? $this->operationalTrip?->total_km ?? $trips->first()?->total_km ?? ($this->itineraries ? $this->itineraries->sum('total_km') : null)),
+            'trip_mode'               => $this->trip_mode ?? 'standby',
+            'departure_start_km'      => $this->departure_start_km,
+            'departure_end_km'        => $this->departure_end_km,
+            'departure_total_km'      => $this->departure_total_km,
+            'departure_checked_out_at'=> $this->departure_checked_out_at ? ($this->departure_checked_out_at instanceof \DateTimeInterface ? $this->departure_checked_out_at->format('Y-m-d H:i:s') : (string)$this->departure_checked_out_at) : null,
+            'departure_checked_in_at' => $this->departure_checked_in_at ? ($this->departure_checked_in_at instanceof \DateTimeInterface ? $this->departure_checked_in_at->format('Y-m-d H:i:s') : (string)$this->departure_checked_in_at) : null,
+            'departure_checkout_by'   => $this->departure_checkout_by,
+            'departure_checkin_by'    => $this->departure_checkin_by,
+            'return_departure_time'   => $this->return_departure_time ? ($this->return_departure_time instanceof \DateTimeInterface ? $this->return_departure_time->format('Y-m-d H:i:s') : (string)$this->return_departure_time) : null,
+            'return_driver_id'        => $this->return_driver_id,
+            'return_driver'           => $this->returnDriver ? [
+                'id'    => $this->returnDriver->id,
+                'name'  => $this->returnDriver->name,
+                'email' => $this->returnDriver->email,
+                'phone' => $this->returnDriver->phone,
+            ] : null,
+            'return_vehicle_id'       => $this->return_vehicle_id,
+            'return_vehicle'          => $this->returnVehicle ? [
+                'id'           => $this->returnVehicle->id,
+                'name'         => $this->returnVehicle->name,
+                'plate_number' => $this->returnVehicle->plate_number,
+                'type'         => $this->returnVehicle->type,
+                'odometer'     => $this->returnVehicle->odometer,
+            ] : null,
+            'return_start_km'         => $this->return_start_km,
+            'return_end_km'           => $this->return_end_km,
+            'return_total_km'         => $this->return_total_km,
+            'return_checked_out_at'   => $this->return_checked_out_at ? ($this->return_checked_out_at instanceof \DateTimeInterface ? $this->return_checked_out_at->format('Y-m-d H:i:s') : (string)$this->return_checked_out_at) : null,
+            'return_checked_in_at'    => $this->return_checked_in_at ? ($this->return_checked_in_at instanceof \DateTimeInterface ? $this->return_checked_in_at->format('Y-m-d H:i:s') : (string)$this->return_checked_in_at) : null,
+            'return_checkout_by'      => $this->return_checkout_by,
+            'return_checkin_by'       => $this->return_checkin_by,
+            'return_reassigned_at'    => $this->return_reassigned_at ? ($this->return_reassigned_at instanceof \DateTimeInterface ? $this->return_reassigned_at->format('Y-m-d H:i:s') : (string)$this->return_reassigned_at) : null,
+            'return_reassigned_by'    => $this->return_reassigned_by,
+            'return_reassigned_by_name'=> $this->returnReassignedBy?->name,
+            'return_notes'            => $this->return_notes,
+            'active_leg_stage'        => $this->calculateActiveLegStage(),
             'started_at'              => $this->started_at,
             'completed_at'            => $this->completed_at,
             'pending_previous_trip'   => \App\Services\TripAvailabilityGuardService::getLockForRequest($this->resource, $user?->id),
@@ -321,5 +359,30 @@ class RequestResource extends JsonResource
             'created_at'              => $this->created_at,
             'updated_at'              => $this->updated_at,
         ];
+    }
+
+    private function calculateActiveLegStage(): string
+    {
+        if ($this->trip_mode === 'split_drop_pickup') {
+            if ($this->departure_checked_out_at === null) {
+                return 'departure_ready';
+            } elseif ($this->departure_checked_in_at === null) {
+                return 'departure_ongoing';
+            } elseif ($this->return_checked_out_at === null) {
+                return 'return_ready';
+            } elseif ($this->return_checked_in_at === null) {
+                return 'return_ongoing';
+            } else {
+                return 'all_completed';
+            }
+        }
+
+        if ($this->security_checked_out_at === null) {
+            return 'departure_ready';
+        } elseif ($this->security_checked_in_at === null) {
+            return 'departure_ongoing';
+        } else {
+            return 'all_completed';
+        }
     }
 }

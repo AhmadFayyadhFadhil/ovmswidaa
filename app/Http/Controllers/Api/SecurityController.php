@@ -161,44 +161,85 @@ class SecurityController extends Controller
                     }
                 }
             } else {
-                if ($validated['type'] === 'checkout') {
-                    if ($vehicleRequest->security_checked_out_at !== null) {
-                        return response()->json([
-                            'status'  => 'error',
-                            'message' => 'Perjalanan ini sudah melakukan check-out (berangkat) sebelumnya.',
-                        ], 422);
-                    }
-                    if ($vehicleRequest->status === RequestStatus::COMPLETED) {
-                        return response()->json([
-                            'status'  => 'error',
-                            'message' => 'Perjalanan ini sudah selesai (completed) dan tidak bisa di-checkout.',
-                        ], 422);
-                    }
-
-                    if (!$vehicleRequest->is_external) {
-                        $targetVehicleId = $targetTrip?->vehicle_id ?? $vehicleRequest->vehicle_id;
-                        if ($targetVehicleId) {
-                            $unfinished = \App\Services\TripAvailabilityGuardService::getUnfinishedTripForVehicle((int)$targetVehicleId, (int)$vehicleRequest->id);
-                            if ($unfinished) {
-                                return response()->json([
-                                    'status'  => 'error',
-                                    'message' => 'Check-out gagal: ' . $unfinished['message']
-                                ], 422);
-                            }
+                if ($vehicleRequest->trip_mode === 'split_drop_pickup') {
+                    if ($validated['type'] === 'checkout') {
+                        if ($vehicleRequest->departure_checked_out_at === null) {
+                            // Stage 1: Checkout Antar OK
+                        } elseif ($vehicleRequest->departure_checked_in_at === null) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Sesi Antar sedang berjalan (ON GOING). Harap lakukan check-in kembali ke pabrik terlebih dahulu.',
+                            ], 422);
+                        } elseif ($vehicleRequest->return_checked_out_at === null) {
+                            // Stage 3: Checkout Jemput OK
+                        } else {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Sesi Penjemputan sudah melakukan check-out sebelumnya.',
+                            ], 422);
+                        }
+                    } else { // checkin
+                        if ($vehicleRequest->departure_checked_out_at === null) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Perjalanan belum melakukan check-out Sesi Antar.',
+                            ], 422);
+                        } elseif ($vehicleRequest->departure_checked_in_at === null) {
+                            // Stage 2: Checkin Balik Pabrik OK
+                        } elseif ($vehicleRequest->return_checked_out_at === null) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Sesi Jemput belum melakukan check-out (belum berangkat menjemput).',
+                            ], 422);
+                        } elseif ($vehicleRequest->return_checked_in_at === null) {
+                            // Stage 4: Checkin Selesai OK
+                        } else {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Seluruh rangkaian perjalanan (Antar & Jemput) sudah selesai.',
+                            ], 422);
                         }
                     }
-                } else { // checkin
-                    if ($vehicleRequest->security_checked_in_at !== null) {
-                        return response()->json([
-                            'status'  => 'error',
-                            'message' => 'Perjalanan ini sudah melakukan check-in (kembali) sebelumnya.',
-                        ], 422);
-                    }
-                    if ($vehicleRequest->security_checked_out_at === null && $vehicleRequest->status !== RequestStatus::ON_GOING && $vehicleRequest->status !== RequestStatus::COMPLETED) {
-                        return response()->json([
-                            'status'  => 'error',
-                            'message' => 'Perjalanan ini belum melakukan check-out / belum dimulai.',
-                        ], 422);
+                } else {
+                    if ($validated['type'] === 'checkout') {
+                        if ($vehicleRequest->security_checked_out_at !== null) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Perjalanan ini sudah melakukan check-out (berangkat) sebelumnya.',
+                            ], 422);
+                        }
+                        if ($vehicleRequest->status === RequestStatus::COMPLETED) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Perjalanan ini sudah selesai (completed) dan tidak bisa di-checkout.',
+                            ], 422);
+                        }
+
+                        if (!$vehicleRequest->is_external) {
+                            $targetVehicleId = $targetTrip?->vehicle_id ?? $vehicleRequest->vehicle_id;
+                            if ($targetVehicleId) {
+                                $unfinished = \App\Services\TripAvailabilityGuardService::getUnfinishedTripForVehicle((int)$targetVehicleId, (int)$vehicleRequest->id);
+                                if ($unfinished) {
+                                    return response()->json([
+                                        'status'  => 'error',
+                                        'message' => 'Check-out gagal: ' . $unfinished['message']
+                                    ], 422);
+                                }
+                            }
+                        }
+                    } else { // checkin
+                        if ($vehicleRequest->security_checked_in_at !== null) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Perjalanan ini sudah melakukan check-in (kembali) sebelumnya.',
+                            ], 422);
+                        }
+                        if ($vehicleRequest->security_checked_out_at === null && $vehicleRequest->status !== RequestStatus::ON_GOING && $vehicleRequest->status !== RequestStatus::COMPLETED) {
+                            return response()->json([
+                                'status'  => 'error',
+                                'message' => 'Perjalanan ini belum melakukan check-out / belum dimulai.',
+                            ], 422);
+                        }
                     }
                 }
             }
@@ -359,48 +400,110 @@ class SecurityController extends Controller
                         $customMessage = 'Scan Checkout Sesi 2 (' . ($todayItinerary->afternoon_destination ?? 'Perjalanan Sore') . ') berhasil. Status Driver & Mobil: ON TRIP.';
                     }
                 } else {
-                    $reqData = [
-                        'status'                  => RequestStatus::ON_GOING,
-                        'started_at'              => $vehicleRequest->started_at ?? $scanTime,
-                        'security_checked_out_at' => $scanTime,
-                        'security_checkout_by'    => $validated['security_name'],
-                        'security_checkout_notes' => $validated['notes'] ?? null,
-                    ];
-                    if ($inputStartKm !== null) {
-                        $reqData['start_km'] = $inputStartKm;
-                    }
-                    if ($additionalPassengers !== null) {
-                        $reqData['additional_passengers'] = $additionalPassengers;
-                    }
-                    $vehicleRequest->update($reqData);
-
-                    if (!$vehicleRequest->is_external) {
-                        $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
-                        foreach ($trips as $trip) {
-                            $tData = [
-                                'status' => 'on_going',
-                                'start_datetime' => $trip->start_datetime ?? $scanTime,
-                                'security_checked_out_at' => $scanTime,
-                                'security_checkout_by' => $validated['security_name'],
-                                'security_checkout_notes' => $validated['notes'] ?? null,
+                    if ($vehicleRequest->trip_mode === 'split_drop_pickup') {
+                        if ($vehicleRequest->departure_checked_out_at === null) {
+                            // STAGE 1: Checkout Sesi Antar
+                            $reqData = [
+                                'status'                   => RequestStatus::ON_GOING,
+                                'started_at'               => $vehicleRequest->started_at ?? $scanTime,
+                                'security_checked_out_at'  => $scanTime,
+                                'security_checkout_by'     => $validated['security_name'],
+                                'security_checkout_notes'  => $validated['notes'] ?? null,
+                                'departure_checked_out_at' => $scanTime,
+                                'departure_checkout_by'    => $validated['security_name'],
                             ];
                             if ($inputStartKm !== null) {
-                                $tData['start_km'] = $inputStartKm;
+                                $reqData['departure_start_km'] = $inputStartKm;
+                                $reqData['start_km']           = $inputStartKm;
                             }
                             if ($additionalPassengers !== null) {
-                                $tData['additional_passengers'] = $additionalPassengers;
+                                $reqData['additional_passengers'] = $additionalPassengers;
                             }
-                            $trip->update($tData);
+                            $vehicleRequest->update($reqData);
 
-                            if ($trip->driver) {
-                                $trip->driver->update(['availability_status' => 'on_trip']);
+                            if ($vehicleRequest->driver) {
+                                $vehicleRequest->driver->update(['availability_status' => 'on_trip']);
                             }
-                            if ($trip->vehicle) {
+                            if ($vehicleRequest->vehicle) {
                                 $vData = ['status' => 'In Use'];
                                 if ($inputStartKm !== null) {
                                     $vData['odometer'] = $inputStartKm;
                                 }
-                                $trip->vehicle->update($vData);
+                                $vehicleRequest->vehicle->update($vData);
+                            }
+
+                            $customMessage = 'Scan Checkout Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan berangkat mengantar.';
+                        } else {
+                            // STAGE 3: Checkout Sesi Jemput
+                            $retDriver = $vehicleRequest->returnDriver ?? $vehicleRequest->driver;
+                            $retVehicle = $vehicleRequest->returnVehicle ?? $vehicleRequest->vehicle;
+
+                            $reqData = [
+                                'return_checked_out_at' => $scanTime,
+                                'return_checkout_by'    => $validated['security_name'],
+                            ];
+                            if ($inputStartKm !== null) {
+                                $reqData['return_start_km'] = $inputStartKm;
+                            }
+                            $vehicleRequest->update($reqData);
+
+                            if ($retDriver) {
+                                $retDriver->update(['availability_status' => 'on_trip']);
+                            }
+                            if ($retVehicle) {
+                                $vData = ['status' => 'In Use'];
+                                if ($inputStartKm !== null) {
+                                    $vData['odometer'] = $inputStartKm;
+                                }
+                                $retVehicle->update($vData);
+                            }
+
+                            $customMessage = 'Scan Checkout Sesi Jemput berhasil. Driver (' . ($retDriver?->name ?? 'Driver') . ') berangkat menjemput.';
+                        }
+                    } else {
+                        $reqData = [
+                            'status'                  => RequestStatus::ON_GOING,
+                            'started_at'              => $vehicleRequest->started_at ?? $scanTime,
+                            'security_checked_out_at' => $scanTime,
+                            'security_checkout_by'    => $validated['security_name'],
+                            'security_checkout_notes' => $validated['notes'] ?? null,
+                        ];
+                        if ($inputStartKm !== null) {
+                            $reqData['start_km'] = $inputStartKm;
+                        }
+                        if ($additionalPassengers !== null) {
+                            $reqData['additional_passengers'] = $additionalPassengers;
+                        }
+                        $vehicleRequest->update($reqData);
+
+                        if (!$vehicleRequest->is_external) {
+                            $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
+                            foreach ($trips as $trip) {
+                                $tData = [
+                                    'status' => 'on_going',
+                                    'start_datetime' => $trip->start_datetime ?? $scanTime,
+                                    'security_checked_out_at' => $scanTime,
+                                    'security_checkout_by' => $validated['security_name'],
+                                    'security_checkout_notes' => $validated['notes'] ?? null,
+                                ];
+                                if ($inputStartKm !== null) {
+                                    $tData['start_km'] = $inputStartKm;
+                                }
+                                if ($additionalPassengers !== null) {
+                                    $tData['additional_passengers'] = $additionalPassengers;
+                                }
+                                $trip->update($tData);
+
+                                if ($trip->driver) {
+                                    $trip->driver->update(['availability_status' => 'on_trip']);
+                                }
+                                if ($trip->vehicle) {
+                                    $vData = ['status' => 'In Use'];
+                                    if ($inputStartKm !== null) {
+                                        $vData['odometer'] = $inputStartKm;
+                                    }
+                                    $trip->vehicle->update($vData);
+                                }
                             }
                         }
                     }
@@ -574,51 +677,123 @@ class SecurityController extends Controller
                             : 'Scan Checkin Sesi 2 berhasil. Menunggu driver menginput KM Akhir spidometer.';
                     }
                 } else {
-                    $stKmReq = $vehicleRequest->start_km ?? 0;
-                    $effectiveEndKm = $inputEndKm ?? $vehicleRequest->end_km;
+                    if ($vehicleRequest->trip_mode === 'split_drop_pickup') {
+                        if ($vehicleRequest->departure_checked_in_at === null) {
+                            // STAGE 2: Checkin Balik Pabrik (Sesi Antar Selesai)
+                            $depStartKm = $vehicleRequest->departure_start_km ?? $vehicleRequest->start_km ?? 0;
+                            $depEffectiveEndKm = $inputEndKm ?? $depStartKm;
+                            $depTotKm = ($inputEndKm !== null) ? max(0, $depEffectiveEndKm - $depStartKm) : null;
 
-                    $reqData = [
-                        'security_checked_in_at' => $scanTime,
-                        'security_checkin_by'    => $validated['security_name'],
-                        'security_checkin_notes' => $validated['notes'] ?? null,
-                    ];
-                    if ($effectiveEndKm !== null || $vehicleRequest->is_external) {
-                        $reqData['status'] = RequestStatus::COMPLETED;
-                        $reqData['completed_at'] = $vehicleRequest->completed_at ?? $scanTime;
-                        if ($effectiveEndKm !== null) {
-                            $reqData['end_km'] = $effectiveEndKm;
-                            $reqData['total_km'] = max(0, $effectiveEndKm - $stKmReq);
-                        }
-                    }
-                    $vehicleRequest->update($reqData);
+                            $reqData = [
+                                'departure_checked_in_at' => $scanTime,
+                                'departure_checkin_by'    => $validated['security_name'],
+                            ];
+                            if ($inputEndKm !== null) {
+                                $reqData['departure_end_km']   = $depEffectiveEndKm;
+                                $reqData['departure_total_km'] = $depTotKm;
+                            }
+                            $vehicleRequest->update($reqData);
 
-                    if (!$vehicleRequest->is_external) {
-                        $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
-                        foreach ($trips as $trip) {
-                            $stTripKm = $trip->start_km ?? $stKmReq;
-                            $tripEffectiveEndKm = $effectiveEndKm ?? $trip->end_km;
-                            $tData = [
+                            // Bebaskan Driver 1 & Mobil 1 kembali ke pool
+                            if ($vehicleRequest->driver_id) {
+                                \App\Services\DriverTaskQueueService::restorePendingDriverDuty($vehicleRequest->driver_id);
+                            }
+                            if ($vehicleRequest->vehicle) {
+                                $vData = ['status' => 'Available'];
+                                if ($inputEndKm !== null) {
+                                    $vData['odometer'] = $depEffectiveEndKm;
+                                }
+                                $vehicleRequest->vehicle->update($vData);
+                            }
+
+                            $customMessage = 'Scan Checkin Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan telah kembali ke pabrik dan siap untuk tugas lain.';
+                        } else {
+                            // STAGE 4: Checkin Selesai (Sesi Jemput Selesai)
+                            $retStartKm = $vehicleRequest->return_start_km ?? 0;
+                            $retEffectiveEndKm = $inputEndKm ?? $retStartKm;
+                            $retTotKm = ($inputEndKm !== null) ? max(0, $retEffectiveEndKm - $retStartKm) : null;
+                            $totalKmCombined = ($vehicleRequest->departure_total_km ?? 0) + ($retTotKm ?? 0);
+
+                            $reqData = [
+                                'status'                 => RequestStatus::COMPLETED,
+                                'completed_at'           => $scanTime,
                                 'security_checked_in_at' => $scanTime,
                                 'security_checkin_by'    => $validated['security_name'],
                                 'security_checkin_notes' => $validated['notes'] ?? null,
+                                'return_checked_in_at'   => $scanTime,
+                                'return_checkin_by'      => $validated['security_name'],
                             ];
-                            if ($tripEffectiveEndKm !== null) {
-                                $tData['status'] = 'completed';
-                                $tData['end_datetime'] = $trip->end_datetime ?? $scanTime;
-                                $tData['end_km'] = $tripEffectiveEndKm;
-                                $tData['total_km'] = max(0, $tripEffectiveEndKm - $stTripKm);
+                            if ($inputEndKm !== null) {
+                                $reqData['return_end_km']   = $retEffectiveEndKm;
+                                $reqData['return_total_km'] = $retTotKm;
+                                $reqData['end_km']          = $retEffectiveEndKm;
+                                $reqData['total_km']        = $totalKmCombined;
                             }
-                            $trip->update($tData);
+                            $vehicleRequest->update($reqData);
 
-                            if ($tripEffectiveEndKm !== null) {
-                                if ($trip->driver_id) {
-                                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($trip->driver_id);
+                            $retDriver = $vehicleRequest->returnDriver ?? $vehicleRequest->driver;
+                            $retVehicle = $vehicleRequest->returnVehicle ?? $vehicleRequest->vehicle;
+
+                            if ($retDriver) {
+                                \App\Services\DriverTaskQueueService::restorePendingDriverDuty($retDriver->id);
+                            }
+                            if ($retVehicle) {
+                                $vData = ['status' => 'Available'];
+                                if ($inputEndKm !== null) {
+                                    $vData['odometer'] = $retEffectiveEndKm;
                                 }
-                                if ($trip->vehicle) {
-                                    $trip->vehicle->update([
-                                        'status'   => 'Available',
-                                        'odometer' => $tripEffectiveEndKm,
-                                    ]);
+                                $retVehicle->update($vData);
+                            }
+
+                            $customMessage = 'Scan Checkin Sesi Jemput berhasil. Seluruh rangkaian perjalanan telah SELESAI (Completed). Total KM: ' . $totalKmCombined . ' KM.';
+                        }
+                    } else {
+                        $stKmReq = $vehicleRequest->start_km ?? 0;
+                        $effectiveEndKm = $inputEndKm ?? $vehicleRequest->end_km;
+
+                        $reqData = [
+                            'security_checked_in_at' => $scanTime,
+                            'security_checkin_by'    => $validated['security_name'],
+                            'security_checkin_notes' => $validated['notes'] ?? null,
+                        ];
+                        if ($effectiveEndKm !== null || $vehicleRequest->is_external) {
+                            $reqData['status'] = RequestStatus::COMPLETED;
+                            $reqData['completed_at'] = $vehicleRequest->completed_at ?? $scanTime;
+                            if ($effectiveEndKm !== null) {
+                                $reqData['end_km'] = $effectiveEndKm;
+                                $reqData['total_km'] = max(0, $effectiveEndKm - $stKmReq);
+                            }
+                        }
+                        $vehicleRequest->update($reqData);
+
+                        if (!$vehicleRequest->is_external) {
+                            $trips = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->with(['driver', 'vehicle'])->get();
+                            foreach ($trips as $trip) {
+                                $stTripKm = $trip->start_km ?? $stKmReq;
+                                $tripEffectiveEndKm = $effectiveEndKm ?? $trip->end_km;
+                                $tData = [
+                                    'security_checked_in_at' => $scanTime,
+                                    'security_checkin_by'    => $validated['security_name'],
+                                    'security_checkin_notes' => $validated['notes'] ?? null,
+                                ];
+                                if ($tripEffectiveEndKm !== null) {
+                                    $tData['status'] = 'completed';
+                                    $tData['end_datetime'] = $trip->end_datetime ?? $scanTime;
+                                    $tData['end_km'] = $tripEffectiveEndKm;
+                                    $tData['total_km'] = max(0, $tripEffectiveEndKm - $stTripKm);
+                                }
+                                $trip->update($tData);
+
+                                if ($tripEffectiveEndKm !== null) {
+                                    if ($trip->driver_id) {
+                                        \App\Services\DriverTaskQueueService::restorePendingDriverDuty($trip->driver_id);
+                                    }
+                                    if ($trip->vehicle) {
+                                        $trip->vehicle->update([
+                                            'status'   => 'Available',
+                                            'odometer' => $tripEffectiveEndKm,
+                                        ]);
+                                    }
                                 }
                             }
                         }
@@ -642,7 +817,7 @@ class SecurityController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => $customMessage ?? ($targetTrip ? 'Checkout unit armada berhasil dikonfirmasi.' : 'Scan Berangkat (Checkout) berhasil dikonfirmasi.'),
-                'data'    => $vehicleRequest->load(['user', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle']),
+                'data'    => $vehicleRequest->load(['user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle']),
             ], 200);
         } else {
             // Trigger trip completed email notification if checkin finalized the request
@@ -657,7 +832,7 @@ class SecurityController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => $customMessage ?? ($targetTrip ? 'Checkin unit armada berhasil dikonfirmasi.' : 'Scan Kembali (Checkin) berhasil dikonfirmasi.'),
-                'data'    => $vehicleRequest->load(['user', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle']),
+                'data'    => $vehicleRequest->load(['user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle']),
             ], 200);
         }
     }
@@ -720,7 +895,7 @@ class SecurityController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => new \App\Http\Resources\RequestResource($vehicleRequest->load(['user', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'assignments.vehicle'])),
+            'data'   => new \App\Http\Resources\RequestResource($vehicleRequest->load(['user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle', 'operationalTrip.vehicle', 'operationalTrip.driver', 'passengers', 'itineraries.driver', 'itineraries.vehicle', 'operationalTrips.driver', 'operationalTrips.vehicle', 'assignments.driver', 'assignments.vehicle'])),
         ], 200);
     }
 

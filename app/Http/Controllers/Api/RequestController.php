@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use App\Actions\Requests\CreateRequestAction;
 use App\Actions\Approvals\ApproveRequestAction;
+use App\Actions\Assignments\AssignDriverAction;
 use App\Enums\RequestStatus;
 
 class RequestController extends Controller
@@ -49,6 +50,8 @@ class RequestController extends Controller
             'passengers.user',
             'driver',
             'vehicle',
+            'returnDriver',
+            'returnVehicle',
             'itineraries.driver',
             'itineraries.vehicle',
         ]);
@@ -1229,6 +1232,48 @@ class RequestController extends Controller
             'message' => 'Terima kasih! Rating & ulasan driver berhasil disimpan.',
             'data'    => new RequestResource($vehicleRequest->fresh(['user', 'driver', 'vehicle'])),
         ], 200);
+    }
+
+    public function reassignReturnDriver(Request $request, VehicleRequest $vehicleRequest, AssignDriverAction $action): JsonResponse
+    {
+        $user = Auth::user();
+        $isAuthorized = $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
+
+        if (!$isAuthorized) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'return_driver_id'  => 'required|exists:users,id',
+            'return_vehicle_id' => 'nullable|exists:vehicles,id',
+            'notes'             => 'nullable|string|max:1000',
+        ]);
+
+        try {
+            $updated = $action->reassignReturnTrip(
+                $vehicleRequest,
+                (int)$validated['return_driver_id'],
+                !empty($validated['return_vehicle_id']) ? (int)$validated['return_vehicle_id'] : null,
+                $validated['notes'] ?? null
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Supir & armada sesi penjemputan berhasil diperbarui.',
+                'data'    => new RequestResource($updated->fresh([
+                    'user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle', 'assignments.driver', 'passengers.department'
+                ])),
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     private function storePublicFileSafely(\Illuminate\Http\UploadedFile $file, string $folder): ?string

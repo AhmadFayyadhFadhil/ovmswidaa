@@ -92,6 +92,12 @@ class AssignmentController extends Controller
                 'vehicle_ids'        => 'nullable|array',
                 'vehicle_ids.*'      => 'exists:vehicles,id|distinct',
                 'notes'              => 'nullable|string|max:1000',
+                'trip_mode'          => 'nullable|string|in:standby,split_drop_pickup',
+                'return_driver_id'   => 'nullable|exists:users,id',
+                'return_vehicle_id'  => 'nullable|exists:vehicles,id',
+                'return_departure_time' => 'nullable|string',
+                'return_notes'       => 'nullable|string|max:1000',
+                'departure_duration' => 'nullable|integer|min:1',
             ]);
 
             if ($validator->fails()) {

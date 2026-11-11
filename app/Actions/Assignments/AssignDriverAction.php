@@ -32,13 +32,42 @@ class AssignDriverAction
                 $effectiveEndTime = $effectiveStartTime->copy()->addHours($effectiveDuration);
             }
 
-            // ===== VALIDATE DRIVER TIME CONFLICT WITH EFFECTIVE TIMES =====
-            $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $effectiveEndTime);
+            // Determine trip mode: standby vs split_drop_pickup
+            $tripMode = $data['trip_mode'] ?? $request->trip_mode ?? 'standby';
+            $isSplitTrip = ($tripMode === 'split_drop_pickup');
 
-            // ===== VALIDATE VEHICLE TIME CONFLICT WITH EFFECTIVE TIMES =====
-            $this->validateVehicleTimeConflict($vehicleId, $request, $effectiveStartTime, $effectiveEndTime);
+            // Sesi 1 (Antar):
+            $depDuration = isset($data['departure_duration']) && is_numeric($data['departure_duration']) && (int)$data['departure_duration'] > 0
+                ? (int)$data['departure_duration']
+                : 3;
+            $depEndTime = $isSplitTrip ? $effectiveStartTime->copy()->addHours($depDuration) : $effectiveEndTime;
 
-            // Create assignment
+            // Sesi 2 (Jemput):
+            $returnDriverId = !empty($data['return_driver_id']) ? (int)$data['return_driver_id'] : $driverId;
+            $returnVehicleId = !empty($data['return_vehicle_id']) ? (int)$data['return_vehicle_id'] : $vehicleId;
+            $returnDepartureTime = null;
+
+            if ($isSplitTrip) {
+                $returnDepartureTime = !empty($data['return_departure_time'])
+                    ? \Carbon\Carbon::parse($data['return_departure_time'])
+                    : $effectiveEndTime->copy()->subHours(2);
+                if ($returnDepartureTime->gte($effectiveEndTime)) {
+                    $returnDepartureTime = $effectiveEndTime->copy()->subHours(1);
+                }
+            }
+
+            // ===== VALIDATE DRIVER & VEHICLE TIME CONFLICTS =====
+            // 1. Sesi Keberangkatan / Antar:
+            $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $depEndTime);
+            $this->validateVehicleTimeConflict($vehicleId, $request, $effectiveStartTime, $depEndTime);
+
+            // 2. Sesi Penjemputan (khusus split_drop_pickup):
+            if ($isSplitTrip && $returnDepartureTime) {
+                $this->validateDriverTimeConflict($returnDriverId, $request, $returnDepartureTime, $effectiveEndTime);
+                $this->validateVehicleTimeConflict($returnVehicleId, $request, $returnDepartureTime, $effectiveEndTime);
+            }
+
+            // Priority check
             $priorityVal = 'Normal';
             if (!empty($data['priority'])) {
                 $priorityVal = $data['priority'] instanceof \BackedEnum ? $data['priority']->value : (is_object($data['priority']) ? ($data['priority']->value ?? 'Normal') : (string)$data['priority']);
@@ -59,6 +88,7 @@ class AssignDriverAction
             $asgStatus = $isDirectScheduled ? 'accepted' : 'allocated';
             $reqStatus = $isDirectScheduled ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::ASSIGNED_BY_GA;
 
+            // Create assignment for primary (departure) driver
             $assignment = Assignment::create([
                 'request_id'  => $request->id,
                 'vehicle_id'  => $vehicleId,
@@ -66,8 +96,21 @@ class AssignDriverAction
                 'assigned_by' => $assignerId,
                 'assigned_at' => now(),
                 'status'      => $asgStatus,
-                'notes'       => $notes,
+                'notes'       => $isSplitTrip ? 'Penugasan Sesi Keberangkatan (Antar)' : $notes,
             ]);
+
+            // Create assignment for return driver if different
+            if ($isSplitTrip && $returnDriverId && $returnDriverId !== $driverId) {
+                Assignment::create([
+                    'request_id'  => $request->id,
+                    'vehicle_id'  => $returnVehicleId,
+                    'driver_id'   => $returnDriverId,
+                    'assigned_by' => $assignerId,
+                    'assigned_at' => now(),
+                    'status'      => $asgStatus,
+                    'notes'       => 'Penugasan Sesi Penjemputan (Jemput)',
+                ]);
+            }
 
             $qrCodeToken = $request->qr_code_token;
             if ($isDirectScheduled && !$qrCodeToken) {
@@ -77,6 +120,7 @@ class AssignDriverAction
             // Update request fields and status
             $updatePayload = [
                 'status'                 => $reqStatus,
+                'trip_mode'              => $tripMode,
                 'driver_id'              => $driverId,
                 'vehicle_id'             => $vehicleId,
                 'assigned_by'            => $assignerId,
@@ -90,6 +134,13 @@ class AssignDriverAction
                 'driver_response_status' => $asgStatus,
                 'qr_code_token'          => $qrCodeToken,
             ];
+
+            if ($isSplitTrip) {
+                $updatePayload['return_departure_time'] = $returnDepartureTime ? $returnDepartureTime->format('Y-m-d H:i:s') : null;
+                $updatePayload['return_driver_id']      = $returnDriverId;
+                $updatePayload['return_vehicle_id']     = $returnVehicleId;
+                $updatePayload['return_notes']          = $data['return_notes'] ?? null;
+            }
 
             if ($isCoordinator && !$isGAOrAdmin) {
                 $updatePayload['coordinator_id'] = $assignerId;
@@ -110,24 +161,11 @@ class AssignDriverAction
                     );
                     $trip->vehicle_id = $vehicleId;
                     $trip->start_datetime = $effectiveStartTime->format('Y-m-d H:i:s');
-                    $trip->end_datetime = $effectiveEndTime->format('Y-m-d H:i:s');
+                    $trip->end_datetime = $depEndTime->format('Y-m-d H:i:s');
                     $trip->status = 'scheduled';
                     $trip->save();
                 } catch (\Throwable $ex) {}
             }
-
-            // Also update any existing request_itineraries for this request
-            try {
-                \App\Models\RequestItinerary::where('request_id', $request->id)
-                    ->where(function ($q) {
-                        $q->whereNull('driver_id')->orWhereNull('vehicle_id');
-                    })
-                    ->update([
-                        'driver_id' => $driverId,
-                        'vehicle_id' => $vehicleId,
-                        'status' => 'assigned',
-                    ]);
-            } catch (\Throwable $ex) {}
 
             return $assignment;
         });
@@ -136,7 +174,58 @@ class AssignDriverAction
     }
 
     /**
+     * Re-assign return trip driver and vehicle dynamically
+     */
+    public function reassignReturnTrip(Request $request, int $newDriverId, ?int $newVehicleId = null, ?string $notes = null): Request
+    {
+        if ($request->return_checked_out_at !== null) {
+            throw new Exception("Sesi penjemputan sudah melakukan check-out keluar gerbang dan tidak dapat diubah supirnya.");
+        }
+
+        $effectiveEndTime = $request->end_time ? \Carbon\Carbon::parse($request->end_time) : now()->addHours(3);
+        $returnDepartureTime = $request->return_departure_time 
+            ? \Carbon\Carbon::parse($request->return_departure_time) 
+            : $effectiveEndTime->copy()->subHours(2);
+
+        $targetVehicleId = $newVehicleId ?? $request->return_vehicle_id ?? $request->vehicle_id;
+
+        // Validate conflicts for return window
+        $this->validateDriverTimeConflict($newDriverId, $request, $returnDepartureTime, $effectiveEndTime);
+        if ($targetVehicleId) {
+            $this->validateVehicleTimeConflict($targetVehicleId, $request, $returnDepartureTime, $effectiveEndTime);
+        }
+
+        $authUser = auth()->user();
+        $assignerId = $authUser?->id ?? 1;
+
+        $request->update([
+            'return_driver_id'      => $newDriverId,
+            'return_vehicle_id'     => $targetVehicleId,
+            'return_reassigned_at'  => now(),
+            'return_reassigned_by'  => $assignerId,
+            'return_reassign_notes' => $notes,
+        ]);
+
+        // Update or create assignment record for return driver
+        try {
+            Assignment::updateOrCreate(
+                ['request_id' => $request->id, 'driver_id' => $newDriverId],
+                [
+                    'vehicle_id'  => $targetVehicleId,
+                    'assigned_by' => $assignerId,
+                    'assigned_at' => now(),
+                    'status'      => 'accepted',
+                    'notes'       => $notes ?: 'Re-assignment Sesi Penjemputan',
+                ]
+            );
+        } catch (\Throwable $ex) {}
+
+        return $request->fresh(['user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle']);
+    }
+
+    /**
      * Validate driver doesn't have conflicting assignment at the same time
+     * Supports smart leg checking for split_drop_pickup requests
      */
     private function validateDriverTimeConflict(int $driverId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null): void
     {
@@ -147,13 +236,32 @@ class AssignDriverAction
             return; // Cannot validate without time range
         }
 
-        $conflict = Request::where('driver_id', $driverId)
+        $conflict = Request::where(function ($dQuery) use ($driverId) {
+                $dQuery->where('driver_id', $driverId)
+                       ->orWhere('return_driver_id', $driverId);
+            })
             ->where('id', '!=', $request->id)
             ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
             ->where(function ($q) use ($startTime, $endTime) {
-                $q->where(function ($inner) use ($startTime, $endTime) {
-                    $inner->where('start_time', '<', $endTime)
-                          ->where('end_time', '>', $startTime);
+                $q->where(function ($sub) use ($startTime, $endTime) {
+                    // Check split trips: check overlap with departure leg or return leg independently
+                    $sub->where('trip_mode', 'split_drop_pickup')
+                        ->where(function ($legs) use ($startTime, $endTime) {
+                            $legs->where(function ($dep) use ($startTime, $endTime) {
+                                $dep->where('start_time', '<', $endTime)
+                                    ->whereRaw('COALESCE(departure_checked_in_at, DATE_ADD(start_time, INTERVAL 3 HOUR)) > ?', [$startTime->format('Y-m-d H:i:s')]);
+                            })->orWhere(function ($ret) use ($startTime, $endTime) {
+                                $ret->whereNotNull('return_departure_time')
+                                    ->where('return_departure_time', '<', $endTime)
+                                    ->where('end_time', '>', $startTime);
+                            });
+                        });
+                })->orWhere(function ($sub) use ($startTime, $endTime) {
+                    // Regular standby trips
+                    $sub->where(function ($mode) {
+                        $mode->whereNull('trip_mode')->orWhere('trip_mode', '!=', 'split_drop_pickup');
+                    })->where('start_time', '<', $endTime)
+                      ->where('end_time', '>', $startTime);
                 });
             })
             ->first();
@@ -167,6 +275,7 @@ class AssignDriverAction
 
     /**
      * Validate vehicle doesn't have conflicting assignment at the same time
+     * Supports smart leg checking for split_drop_pickup requests
      */
     private function validateVehicleTimeConflict(int $vehicleId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null): void
     {
@@ -177,13 +286,32 @@ class AssignDriverAction
             return; // Cannot validate without time range
         }
 
-        $conflict = Request::where('vehicle_id', $vehicleId)
+        $conflict = Request::where(function ($vQuery) use ($vehicleId) {
+                $vQuery->where('vehicle_id', $vehicleId)
+                       ->orWhere('return_vehicle_id', $vehicleId);
+            })
             ->where('id', '!=', $request->id)
             ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
             ->where(function ($q) use ($startTime, $endTime) {
-                $q->where(function ($inner) use ($startTime, $endTime) {
-                    $inner->where('start_time', '<', $endTime)
-                          ->where('end_time', '>', $startTime);
+                $q->where(function ($sub) use ($startTime, $endTime) {
+                    // Check split trips: check overlap with departure leg or return leg independently
+                    $sub->where('trip_mode', 'split_drop_pickup')
+                        ->where(function ($legs) use ($startTime, $endTime) {
+                            $legs->where(function ($dep) use ($startTime, $endTime) {
+                                $dep->where('start_time', '<', $endTime)
+                                    ->whereRaw('COALESCE(departure_checked_in_at, DATE_ADD(start_time, INTERVAL 3 HOUR)) > ?', [$startTime->format('Y-m-d H:i:s')]);
+                            })->orWhere(function ($ret) use ($startTime, $endTime) {
+                                $ret->whereNotNull('return_departure_time')
+                                    ->where('return_departure_time', '<', $endTime)
+                                    ->where('end_time', '>', $startTime);
+                            });
+                        });
+                })->orWhere(function ($sub) use ($startTime, $endTime) {
+                    // Regular standby trips
+                    $sub->where(function ($mode) {
+                        $mode->whereNull('trip_mode')->orWhere('trip_mode', '!=', 'split_drop_pickup');
+                    })->where('start_time', '<', $endTime)
+                      ->where('end_time', '>', $startTime);
                 });
             })
             ->first();

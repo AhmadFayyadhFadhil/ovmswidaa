@@ -80,6 +80,30 @@ class Request extends Model
         'start_km',
         'end_km',
         'total_km',
+        'trip_mode',
+        'departure_start_km',
+        'departure_end_km',
+        'departure_checked_out_at',
+        'departure_checked_in_at',
+        'departure_checkout_by',
+        'departure_checkin_by',
+        'departure_checkout_notes',
+        'departure_checkin_notes',
+        'return_departure_time',
+        'return_driver_id',
+        'return_vehicle_id',
+        'return_notes',
+        'return_start_km',
+        'return_end_km',
+        'return_checked_out_at',
+        'return_checked_in_at',
+        'return_checkout_by',
+        'return_checkin_by',
+        'return_checkout_notes',
+        'return_checkin_notes',
+        'return_reassigned_at',
+        'return_reassigned_by',
+        'return_reassign_notes',
     ];
 
     protected $casts = [
@@ -90,6 +114,12 @@ class Request extends Model
         'security_checked_in_at' => 'datetime',
         'coordinator_assigned_at' => 'datetime',
         'ga_approved_at' => 'datetime',
+        'return_departure_time' => 'datetime',
+        'departure_checked_out_at' => 'datetime',
+        'departure_checked_in_at' => 'datetime',
+        'return_checked_out_at' => 'datetime',
+        'return_checked_in_at' => 'datetime',
+        'return_reassigned_at' => 'datetime',
     ];
 
     /**
@@ -194,6 +224,37 @@ class Request extends Model
     public function passengers()
     {
         return $this->hasMany(Passenger::class);
+    }
+
+    public function returnDriver()
+    {
+        return $this->belongsTo(User::class, 'return_driver_id');
+    }
+
+    public function returnVehicle()
+    {
+        return $this->belongsTo(Vehicle::class, 'return_vehicle_id');
+    }
+
+    public function returnReassignedBy()
+    {
+        return $this->belongsTo(User::class, 'return_reassigned_by');
+    }
+
+    public function getDepartureTotalKmAttribute(): ?float
+    {
+        if ($this->departure_start_km !== null && $this->departure_end_km !== null) {
+            return max(0, (float)$this->departure_end_km - (float)$this->departure_start_km);
+        }
+        return null;
+    }
+
+    public function getReturnTotalKmAttribute(): ?float
+    {
+        if ($this->return_start_km !== null && $this->return_end_km !== null) {
+            return max(0, (float)$this->return_end_km - (float)$this->return_start_km);
+        }
+        return null;
     }
 
     // Status Sync helper for multi-day requests

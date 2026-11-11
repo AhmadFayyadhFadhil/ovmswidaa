@@ -104,6 +104,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/requests/{vehicleRequest}/record-end-km', [RequestController::class, 'recordEndKm']);
     Route::post('/requests/{vehicleRequest}/adjust-driver', [RequestController::class, 'adjustDriver']);
     Route::post('/requests/{vehicleRequest}/rate-driver', [RequestController::class, 'rateDriver']);
+    Route::post('/requests/{vehicleRequest}/reassign-return-driver', [RequestController::class, 'reassignReturnDriver']);
     Route::post('/requests/{vehicleRequest}/daily-assignments', [AssignmentController::class, 'storeDailyAssignments']);
 
 
