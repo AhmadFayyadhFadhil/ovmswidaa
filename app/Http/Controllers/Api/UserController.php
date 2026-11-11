@@ -89,7 +89,7 @@ class UserController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $hasAccess = $user->hasRoleDirect(['Admin', 'GA', 'Driver Coordinator']) || $user->isHrGaHead();
+        $hasAccess = $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga', 'GA Coordinator', 'ga coordinator', 'GA Staff', 'ga staff', 'Driver Coordinator', 'driver coordinator', 'coordinator']) || $user->isHrGaHead();
 
         if (!$hasAccess) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
@@ -435,10 +435,20 @@ class UserController extends Controller
     public function show(User $user): JsonResponse
     {
         $currentUser = Auth::user();
-        $isAuthorized = $currentUser && (
-            $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
+        if (!$currentUser) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $isDriverTarget = $user->hasRoleDirect(['Driver', 'driver', 'Driver Coordinator', 'driver coordinator']);
+        $isCoordinator = $currentUser->hasRoleDirect(['Driver Coordinator', 'driver coordinator', 'coordinator']);
+        $isSelf = (int) $currentUser->id === (int) $user->id;
+
+        $isAuthorized = (
+            $currentUser->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin', 'GA', 'ga', 'GA Coordinator', 'ga coordinator', 'GA Staff', 'ga staff']) ||
             $currentUser->isHrGaHead() ||
-            ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
+            ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect(['Approver', 'approver', 'GA', 'ga'])) ||
+            $isSelf ||
+            ($isCoordinator && $isDriverTarget)
         );
 
         if (!$isAuthorized) {
@@ -455,26 +465,37 @@ class UserController extends Controller
     {
         try {
             $currentUser = Auth::user();
-            $isGaOrHrHead = $currentUser && (
-                $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga']) ||
+            if (!$currentUser) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+            }
+
+            $isDriverTarget = $user->hasRoleDirect(['Driver', 'driver', 'Driver Coordinator', 'driver coordinator']);
+            $isCoordinator = $currentUser->hasRoleDirect(['Driver Coordinator', 'driver coordinator', 'coordinator']);
+            $isSelf = (int) $currentUser->id === (int) $user->id;
+
+            $isGaOrHrHead = (
+                $currentUser->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin', 'GA', 'ga', 'GA Coordinator', 'ga coordinator', 'GA Staff', 'ga staff']) ||
                 $currentUser->isHrGaHead() ||
-                ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'))
+                ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect(['Approver', 'approver', 'GA', 'ga']))
             );
 
-            $isDutyStatusOnly = ($request->has('availability_status') || $request->has('status')) &&
-                !$request->hasAny(['name', 'email', 'password', 'role', 'nik', 'rank', 'department_id', 'sim_number', 'sim_expiry_date']);
+            // Authorized if GA/HR Head, Admin, or Driver Coordinator managing Driver/self, or Driver updating self
+            $isAuthorized = $isGaOrHrHead || $this->isAdmin() || ($isCoordinator && $isDriverTarget) || ($isSelf && $isDriverTarget);
 
-            if (!$isGaOrHrHead && !$this->isAdmin()) {
+            if (!$isAuthorized) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
             }
 
             // Guard: Non-Admin users cannot edit an Admin user's profile
-            if ($user->hasRoleDirect('Admin') && !$this->isAdmin()) {
+            if ($user->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin']) && !$this->isAdmin()) {
                 return response()->json([
                     'status'  => 'error',
                     'message' => 'Hanya Superadmin yang berhak mengedit akun Admin.',
                 ], 403);
             }
+
+            $isDutyStatusOnly = ($request->has('availability_status') || $request->has('status')) &&
+                !$request->hasAny(['name', 'email', 'password', 'role', 'nik', 'rank', 'department_id', 'sim_number', 'sim_expiry_date', 'phone']);
 
             if ($isDutyStatusOnly) {
                 return $this->updateDriverDuty($user, $request);
@@ -504,6 +525,7 @@ class UserController extends Controller
 
             $validated = $request->validate([
                 'nik'             => ['nullable', 'string', 'max:50', Rule::unique('users', 'nik')->ignore($user->id)],
+                'phone'           => ['nullable', 'string', 'max:50'],
                 'sim_number'      => ['nullable', 'string', 'max:50'],
                 'sim_type'        => ['nullable', 'string', 'max:50'],
                 'sim_expiry_date' => ['nullable'],
@@ -534,6 +556,12 @@ class UserController extends Controller
                     'status'  => 'error',
                     'message' => 'Hanya Superadmin yang berhak menetapkan role Admin.',
                 ], 403);
+            }
+
+            // Guard: Non-GA/Admin users (e.g. Driver Coordinator or self) cannot change user roles
+            if ($role && !$isGaOrHrHead && !$this->isAdmin()) {
+                unset($validated['role']);
+                $role = null;
             }
 
             $targetRole = $role ?? ($user->getRoleNames()[0] ?? null);
@@ -797,15 +825,21 @@ class UserController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        $hasAccess = $currentUser->hasRoleDirect(['Admin', 'GA', 'admin', 'ga'])
+        $isDriverTarget = $user->hasRoleDirect(['Driver', 'driver', 'Driver Coordinator', 'driver coordinator']);
+        $isCoordinator = $currentUser->hasRoleDirect(['Driver Coordinator', 'driver coordinator', 'coordinator']);
+        $isSelf = (int) $currentUser->id === (int) $user->id;
+
+        $hasAccess = $currentUser->hasRoleDirect(['Admin', 'admin', 'Superadmin', 'superadmin', 'GA', 'ga', 'GA Coordinator', 'ga coordinator', 'GA Staff', 'ga staff', 'Driver Coordinator', 'driver coordinator', 'coordinator'])
             || $currentUser->isHrGaHead()
-            || ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect('Approver'));
+            || ($currentUser->isHrGaDepartment() && $currentUser->hasRoleDirect(['Approver', 'approver', 'GA', 'ga']))
+            || ($isCoordinator && $isDriverTarget)
+            || ($isSelf && $isDriverTarget);
 
         if (!$hasAccess) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        if (!$user->hasRoleDirect(['Driver', 'driver'])) {
+        if (!$isDriverTarget) {
             return response()->json(['status' => 'error', 'message' => 'User ini bukan merupakan Driver.'], 422);
         }
 
@@ -902,6 +936,7 @@ class UserController extends Controller
             'sim_expiry_days_left' => $simExpiryDaysLeft,
             'name'                => $user->name,
             'email'               => $user->email,
+            'phone'               => $user->phone,
             'rank'                => $user->rank,
             'department_id'       => $user->department_id,
             'department_name'     => $user->department?->name,
