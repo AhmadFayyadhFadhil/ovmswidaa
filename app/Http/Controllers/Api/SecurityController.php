@@ -456,6 +456,7 @@ class SecurityController extends Controller
                             $retVehicle = $vehicleRequest->returnVehicle ?? $vehicleRequest->vehicle;
 
                             $reqData = [
+                                'status'                => RequestStatus::ON_GOING,
                                 'return_checked_out_at' => $scanTime,
                                 'return_checkout_by'    => $validated['security_name'],
                             ];
@@ -727,6 +728,7 @@ class SecurityController extends Controller
                             $depTotKm = ($inputEndKm !== null) ? max(0, $depEffectiveEndKm - $depStartKm) : null;
 
                             $reqData = [
+                                'status'                  => RequestStatus::DRIVER_ASSIGNED,
                                 'departure_checked_in_at' => $scanTime,
                                 'departure_checkin_by'    => $validated['security_name'],
                             ];

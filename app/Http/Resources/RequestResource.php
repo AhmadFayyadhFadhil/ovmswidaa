@@ -175,6 +175,24 @@ class RequestResource extends JsonResource
                 ? (($this->departure_total_km ?? 0) + ($this->return_total_km ?? 0) ?: ($this->total_km ?? null))
                 : ($this->total_km ?? $this->operationalTrip?->total_km ?? $trips->first()?->total_km ?? ($this->itineraries ? $this->itineraries->sum('total_km') : null)),
             'trip_mode'               => $this->trip_mode ?? 'standby',
+            'split_trip_stage'        => ($this->trip_mode === 'split_drop_pickup') ? (
+                $this->return_checked_in_at ? 'completed' : (
+                    $this->return_checked_out_at ? 'return_ongoing' : (
+                        $this->departure_checked_in_at ? 'waiting_pickup' : (
+                            $this->departure_checked_out_at ? 'departure_ongoing' : 'scheduled'
+                        )
+                    )
+                )
+            ) : null,
+            'split_trip_status_label' => ($this->trip_mode === 'split_drop_pickup') ? (
+                $this->return_checked_in_at ? 'Selesai' : (
+                    $this->return_checked_out_at ? 'Sedang Berjalan (Penjemputan)' : (
+                        $this->departure_checked_in_at ? 'Terjadwal Jemput' : (
+                            $this->departure_checked_out_at ? 'Sedang Berjalan (Pengantaran)' : 'Terjadwal'
+                        )
+                    )
+                )
+            ) : null,
             'departure_start_km'      => $this->departure_start_km,
             'departure_end_km'        => $this->departure_end_km,
             'departure_total_km'      => $this->departure_total_km,

@@ -16,6 +16,9 @@ class VehicleController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        // Self-healing: Rekonsiliasi ketersediaan armada berdasarkan status gerbang riil
+        $this->reconcileVehiclesAvailability();
+
         $perPage = $request->query('per_page', 15);
         $status  = $request->query('status');
         $search  = $request->query('search');
@@ -284,6 +287,95 @@ class VehicleController extends Controller
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Vehicle File Storage Error ({$folder}): " . $e->getMessage());
             return null;
+        }
+    }
+
+    /**
+     * Rekonsiliasi otomatis ketersediaan armada.
+     * Jika kendaraan ditandai 'In Use' namun secara riil sudah kembali masuk gerbang,
+     * statusnya otomatis dipulihkan menjadi 'Available' dan odometernya disinkronkan.
+     */
+    protected function reconcileVehiclesAvailability(): void
+    {
+        try {
+            // 1. Dapatkan ID kendaraan yang BENAR-BENAR sedang berada di luar pabrik (checkout tanpa checkin)
+            $activeSplitDepVehicles = \App\Models\Request::where('trip_mode', 'split_drop_pickup')
+                ->whereNotNull('departure_checked_out_at')
+                ->whereNull('departure_checked_in_at')
+                ->whereNotIn('status', [RequestStatus::REJECTED->value, RequestStatus::COMPLETED->value, RequestStatus::CANCELLED->value])
+                ->whereNotNull('vehicle_id')
+                ->pluck('vehicle_id')
+                ->toArray();
+
+            $activeSplitRetVehicles = \App\Models\Request::where('trip_mode', 'split_drop_pickup')
+                ->whereNotNull('return_checked_out_at')
+                ->whereNull('return_checked_in_at')
+                ->whereNotIn('status', [RequestStatus::REJECTED->value, RequestStatus::COMPLETED->value, RequestStatus::CANCELLED->value])
+                ->whereNotNull('return_vehicle_id')
+                ->pluck('return_vehicle_id')
+                ->toArray();
+
+            $activeSingleVehicles = \App\Models\Request::where(function ($q) {
+                    $q->whereNull('trip_mode')->orWhere('trip_mode', '!=', 'split_drop_pickup');
+                })
+                ->whereNotNull('security_checked_out_at')
+                ->whereNull('security_checked_in_at')
+                ->whereNotIn('status', [RequestStatus::REJECTED->value, RequestStatus::COMPLETED->value, RequestStatus::CANCELLED->value])
+                ->whereNotNull('vehicle_id')
+                ->pluck('vehicle_id')
+                ->toArray();
+
+            $activeTripVehicles = \App\Models\OperationalTrip::where('status', 'on_going')
+                ->whereNotNull('security_checked_out_at')
+                ->whereNull('security_checked_in_at')
+                ->whereNotNull('vehicle_id')
+                ->pluck('vehicle_id')
+                ->toArray();
+
+            $genuinelyActiveVehicleIds = array_unique(array_filter(array_merge(
+                $activeSplitDepVehicles,
+                $activeSplitRetVehicles,
+                $activeSingleVehicles,
+                $activeTripVehicles
+            )));
+
+            // 2. Pulihkan kendaraan yang statusnya 'In Use' tapi tidak ada trip aktif di luar pabrik
+            $vehiclesToRestore = Vehicle::whereIn('status', ['In Use', 'in use', 'IN USE', 'On Trip', 'on trip'])
+                ->whereNotIn('id', $genuinelyActiveVehicleIds)
+                ->get();
+
+            foreach ($vehiclesToRestore as $veh) {
+                $updateData = ['status' => 'Available'];
+
+                // Cari KM akhir terbaru dari perjalanan yang telah checkin
+                $latestSplitDepEndKm = \App\Models\Request::where('vehicle_id', $veh->id)
+                    ->where('trip_mode', 'split_drop_pickup')
+                    ->whereNotNull('departure_checked_in_at')
+                    ->max('departure_end_km');
+
+                $latestSplitRetEndKm = \App\Models\Request::where('return_vehicle_id', $veh->id)
+                    ->where('trip_mode', 'split_drop_pickup')
+                    ->whereNotNull('return_checked_in_at')
+                    ->max('return_end_km');
+
+                $latestGeneralEndKm = \App\Models\Request::where('vehicle_id', $veh->id)
+                    ->whereNotNull('security_checked_in_at')
+                    ->max('end_km');
+
+                $maxRecordedKm = max(
+                    (int)($latestSplitDepEndKm ?? 0),
+                    (int)($latestSplitRetEndKm ?? 0),
+                    (int)($latestGeneralEndKm ?? 0)
+                );
+
+                if ($maxRecordedKm > 0 && $maxRecordedKm > (int)($veh->odometer ?? 0)) {
+                    $updateData['odometer'] = $maxRecordedKm;
+                }
+
+                $veh->update($updateData);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Vehicle Reconcile Error: " . $e->getMessage());
         }
     }
 }

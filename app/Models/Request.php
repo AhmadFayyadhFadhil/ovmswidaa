@@ -257,9 +257,35 @@ class Request extends Model
         return null;
     }
 
-    // Status Sync helper for multi-day requests
+    // Status Sync helper for multi-day and split-trip requests
     public function syncStatus()
     {
+        if ($this->trip_mode === 'split_drop_pickup') {
+            if ($this->return_checked_in_at !== null) {
+                if ($this->status !== RequestStatus::COMPLETED) {
+                    $this->update(['status' => RequestStatus::COMPLETED, 'completed_at' => $this->completed_at ?? now()]);
+                    $this->status = RequestStatus::COMPLETED;
+                }
+            } elseif ($this->return_checked_out_at !== null) {
+                if ($this->status !== RequestStatus::ON_GOING) {
+                    $this->update(['status' => RequestStatus::ON_GOING]);
+                    $this->status = RequestStatus::ON_GOING;
+                }
+            } elseif ($this->departure_checked_in_at !== null) {
+                // Sesi 1 telah kembali ke pabrik -> status otomatis Terjadwal Jemput
+                if ($this->status !== RequestStatus::DRIVER_ASSIGNED) {
+                    $this->update(['status' => RequestStatus::DRIVER_ASSIGNED]);
+                    $this->status = RequestStatus::DRIVER_ASSIGNED;
+                }
+            } elseif ($this->departure_checked_out_at !== null) {
+                if ($this->status !== RequestStatus::ON_GOING) {
+                    $this->update(['status' => RequestStatus::ON_GOING]);
+                    $this->status = RequestStatus::ON_GOING;
+                }
+            }
+            return;
+        }
+
         // Early exit: only multi-day requests with loaded itineraries need syncing
         if (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty()) {
             return;
