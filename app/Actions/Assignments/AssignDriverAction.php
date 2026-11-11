@@ -156,14 +156,35 @@ class AssignDriverAction
 
             if ($isDirectScheduled) {
                 try {
-                    $trip = \App\Models\OperationalTrip::firstOrNew(
-                        ['request_id' => $request->id, 'driver_id' => $driverId]
-                    );
-                    $trip->vehicle_id = $vehicleId;
-                    $trip->start_datetime = $effectiveStartTime->format('Y-m-d H:i:s');
-                    $trip->end_datetime = $depEndTime->format('Y-m-d H:i:s');
-                    $trip->status = 'scheduled';
-                    $trip->save();
+                    // Sesi 1: Keberangkatan (Antar)
+                    $trip1 = \App\Models\OperationalTrip::where('request_id', $request->id)
+                        ->where('driver_id', $driverId)
+                        ->first();
+                    if (!$trip1) {
+                        $trip1 = new \App\Models\OperationalTrip(['request_id' => $request->id]);
+                    }
+                    $trip1->driver_id = $driverId;
+                    $trip1->vehicle_id = $vehicleId;
+                    $trip1->start_datetime = $effectiveStartTime->format('Y-m-d H:i:s');
+                    $trip1->end_datetime = $depEndTime->format('Y-m-d H:i:s');
+                    $trip1->status = 'scheduled';
+                    $trip1->save();
+
+                    // Sesi 2: Penjemputan (khusus split_drop_pickup)
+                    if ($isSplitTrip && $returnDepartureTime) {
+                        $trip2 = \App\Models\OperationalTrip::where('request_id', $request->id)
+                            ->where('id', '!=', $trip1->id)
+                            ->first();
+                        if (!$trip2) {
+                            $trip2 = new \App\Models\OperationalTrip(['request_id' => $request->id]);
+                        }
+                        $trip2->driver_id = $returnDriverId;
+                        $trip2->vehicle_id = $returnVehicleId;
+                        $trip2->start_datetime = $returnDepartureTime->format('Y-m-d H:i:s');
+                        $trip2->end_datetime = $effectiveEndTime->format('Y-m-d H:i:s');
+                        $trip2->status = 'scheduled';
+                        $trip2->save();
+                    }
                 } catch (\Throwable $ex) {}
             }
 
@@ -218,6 +239,29 @@ class AssignDriverAction
                     'notes'       => $notes ?: 'Re-assignment Sesi Penjemputan',
                 ]
             );
+
+            // Update or create OperationalTrip for the return session
+            $departureTrip = \App\Models\OperationalTrip::where('request_id', $request->id)
+                ->where('driver_id', $request->driver_id)
+                ->first();
+
+            $returnTrip = \App\Models\OperationalTrip::where('request_id', $request->id)
+                ->when($departureTrip, function($q) use ($departureTrip) {
+                    $q->where('id', '!=', $departureTrip->id);
+                })
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if (!$returnTrip) {
+                $returnTrip = new \App\Models\OperationalTrip(['request_id' => $request->id]);
+            }
+
+            $returnTrip->driver_id = $newDriverId;
+            $returnTrip->vehicle_id = $targetVehicleId;
+            $returnTrip->start_datetime = $returnDepartureTime->format('Y-m-d H:i:s');
+            $returnTrip->end_datetime = $effectiveEndTime->format('Y-m-d H:i:s');
+            $returnTrip->status = 'scheduled';
+            $returnTrip->save();
         } catch (\Throwable $ex) {}
 
         return $request->fresh(['user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle']);

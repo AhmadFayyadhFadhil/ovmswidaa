@@ -106,10 +106,14 @@ class RequestController extends Controller
                 $query->where(function ($q) use ($user) {
                     $q->where('user_id', $user->id)
                       ->orWhere('driver_id', $user->id)
+                      ->orWhere('return_driver_id', $user->id)
                       ->orWhereHas('assignments', function ($sub) use ($user) {
                           $sub->where('driver_id', $user->id);
                       })
                       ->orWhereHas('operationalTrip', function ($sub) use ($user) {
+                          $sub->where('driver_id', $user->id);
+                      })
+                      ->orWhereHas('operationalTrips', function ($sub) use ($user) {
                           $sub->where('driver_id', $user->id);
                       })
                       ->orWhereHas('itineraries', function ($sub) use ($user) {
@@ -715,6 +719,62 @@ class RequestController extends Controller
         $isSecurityCheckedIn = !empty($vehicleRequest->security_checked_in_at) || ($myTrip && !empty($myTrip->security_checked_in_at));
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $endKm, $totKm, $myTrip, $vehicle, $activeIt, $isSecurityCheckedIn) {
+            if ($vehicleRequest->trip_mode === 'split_drop_pickup') {
+                $isDepartureDriver = ((int)$user->id === (int)$vehicleRequest->driver_id);
+                $isReturnDriver = ((int)$user->id === (int)$vehicleRequest->return_driver_id);
+                $isDepartureDone = !empty($vehicleRequest->departure_checked_in_at);
+
+                if (!$isDepartureDone || ($isDepartureDriver && !$isReturnDriver)) {
+                    // Sesi 1: Antar
+                    $depStartKm = $vehicleRequest->departure_start_km ?? $vehicleRequest->start_km ?? 0;
+                    $depEffectiveEndKm = $endKm;
+                    $depTotKm = max(0, $depEffectiveEndKm - $depStartKm);
+
+                    $reqUpdates = [
+                        'departure_end_km'   => $depEffectiveEndKm,
+                        'departure_total_km' => $depTotKm,
+                        'status'             => RequestStatus::ON_GOING,
+                    ];
+                    $vehicleRequest->update($reqUpdates);
+
+                    if ($myTrip) {
+                        $myTrip->update([
+                            'end_km'       => $endKm,
+                            'total_km'     => $depTotKm,
+                            'status'       => 'completed',
+                            'end_datetime' => now(),
+                        ]);
+                    }
+                    return;
+                } else {
+                    // Sesi 2: Jemput
+                    $retStartKm = $vehicleRequest->return_start_km ?? 0;
+                    $retEffectiveEndKm = $endKm;
+                    $retTotKm = max(0, $retEffectiveEndKm - $retStartKm);
+                    $totalKmCombined = ($vehicleRequest->departure_total_km ?? 0) + $retTotKm;
+
+                    $reqUpdates = [
+                        'return_end_km'   => $retEffectiveEndKm,
+                        'return_total_km' => $retTotKm,
+                        'end_km'          => $retEffectiveEndKm,
+                        'total_km'        => $totalKmCombined,
+                        'status'          => RequestStatus::COMPLETED,
+                        'completed_at'    => now(),
+                    ];
+                    $vehicleRequest->update($reqUpdates);
+
+                    if ($myTrip) {
+                        $myTrip->update([
+                            'end_km'       => $endKm,
+                            'total_km'     => $retTotKm,
+                            'status'       => 'completed',
+                            'end_datetime' => now(),
+                        ]);
+                    }
+                    return;
+                }
+            }
+
             $reqUpdates = [
                 'end_km'   => $endKm,
                 'total_km' => $totKm,
@@ -1071,6 +1131,106 @@ class RequestController extends Controller
                         $reqEndData['total_km'] = $totKm;
                     }
                     $vehicleRequest->update($reqEndData);
+                }
+            } elseif ($vehicleRequest->trip_mode === 'split_drop_pickup') {
+                $isDepartureDriver = ((int)$user->id === (int)$vehicleRequest->driver_id);
+                $isReturnDriver = ((int)$user->id === (int)$vehicleRequest->return_driver_id);
+                $isDepartureDone = !empty($vehicleRequest->departure_checked_in_at);
+
+                if (!$isDepartureDone || ($isDepartureDriver && !$isReturnDriver)) {
+                    // Sesi 1: Antar
+                    $depStartKm = $vehicleRequest->departure_start_km ?? $vehicleRequest->start_km ?? 0;
+                    $depEffectiveEndKm = $inputEndKm ?? $depStartKm;
+                    $depTotKm = ($inputEndKm !== null && $depStartKm > 0) ? max(0, $depEffectiveEndKm - $depStartKm) : null;
+
+                    $reqUpdates = [
+                        'departure_checked_in_at' => $vehicleRequest->departure_checked_in_at ?? now(),
+                        'departure_checkin_by'    => $vehicleRequest->departure_checkin_by ?? $user->name,
+                        'status'                  => RequestStatus::ON_GOING, // Tetap ON_GOING!
+                    ];
+                    if ($inputEndKm !== null) {
+                        $reqUpdates['departure_end_km']   = $depEffectiveEndKm;
+                        $reqUpdates['departure_total_km'] = $depTotKm;
+                    }
+                    $vehicleRequest->update($reqUpdates);
+
+                    // Update Trip 1
+                    $trip1 = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                        ->where('driver_id', $vehicleRequest->driver_id)
+                        ->orderBy('id', 'asc')
+                        ->first();
+                    if ($trip1) {
+                        $trip1->update([
+                            'status'                 => 'completed',
+                            'security_checked_in_at' => $trip1->security_checked_in_at ?? now(),
+                            'end_datetime'           => now(),
+                            'end_km'                 => $inputEndKm ?? $trip1->end_km,
+                            'total_km'               => $depTotKm ?? $trip1->total_km,
+                        ]);
+                    }
+
+                    // Release Driver 1 & Mobil 1 ke AVAILABLE
+                    if ($vehicleRequest->driver_id) {
+                        \App\Services\DriverTaskQueueService::restorePendingDriverDuty($vehicleRequest->driver_id);
+                    }
+                    if ($vehicleRequest->vehicle) {
+                        $vData = ['status' => 'Available'];
+                        if ($inputEndKm !== null) {
+                            $vData['odometer'] = $depEffectiveEndKm;
+                        }
+                        $vehicleRequest->vehicle->update($vData);
+                    }
+                } else {
+                    // Sesi 2: Jemput -> RESMI COMPLETED
+                    $retStartKm = $vehicleRequest->return_start_km ?? 0;
+                    $retEffectiveEndKm = $inputEndKm ?? $retStartKm;
+                    $retTotKm = ($inputEndKm !== null && $retStartKm > 0) ? max(0, $retEffectiveEndKm - $retStartKm) : null;
+                    $totalKmCombined = ($vehicleRequest->departure_total_km ?? 0) + ($retTotKm ?? 0);
+
+                    $reqUpdates = [
+                        'status'                 => RequestStatus::COMPLETED,
+                        'completed_at'           => now(),
+                        'security_checked_in_at' => $vehicleRequest->security_checked_in_at ?? now(),
+                        'security_checkin_by'    => $vehicleRequest->security_checkin_by ?? $user->name,
+                        'return_checked_in_at'   => $vehicleRequest->return_checked_in_at ?? now(),
+                        'return_checkin_by'      => $vehicleRequest->return_checkin_by ?? $user->name,
+                    ];
+                    if ($inputEndKm !== null) {
+                        $reqUpdates['return_end_km']   = $retEffectiveEndKm;
+                        $reqUpdates['return_total_km'] = $retTotKm;
+                        $reqUpdates['end_km']          = $retEffectiveEndKm;
+                        $reqUpdates['total_km']        = $totalKmCombined;
+                    }
+                    $vehicleRequest->update($reqUpdates);
+
+                    // Update Trip 2
+                    $retDriverId = $vehicleRequest->return_driver_id ?? $vehicleRequest->driver_id;
+                    $trip2 = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                        ->where('driver_id', $retDriverId)
+                        ->orderBy('id', 'desc')
+                        ->first();
+                    if ($trip2) {
+                        $trip2->update([
+                            'status'                 => 'completed',
+                            'security_checked_in_at' => $trip2->security_checked_in_at ?? now(),
+                            'end_datetime'           => now(),
+                            'end_km'                 => $inputEndKm ?? $trip2->end_km,
+                            'total_km'               => $retTotKm ?? $trip2->total_km,
+                        ]);
+                    }
+
+                    // Release Driver 2 & Mobil 2 ke AVAILABLE
+                    if ($retDriverId) {
+                        \App\Services\DriverTaskQueueService::restorePendingDriverDuty($retDriverId);
+                    }
+                    $retVehicle = $vehicleRequest->returnVehicle ?? $vehicleRequest->vehicle;
+                    if ($retVehicle) {
+                        $vData = ['status' => 'Available'];
+                        if ($inputEndKm !== null) {
+                            $vData['odometer'] = $retEffectiveEndKm;
+                        }
+                        $retVehicle->update($vData);
+                    }
                 }
             } else {
                 // Regular single-day request

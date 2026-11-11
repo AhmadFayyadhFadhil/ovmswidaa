@@ -421,6 +421,23 @@ class SecurityController extends Controller
                             }
                             $vehicleRequest->update($reqData);
 
+                            // Update OperationalTrip Sesi Antar
+                            $trip1 = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                                ->where('driver_id', $vehicleRequest->driver_id)
+                                ->orderBy('id', 'asc')
+                                ->first();
+                            if ($trip1) {
+                                $t1Data = [
+                                    'status'                  => 'on_going',
+                                    'security_checked_out_at' => $scanTime,
+                                    'security_checkout_by'    => $validated['security_name'],
+                                ];
+                                if ($inputStartKm !== null) {
+                                    $t1Data['start_km'] = $inputStartKm;
+                                }
+                                $trip1->update($t1Data);
+                            }
+
                             if ($vehicleRequest->driver) {
                                 $vehicleRequest->driver->update(['availability_status' => 'on_trip']);
                             }
@@ -446,6 +463,24 @@ class SecurityController extends Controller
                                 $reqData['return_start_km'] = $inputStartKm;
                             }
                             $vehicleRequest->update($reqData);
+
+                            // Update OperationalTrip Sesi Jemput
+                            $retDriverId = $vehicleRequest->return_driver_id ?? $vehicleRequest->driver_id;
+                            $trip2 = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                                ->where('driver_id', $retDriverId)
+                                ->orderBy('id', 'desc')
+                                ->first();
+                            if ($trip2) {
+                                $t2Data = [
+                                    'status'                  => 'on_going',
+                                    'security_checked_out_at' => $scanTime,
+                                    'security_checkout_by'    => $validated['security_name'],
+                                ];
+                                if ($inputStartKm !== null) {
+                                    $t2Data['start_km'] = $inputStartKm;
+                                }
+                                $trip2->update($t2Data);
+                            }
 
                             if ($retDriver) {
                                 $retDriver->update(['availability_status' => 'on_trip']);
@@ -681,6 +716,13 @@ class SecurityController extends Controller
                         if ($vehicleRequest->departure_checked_in_at === null) {
                             // STAGE 2: Checkin Balik Pabrik (Sesi Antar Selesai)
                             $depStartKm = $vehicleRequest->departure_start_km ?? $vehicleRequest->start_km ?? 0;
+                            if ($inputEndKm !== null && $depStartKm > 0 && $inputEndKm < $depStartKm) {
+                                return response()->json([
+                                    'status'  => 'error',
+                                    'message' => 'KM Akhir Sesi Antar (' . number_format($inputEndKm, 0, ',', '.') . ' KM) tidak boleh lebih kecil dari KM Awal (' . number_format($depStartKm, 0, ',', '.') . ' KM).'
+                                ], 422);
+                            }
+
                             $depEffectiveEndKm = $inputEndKm ?? $depStartKm;
                             $depTotKm = ($inputEndKm !== null) ? max(0, $depEffectiveEndKm - $depStartKm) : null;
 
@@ -693,6 +735,24 @@ class SecurityController extends Controller
                                 $reqData['departure_total_km'] = $depTotKm;
                             }
                             $vehicleRequest->update($reqData);
+
+                            // Update OperationalTrip Sesi Antar
+                            $trip1 = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                                ->where('driver_id', $vehicleRequest->driver_id)
+                                ->orderBy('id', 'asc')
+                                ->first();
+                            if ($trip1) {
+                                $t1Data = [
+                                    'status'                 => 'completed',
+                                    'security_checked_in_at' => $scanTime,
+                                    'security_checkin_by'    => $validated['security_name'],
+                                ];
+                                if ($inputEndKm !== null) {
+                                    $t1Data['end_km'] = $depEffectiveEndKm;
+                                    $t1Data['total_km'] = $depTotKm;
+                                }
+                                $trip1->update($t1Data);
+                            }
 
                             // Bebaskan Driver 1 & Mobil 1 kembali ke pool
                             if ($vehicleRequest->driver_id) {
@@ -710,6 +770,13 @@ class SecurityController extends Controller
                         } else {
                             // STAGE 4: Checkin Selesai (Sesi Jemput Selesai)
                             $retStartKm = $vehicleRequest->return_start_km ?? 0;
+                            if ($inputEndKm !== null && $retStartKm > 0 && $inputEndKm < $retStartKm) {
+                                return response()->json([
+                                    'status'  => 'error',
+                                    'message' => 'KM Akhir Sesi Jemput (' . number_format($inputEndKm, 0, ',', '.') . ' KM) tidak boleh lebih kecil dari KM Awal (' . number_format($retStartKm, 0, ',', '.') . ' KM).'
+                                ], 422);
+                            }
+
                             $retEffectiveEndKm = $inputEndKm ?? $retStartKm;
                             $retTotKm = ($inputEndKm !== null) ? max(0, $retEffectiveEndKm - $retStartKm) : null;
                             $totalKmCombined = ($vehicleRequest->departure_total_km ?? 0) + ($retTotKm ?? 0);
@@ -733,6 +800,25 @@ class SecurityController extends Controller
 
                             $retDriver = $vehicleRequest->returnDriver ?? $vehicleRequest->driver;
                             $retVehicle = $vehicleRequest->returnVehicle ?? $vehicleRequest->vehicle;
+
+                            // Update OperationalTrip Sesi Jemput
+                            $retDriverId = $vehicleRequest->return_driver_id ?? $vehicleRequest->driver_id;
+                            $trip2 = \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)
+                                ->where('driver_id', $retDriverId)
+                                ->orderBy('id', 'desc')
+                                ->first();
+                            if ($trip2) {
+                                $t2Data = [
+                                    'status'                 => 'completed',
+                                    'security_checked_in_at' => $scanTime,
+                                    'security_checkin_by'    => $validated['security_name'],
+                                ];
+                                if ($inputEndKm !== null) {
+                                    $t2Data['end_km'] = $retEffectiveEndKm;
+                                    $t2Data['total_km'] = $retTotKm;
+                                }
+                                $trip2->update($t2Data);
+                            }
 
                             if ($retDriver) {
                                 \App\Services\DriverTaskQueueService::restorePendingDriverDuty($retDriver->id);
