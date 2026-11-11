@@ -292,25 +292,25 @@ class VehicleController extends Controller
 
     /**
      * Rekonsiliasi otomatis ketersediaan armada.
-     * Jika kendaraan ditandai 'In Use' namun secara riil sudah kembali masuk gerbang,
+     * Jika kendaraan ditandai 'In Use' namun secara riil tidak sedang bertugas di luar pabrik,
      * statusnya otomatis dipulihkan menjadi 'Available' dan odometernya disinkronkan.
      */
     protected function reconcileVehiclesAvailability(): void
     {
         try {
-            // 1. Dapatkan ID kendaraan yang BENAR-BENAR sedang berada di luar pabrik (checkout tanpa checkin)
+            // 1. Dapatkan ID kendaraan yang BENAR-BENAR sedang berada di luar pabrik (checkout tanpa checkin dan status ON_GOING)
             $activeSplitDepVehicles = \App\Models\Request::where('trip_mode', 'split_drop_pickup')
+                ->where('status', RequestStatus::ON_GOING->value)
                 ->whereNotNull('departure_checked_out_at')
                 ->whereNull('departure_checked_in_at')
-                ->whereNotIn('status', [RequestStatus::REJECTED->value, RequestStatus::COMPLETED->value, RequestStatus::CANCELLED->value])
                 ->whereNotNull('vehicle_id')
                 ->pluck('vehicle_id')
                 ->toArray();
 
             $activeSplitRetVehicles = \App\Models\Request::where('trip_mode', 'split_drop_pickup')
+                ->where('status', RequestStatus::ON_GOING->value)
                 ->whereNotNull('return_checked_out_at')
                 ->whereNull('return_checked_in_at')
-                ->whereNotIn('status', [RequestStatus::REJECTED->value, RequestStatus::COMPLETED->value, RequestStatus::CANCELLED->value])
                 ->whereNotNull('return_vehicle_id')
                 ->pluck('return_vehicle_id')
                 ->toArray();
@@ -318,9 +318,9 @@ class VehicleController extends Controller
             $activeSingleVehicles = \App\Models\Request::where(function ($q) {
                     $q->whereNull('trip_mode')->orWhere('trip_mode', '!=', 'split_drop_pickup');
                 })
+                ->where('status', RequestStatus::ON_GOING->value)
                 ->whereNotNull('security_checked_out_at')
                 ->whereNull('security_checked_in_at')
-                ->whereNotIn('status', [RequestStatus::REJECTED->value, RequestStatus::COMPLETED->value, RequestStatus::CANCELLED->value])
                 ->whereNotNull('vehicle_id')
                 ->pluck('vehicle_id')
                 ->toArray();
@@ -339,10 +339,14 @@ class VehicleController extends Controller
                 $activeTripVehicles
             )));
 
-            // 2. Pulihkan kendaraan yang statusnya 'In Use' tapi tidak ada trip aktif di luar pabrik
-            $vehiclesToRestore = Vehicle::whereIn('status', ['In Use', 'in use', 'IN USE', 'On Trip', 'on trip'])
-                ->whereNotIn('id', $genuinelyActiveVehicleIds)
-                ->get();
+            // 2. Pulihkan kendaraan yang statusnya bukan Available/Maintenance/Retired jika tidak ada trip aktif di luar pabrik
+            $vehiclesToRestore = Vehicle::whereNotIn('status', [
+                'Available', 'available', 'AVAILABLE', 'Tersedia',
+                'Maintenance', 'maintenance', 'MAINTENANCE', 'Servis', 'Perbaikan',
+                'Retired', 'retired', 'RETIRED', 'Decommissioned', 'decommissioned', 'Inactive'
+            ])
+            ->whereNotIn('id', $genuinelyActiveVehicleIds)
+            ->get();
 
             foreach ($vehiclesToRestore as $veh) {
                 $updateData = ['status' => 'Available'];
@@ -373,6 +377,13 @@ class VehicleController extends Controller
                 }
 
                 $veh->update($updateData);
+            }
+
+            // 3. Pastikan kendaraan yang sedang berada di luar pabrik konsisten berstatus 'In Use'
+            if (!empty($genuinelyActiveVehicleIds)) {
+                Vehicle::whereIn('id', $genuinelyActiveVehicleIds)
+                    ->whereNotIn('status', ['In Use', 'in use', 'IN USE'])
+                    ->update(['status' => 'In Use']);
             }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning("Vehicle Reconcile Error: " . $e->getMessage());

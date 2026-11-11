@@ -319,6 +319,29 @@ class Request extends Model
             return;
         }
 
+        // Self-healing for regular single-day internal trips:
+        // Trigger status riil adalah saat kendaraan keluar/masuk gerbang security
+        if (!$this->is_external && (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty())) {
+            if ($this->security_checked_in_at !== null) {
+                if ($this->status !== RequestStatus::COMPLETED) {
+                    $this->update(['status' => RequestStatus::COMPLETED, 'completed_at' => $this->completed_at ?? now()]);
+                    $this->status = RequestStatus::COMPLETED;
+                }
+            } elseif ($this->security_checked_out_at !== null) {
+                if ($this->status !== RequestStatus::ON_GOING) {
+                    $this->update(['status' => RequestStatus::ON_GOING]);
+                    $this->status = RequestStatus::ON_GOING;
+                }
+            } else {
+                // Belum scan gerbang checkout -> status tetap DRIVER_ASSIGNED (Terjadwal), bukan ON_GOING!
+                if ($this->status === RequestStatus::ON_GOING) {
+                    $this->update(['status' => RequestStatus::DRIVER_ASSIGNED]);
+                    $this->status = RequestStatus::DRIVER_ASSIGNED;
+                }
+            }
+            return;
+        }
+
         // Early exit: only multi-day requests with loaded itineraries need syncing
         if (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty()) {
             return;
