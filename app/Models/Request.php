@@ -83,6 +83,7 @@ class Request extends Model
         'trip_mode',
         'departure_start_km',
         'departure_end_km',
+        'departure_total_km',
         'departure_checked_out_at',
         'departure_checked_in_at',
         'departure_checkout_by',
@@ -95,6 +96,7 @@ class Request extends Model
         'return_notes',
         'return_start_km',
         'return_end_km',
+        'return_total_km',
         'return_checked_out_at',
         'return_checked_in_at',
         'return_checkout_by',
@@ -241,16 +243,22 @@ class Request extends Model
         return $this->belongsTo(User::class, 'return_reassigned_by');
     }
 
-    public function getDepartureTotalKmAttribute(): ?float
+    public function getDepartureTotalKmAttribute($value = null): ?float
     {
+        if ($value !== null && $value !== '') {
+            return (float)$value;
+        }
         if ($this->departure_start_km !== null && $this->departure_end_km !== null) {
             return max(0, (float)$this->departure_end_km - (float)$this->departure_start_km);
         }
         return null;
     }
 
-    public function getReturnTotalKmAttribute(): ?float
+    public function getReturnTotalKmAttribute($value = null): ?float
     {
+        if ($value !== null && $value !== '') {
+            return (float)$value;
+        }
         if ($this->return_start_km !== null && $this->return_end_km !== null) {
             return max(0, (float)$this->return_end_km - (float)$this->return_start_km);
         }
@@ -260,119 +268,147 @@ class Request extends Model
     // Status Sync helper for multi-day and split-trip requests
     public function syncStatus()
     {
-        if ($this->trip_mode === 'split_drop_pickup') {
-            // Self-healing 1: sinkronkan data security_checked_* ke departure_checked_* jika departure_checked_* masih kosong
-            if ($this->departure_checked_out_at === null && $this->security_checked_out_at !== null) {
-                $this->departure_checked_out_at = $this->security_checked_out_at;
-                $this->departure_checkout_by    = $this->departure_checkout_by ?? $this->security_checkout_by;
-                $this->departure_start_km       = $this->departure_start_km ?? $this->start_km;
-                $this->update([
-                    'departure_checked_out_at' => $this->departure_checked_out_at,
-                    'departure_checkout_by'    => $this->departure_checkout_by,
-                    'departure_start_km'       => $this->departure_start_km,
-                ]);
-            }
-            if ($this->departure_checked_in_at === null && $this->security_checked_in_at !== null && $this->return_checked_out_at === null) {
-                $this->departure_checked_in_at  = $this->security_checked_in_at;
-                $this->departure_checkin_by     = $this->departure_checkin_by ?? $this->security_checkin_by;
-                $this->departure_end_km         = $this->departure_end_km ?? $this->end_km;
-                if ($this->departure_start_km !== null && $this->departure_end_km !== null) {
-                    $this->departure_total_km   = max(0, (int)$this->departure_end_km - (int)$this->departure_start_km);
+        try {
+            if ($this->trip_mode === 'split_drop_pickup') {
+                $updates = [];
+
+                // Self-healing 1: sinkronkan data security_checked_* ke departure_checked_* jika departure_checked_* masih kosong
+                if ($this->departure_checked_out_at === null && $this->security_checked_out_at !== null) {
+                    $this->departure_checked_out_at = $this->security_checked_out_at;
+                    $this->departure_checkout_by    = $this->departure_checkout_by ?? $this->security_checkout_by;
+                    $this->departure_start_km       = $this->departure_start_km ?? $this->start_km;
+                    $updates['departure_checked_out_at'] = $this->departure_checked_out_at;
+                    $updates['departure_checkout_by']    = $this->departure_checkout_by;
+                    $updates['departure_start_km']       = $this->departure_start_km;
                 }
-                $this->update([
-                    'departure_checked_in_at' => $this->departure_checked_in_at,
-                    'departure_checkin_by'    => $this->departure_checkin_by,
-                    'departure_end_km'        => $this->departure_end_km,
-                    'departure_total_km'      => $this->departure_total_km,
-                ]);
+                if ($this->departure_checked_in_at === null && $this->security_checked_in_at !== null && $this->return_checked_out_at === null) {
+                    $this->departure_checked_in_at  = $this->security_checked_in_at;
+                    $this->departure_checkin_by     = $this->departure_checkin_by ?? $this->security_checkin_by;
+                    $this->departure_end_km         = $this->departure_end_km ?? $this->end_km;
+                    $updates['departure_checked_in_at'] = $this->departure_checked_in_at;
+                    $updates['departure_checkin_by']    = $this->departure_checkin_by;
+                    $updates['departure_end_km']        = $this->departure_end_km;
+                    if ($this->departure_start_km !== null && $this->departure_end_km !== null) {
+                        $updates['departure_total_km']   = max(0, (float)$this->departure_end_km - (float)$this->departure_start_km);
+                    }
+                }
+
+                // Self-healing 2: tentukan status riil berdasarkan fase gerbang
+                $currentStatusStr = is_object($this->status) ? $this->status->value : (string)$this->status;
+                if (!in_array($currentStatusStr, [RequestStatus::CANCELLED->value, RequestStatus::REJECTED->value, RequestStatus::SUBMITTED->value])) {
+                    if ($this->return_checked_in_at !== null) {
+                        if ($this->status !== RequestStatus::COMPLETED) {
+                            $updates['status'] = RequestStatus::COMPLETED->value;
+                            $updates['completed_at'] = $this->completed_at ?? now();
+                            $this->status = RequestStatus::COMPLETED;
+                        }
+                    } elseif ($this->return_checked_out_at !== null) {
+                        if ($this->status !== RequestStatus::ON_GOING) {
+                            $updates['status'] = RequestStatus::ON_GOING->value;
+                            $this->status = RequestStatus::ON_GOING;
+                        }
+                    } elseif ($this->departure_checked_in_at !== null) {
+                        // Sesi 1 telah kembali ke pabrik -> status otomatis Terjadwal Jemput
+                        if ($this->status !== RequestStatus::DRIVER_ASSIGNED) {
+                            $updates['status'] = RequestStatus::DRIVER_ASSIGNED->value;
+                            $this->status = RequestStatus::DRIVER_ASSIGNED;
+                        }
+                    } elseif ($this->departure_checked_out_at !== null) {
+                        if ($this->status !== RequestStatus::ON_GOING) {
+                            $updates['status'] = RequestStatus::ON_GOING->value;
+                            $this->status = RequestStatus::ON_GOING;
+                        }
+                    } else {
+                        // Belum pernah checkout gerbang sama sekali -> status HARUS driver_assigned (Terjadwal), BUKAN on_going!
+                        if ($this->status === RequestStatus::ON_GOING) {
+                            $updates['status'] = RequestStatus::DRIVER_ASSIGNED->value;
+                            $this->status = RequestStatus::DRIVER_ASSIGNED;
+                        }
+                    }
+                }
+
+                if (!empty($updates)) {
+                    \Illuminate\Support\Facades\DB::table('requests')
+                        ->where('id', $this->id)
+                        ->update(array_merge($updates, ['updated_at' => now()]));
+                }
+                return;
             }
 
-            // Self-healing 2: tentukan status riil berdasarkan fase gerbang
-            if ($this->return_checked_in_at !== null) {
+            // Self-healing for regular single-day internal trips:
+            // Trigger status riil adalah saat kendaraan keluar/masuk gerbang security
+            if (!$this->is_external && (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty())) {
+                $currentStatusStr = is_object($this->status) ? $this->status->value : (string)$this->status;
+                if (!in_array($currentStatusStr, [RequestStatus::CANCELLED->value, RequestStatus::REJECTED->value, RequestStatus::SUBMITTED->value])) {
+                    $updates = [];
+                    if ($this->security_checked_in_at !== null) {
+                        if ($this->status !== RequestStatus::COMPLETED) {
+                            $updates['status'] = RequestStatus::COMPLETED->value;
+                            $updates['completed_at'] = $this->completed_at ?? now();
+                            $this->status = RequestStatus::COMPLETED;
+                        }
+                    } elseif ($this->security_checked_out_at !== null) {
+                        if ($this->status !== RequestStatus::ON_GOING) {
+                            $updates['status'] = RequestStatus::ON_GOING->value;
+                            $this->status = RequestStatus::ON_GOING;
+                        }
+                    } else {
+                        // Belum scan gerbang checkout -> status tetap DRIVER_ASSIGNED (Terjadwal), bukan ON_GOING!
+                        if ($this->status === RequestStatus::ON_GOING) {
+                            $updates['status'] = RequestStatus::DRIVER_ASSIGNED->value;
+                            $this->status = RequestStatus::DRIVER_ASSIGNED;
+                        }
+                    }
+
+                    if (!empty($updates)) {
+                        \Illuminate\Support\Facades\DB::table('requests')
+                            ->where('id', $this->id)
+                            ->update(array_merge($updates, ['updated_at' => now()]));
+                    }
+                }
+                return;
+            }
+
+            // Early exit: only multi-day requests with loaded itineraries need syncing
+            if (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty()) {
+                return;
+            }
+
+            $allCount  = $this->itineraries->count();
+            $doneCount = $this->itineraries->where('status', 'completed')->count();
+
+            if ($doneCount >= $allCount) {
+                // Already completed — no need to write again
                 if ($this->status !== RequestStatus::COMPLETED) {
-                    $this->update(['status' => RequestStatus::COMPLETED, 'completed_at' => $this->completed_at ?? now()]);
+                    \Illuminate\Support\Facades\DB::table('requests')
+                        ->where('id', $this->id)
+                        ->update([
+                            'status'       => RequestStatus::COMPLETED->value,
+                            'completed_at' => $this->completed_at ?? now(),
+                            'updated_at'   => now(),
+                        ]);
                     $this->status = RequestStatus::COMPLETED;
                 }
-            } elseif ($this->return_checked_out_at !== null) {
-                if ($this->status !== RequestStatus::ON_GOING) {
-                    $this->update(['status' => RequestStatus::ON_GOING]);
-                    $this->status = RequestStatus::ON_GOING;
-                }
-            } elseif ($this->departure_checked_in_at !== null) {
-                // Sesi 1 telah kembali ke pabrik -> status otomatis Terjadwal Jemput
-                if ($this->status !== RequestStatus::DRIVER_ASSIGNED) {
-                    $this->update(['status' => RequestStatus::DRIVER_ASSIGNED]);
-                    $this->status = RequestStatus::DRIVER_ASSIGNED;
-                }
-            } elseif ($this->departure_checked_out_at !== null) {
-                if ($this->status !== RequestStatus::ON_GOING) {
-                    $this->update(['status' => RequestStatus::ON_GOING]);
-                    $this->status = RequestStatus::ON_GOING;
-                }
             } else {
-                // Belum pernah checkout gerbang sama sekali -> status HARUS driver_assigned (Terjadwal), BUKAN on_going!
-                if ($this->status === RequestStatus::ON_GOING) {
-                    $this->update(['status' => RequestStatus::DRIVER_ASSIGNED]);
-                    $this->status = RequestStatus::DRIVER_ASSIGNED;
+                $anyActiveOnGoing = $this->itineraries->contains(function ($it) {
+                    return $it->status === 'on_going' ||
+                           $it->morning_status === 'on_going' ||
+                           $it->afternoon_status === 'on_going';
+                });
+                $targetStatus = $anyActiveOnGoing ? RequestStatus::ON_GOING : RequestStatus::DRIVER_ASSIGNED;
+                if ($this->status === RequestStatus::COMPLETED || ($this->status === RequestStatus::ON_GOING && !$anyActiveOnGoing)) {
+                    \Illuminate\Support\Facades\DB::table('requests')
+                        ->where('id', $this->id)
+                        ->update([
+                            'status'       => $targetStatus->value,
+                            'completed_at' => null,
+                            'updated_at'   => now(),
+                        ]);
+                    $this->status = $targetStatus;
                 }
             }
-            return;
-        }
-
-        // Self-healing for regular single-day internal trips:
-        // Trigger status riil adalah saat kendaraan keluar/masuk gerbang security
-        if (!$this->is_external && (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty())) {
-            if ($this->security_checked_in_at !== null) {
-                if ($this->status !== RequestStatus::COMPLETED) {
-                    $this->update(['status' => RequestStatus::COMPLETED, 'completed_at' => $this->completed_at ?? now()]);
-                    $this->status = RequestStatus::COMPLETED;
-                }
-            } elseif ($this->security_checked_out_at !== null) {
-                if ($this->status !== RequestStatus::ON_GOING) {
-                    $this->update(['status' => RequestStatus::ON_GOING]);
-                    $this->status = RequestStatus::ON_GOING;
-                }
-            } else {
-                // Belum scan gerbang checkout -> status tetap DRIVER_ASSIGNED (Terjadwal), bukan ON_GOING!
-                if ($this->status === RequestStatus::ON_GOING) {
-                    $this->update(['status' => RequestStatus::DRIVER_ASSIGNED]);
-                    $this->status = RequestStatus::DRIVER_ASSIGNED;
-                }
-            }
-            return;
-        }
-
-        // Early exit: only multi-day requests with loaded itineraries need syncing
-        if (!$this->relationLoaded('itineraries') || $this->itineraries->isEmpty()) {
-            return;
-        }
-
-        $allCount  = $this->itineraries->count();
-        $doneCount = $this->itineraries->where('status', 'completed')->count();
-
-        if ($doneCount >= $allCount) {
-            // Already completed — no need to write again
-            if ($this->status !== RequestStatus::COMPLETED) {
-                $this->update([
-                    'status'       => RequestStatus::COMPLETED,
-                    'completed_at' => $this->completed_at ?? now(),
-                ]);
-                $this->status = RequestStatus::COMPLETED;
-            }
-        } else {
-            $anyActiveOnGoing = $this->itineraries->contains(function ($it) {
-                return $it->status === 'on_going' ||
-                       $it->morning_status === 'on_going' ||
-                       $it->afternoon_status === 'on_going';
-            });
-            $targetStatus = $anyActiveOnGoing ? RequestStatus::ON_GOING : RequestStatus::DRIVER_ASSIGNED;
-            if ($this->status === RequestStatus::COMPLETED || ($this->status === RequestStatus::ON_GOING && !$anyActiveOnGoing)) {
-                $this->update([
-                    'status'       => $targetStatus,
-                    'completed_at' => null,
-                ]);
-                $this->status = $targetStatus;
-            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Request syncStatus warning on #{$this->id}: " . $e->getMessage());
         }
     }
 
@@ -418,37 +454,41 @@ class Request extends Model
 
     public function ensureItinerariesExist(): void
     {
-        if (!$this->start_time || !$this->end_time) {
-            return;
-        }
-
-        $startDate = \Carbon\Carbon::parse($this->start_time)->startOfDay();
-        $endDate = \Carbon\Carbon::parse($this->end_time)->startOfDay();
-
-        // Single-day request: clean up any empty auto-generated itinerary rows so normal assignment form is used
-        if ($startDate->equalTo($endDate)) {
-            $this->itineraries()
-                ->whereNull('morning_destination')
-                ->whereNull('afternoon_destination')
-                ->whereNull('driver_id')
-                ->delete();
-            return;
-        }
-
-        if ($this->itineraries()->count() > 0) {
-            return;
-        }
-
-        // Multi-day request: auto-generate itinerary rows for each date in range
-        if ($startDate->lessThan($endDate)) {
-            $period = \Carbon\CarbonPeriod::create($startDate, $endDate);
-            foreach ($period as $date) {
-                RequestItinerary::create([
-                    'request_id' => $this->id,
-                    'date' => $date->format('Y-m-d'),
-                    'status' => 'pending',
-                ]);
+        try {
+            if (!$this->start_time || !$this->end_time) {
+                return;
             }
+
+            $startDate = \Carbon\Carbon::parse($this->start_time)->startOfDay();
+            $endDate = \Carbon\Carbon::parse($this->end_time)->startOfDay();
+
+            // Single-day request: clean up any empty auto-generated itinerary rows so normal assignment form is used
+            if ($startDate->equalTo($endDate)) {
+                $this->itineraries()
+                    ->whereNull('morning_destination')
+                    ->whereNull('afternoon_destination')
+                    ->whereNull('driver_id')
+                    ->delete();
+                return;
+            }
+
+            if ($this->itineraries()->count() > 0) {
+                return;
+            }
+
+            // Multi-day request: auto-generate itinerary rows for each date in range
+            if ($startDate->lessThan($endDate)) {
+                $period = \Carbon\CarbonPeriod::create($startDate, $endDate);
+                foreach ($period as $date) {
+                    RequestItinerary::create([
+                        'request_id' => $this->id,
+                        'date' => $date->format('Y-m-d'),
+                        'status' => 'pending',
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Request ensureItinerariesExist warning on #{$this->id}: " . $e->getMessage());
         }
     }
 

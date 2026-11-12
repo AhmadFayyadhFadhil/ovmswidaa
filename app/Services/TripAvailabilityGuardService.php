@@ -264,81 +264,86 @@ class TripAvailabilityGuardService
      */
     public static function getLockForRequest(VehicleRequest $request, ?int $currentUserId = null): ?array
     {
-        if ($request->is_external) {
-            return null; // External rentals do not have internal odometer locks
-        }
-
-        // If this request itself is already completed or cancelled, no lock needed
-        if (in_array($request->status, [RequestStatus::COMPLETED, RequestStatus::REJECTED, RequestStatus::CANCELLED])) {
-            return null;
-        }
-
-        // Determine specific vehicle and driver for this user / trip
-        $trips = $request->relationLoaded('operationalTrips') ? $request->operationalTrips : $request->operationalTrips()->get();
-        $myTrip = $currentUserId ? ($trips->firstWhere('driver_id', $currentUserId) ?? $trips->first()) : $trips->first();
-
-        $vehicleId = null;
-        if ($request->trip_mode === 'split_drop_pickup' && $currentUserId && (int)$currentUserId === (int)$request->return_driver_id) {
-            $vehicleId = $request->return_vehicle_id ?? $myTrip?->vehicle_id ?? $request->vehicle_id;
-        } else {
-            $vehicleId = $myTrip?->vehicle_id ?? $request->vehicle_id;
-        }
-
-        $driverId = $currentUserId 
-            ?? $myTrip?->driver_id 
-            ?? $request->driver_id;
-
-        // Check vehicle lock
-        if ($vehicleId) {
-            $vLock = self::getUnfinishedTripForVehicle((int)$vehicleId, (int)$request->id);
-            if ($vLock) {
-                return [
-                    'is_locked'         => true,
-                    'lock_type'         => 'vehicle',
-                    'vehicle_name'      => $vLock['vehicle_name'],
-                    'plate_number'      => $vLock['plate_number'],
-                    'other_request_id'  => $vLock['request_id'],
-                    'other_driver_name' => $vLock['driver_name'],
-                    'message'           => $vLock['message'],
-                ];
+        try {
+            if ($request->is_external) {
+                return null; // External rentals do not have internal odometer locks
             }
-        }
 
-        // Check driver lock
-        if ($driverId) {
-            // Check if driver SIM has expired
-            $driverUser = \App\Models\User::find($driverId);
-            if ($driverUser && $driverUser->sim_expiry_date) {
-                $todayStr = now()->toDateString();
-                $simExpiryDate = \Carbon\Carbon::parse($driverUser->sim_expiry_date)->toDateString();
-                if ($simExpiryDate < $todayStr) {
-                    $simExpiryFormatted = \Carbon\Carbon::parse($driverUser->sim_expiry_date)->format('d/m/Y');
+            // If this request itself is already completed or cancelled, no lock needed
+            if (in_array($request->status, [RequestStatus::COMPLETED, RequestStatus::REJECTED, RequestStatus::CANCELLED])) {
+                return null;
+            }
+
+            // Determine specific vehicle and driver for this user / trip
+            $trips = $request->relationLoaded('operationalTrips') ? $request->operationalTrips : $request->operationalTrips()->get();
+            $myTrip = $currentUserId ? ($trips->firstWhere('driver_id', $currentUserId) ?? $trips->first()) : $trips->first();
+
+            $vehicleId = null;
+            if ($request->trip_mode === 'split_drop_pickup' && $currentUserId && (int)$currentUserId === (int)$request->return_driver_id) {
+                $vehicleId = $request->return_vehicle_id ?? $myTrip?->vehicle_id ?? $request->vehicle_id;
+            } else {
+                $vehicleId = $myTrip?->vehicle_id ?? $request->vehicle_id;
+            }
+
+            $driverId = $currentUserId 
+                ?? $myTrip?->driver_id 
+                ?? $request->driver_id;
+
+            // Check vehicle lock
+            if ($vehicleId) {
+                $vLock = self::getUnfinishedTripForVehicle((int)$vehicleId, (int)$request->id);
+                if ($vLock) {
                     return [
                         'is_locked'         => true,
-                        'lock_type'         => 'driver_sim_expired',
-                        'vehicle_name'      => null,
-                        'plate_number'      => null,
-                        'other_request_id'  => null,
-                        'other_driver_name' => $driverUser->name,
-                        'message'           => "Masa berlaku SIM Driver {$driverUser->name} telah kedaluwarsa ({$simExpiryFormatted}). Driver tidak diizinkan memulai perjalanan sampai SIM diperpanjang.",
+                        'lock_type'         => 'vehicle',
+                        'vehicle_name'      => $vLock['vehicle_name'],
+                        'plate_number'      => $vLock['plate_number'],
+                        'other_request_id'  => $vLock['request_id'],
+                        'other_driver_name' => $vLock['driver_name'],
+                        'message'           => $vLock['message'],
                     ];
                 }
             }
 
-            $dLock = self::getUnfinishedTripForDriver((int)$driverId, (int)$request->id);
-            if ($dLock) {
-                return [
-                    'is_locked'         => true,
-                    'lock_type'         => 'driver',
-                    'vehicle_name'      => $dLock['vehicle_name'],
-                    'plate_number'      => $dLock['plate_number'],
-                    'other_request_id'  => $dLock['request_id'],
-                    'other_driver_name' => $dLock['driver_name'],
-                    'message'           => $dLock['message'],
-                ];
-            }
-        }
+            // Check driver lock
+            if ($driverId) {
+                // Check if driver SIM has expired
+                $driverUser = \App\Models\User::find($driverId);
+                if ($driverUser && $driverUser->sim_expiry_date) {
+                    $todayStr = now()->toDateString();
+                    $simExpiryDate = \Carbon\Carbon::parse($driverUser->sim_expiry_date)->toDateString();
+                    if ($simExpiryDate < $todayStr) {
+                        $simExpiryFormatted = \Carbon\Carbon::parse($driverUser->sim_expiry_date)->format('d/m/Y');
+                        return [
+                            'is_locked'         => true,
+                            'lock_type'         => 'driver_sim_expired',
+                            'vehicle_name'      => null,
+                            'plate_number'      => null,
+                            'other_request_id'  => null,
+                            'other_driver_name' => $driverUser->name,
+                            'message'           => "Masa berlaku SIM Driver {$driverUser->name} telah kedaluwarsa ({$simExpiryFormatted}). Driver tidak diizinkan memulai perjalanan sampai SIM diperpanjang.",
+                        ];
+                    }
+                }
 
-        return null;
+                $dLock = self::getUnfinishedTripForDriver((int)$driverId, (int)$request->id);
+                if ($dLock) {
+                    return [
+                        'is_locked'         => true,
+                        'lock_type'         => 'driver',
+                        'vehicle_name'      => $dLock['vehicle_name'],
+                        'plate_number'      => $dLock['plate_number'],
+                        'other_request_id'  => $dLock['request_id'],
+                        'other_driver_name' => $dLock['driver_name'],
+                        'message'           => $dLock['message'],
+                    ];
+                }
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("TripAvailabilityGuardService getLockForRequest error on #{$request->id}: " . $e->getMessage());
+            return null;
+        }
     }
 }

@@ -10,8 +10,18 @@ class RequestResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $this->resource->syncStatus();
-        $this->resource->ensureItinerariesExist();
+        try {
+            $this->resource->syncStatus();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("RequestResource syncStatus error for #{$this->resource->id}: " . $e->getMessage());
+        }
+
+        try {
+            $this->resource->ensureItinerariesExist();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("RequestResource ensureItinerariesExist error for #{$this->resource->id}: " . $e->getMessage());
+        }
+
         $user = $request->user();
 
         $canApprove = false;
@@ -227,10 +237,10 @@ class RequestResource extends JsonResource
             'return_reassigned_by'    => $this->return_reassigned_by,
             'return_reassigned_by_name'=> $this->returnReassignedBy?->name,
             'return_notes'            => $this->return_notes,
-            'active_leg_stage'        => $this->calculateActiveLegStage(),
+            'active_leg_stage'        => rescue(fn() => $this->calculateActiveLegStage(), 'departure_ready', false),
             'started_at'              => $this->started_at,
             'completed_at'            => $this->completed_at,
-            'pending_previous_trip'   => \App\Services\TripAvailabilityGuardService::getLockForRequest($this->resource, $user?->id),
+            'pending_previous_trip'   => rescue(fn() => \App\Services\TripAvailabilityGuardService::getLockForRequest($this->resource, $user?->id), null, false),
             'is_overtime'             => $this->is_overtime,
             'overtime_minutes'        => $this->overtime_minutes,
             'overtime_formatted'      => $this->overtime_formatted,
