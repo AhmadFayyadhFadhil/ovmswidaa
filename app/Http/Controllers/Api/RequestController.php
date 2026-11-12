@@ -797,6 +797,15 @@ class RequestController extends Controller
                             'end_datetime' => now(),
                         ]);
                     }
+
+                    if ($vehicle) {
+                        $vehicle->update([
+                            'status'   => 'Available',
+                            'odometer' => $depEffectiveEndKm,
+                        ]);
+                    }
+                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($user->id);
+
                     return;
                 } else {
                     // Sesi 2: Jemput
@@ -823,6 +832,15 @@ class RequestController extends Controller
                             'end_datetime' => now(),
                         ]);
                     }
+
+                    if ($vehicle) {
+                        $vehicle->update([
+                            'status'   => 'Available',
+                            'odometer' => $retEffectiveEndKm,
+                        ]);
+                    }
+                    \App\Services\DriverTaskQueueService::restorePendingDriverDuty($user->id);
+
                     return;
                 }
             }
