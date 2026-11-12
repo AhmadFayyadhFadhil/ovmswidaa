@@ -478,30 +478,60 @@ class RequestController extends Controller
         }
 
         $request->validate([
-            'role'             => 'nullable|in:dept_head,hrd_head',
+            'role'             => 'nullable|string|in:dept_head,hrd_head,admin,coordinator,ga_final',
+            'stage'            => 'nullable|string|in:dept_head,coordinator,hrd_head,ga_final,all',
             'notes'            => 'nullable|string',
             'approved_by_name' => 'nullable|string|max:255',
+            'driver_id'        => 'nullable|integer',
+            'vehicle_id'       => 'nullable|integer',
         ]);
 
         $statusStr = $vehicleRequest->status instanceof RequestStatus ? $vehicleRequest->status->value : (string) $vehicleRequest->status;
-        $role = $request->input('role') ?? match($statusStr) {
-            RequestStatus::SUBMITTED->value           => 'dept_head',
-            RequestStatus::APPROVED_DEPARTMENT->value => 'hrd_head',
-            RequestStatus::ASSIGNED_BY_GA->value      => 'hrd_head',
-            default => null,
-        };
+        $user = Auth::user();
+        $isAdmin = $user && $user->hasRoleDirect('Admin');
+
+        $stage = $request->input('stage');
+        $role = $request->input('role');
+
+        if (!$role) {
+            if ($stage === 'dept_head') {
+                $role = 'dept_head';
+            } elseif ($stage === 'hrd_head' || $stage === 'ga_final') {
+                $role = 'hrd_head';
+            } else {
+                $role = match($statusStr) {
+                    RequestStatus::SUBMITTED->value           => 'dept_head',
+                    RequestStatus::APPROVED_DEPARTMENT->value => ($isAdmin && !$request->filled('driver_id') && !$vehicleRequest->driver_id ? 'dept_head' : 'hrd_head'),
+                    RequestStatus::ASSIGNED_BY_GA->value      => 'hrd_head',
+                    default => null,
+                };
+            }
+        }
+
+        if (!$role && $isAdmin) {
+            $role = 'admin';
+        }
 
         if (!$role) {
             return response()->json(['status' => 'error', 'message' => 'Request tidak dapat disetujui pada status ini'], 422);
         }
 
         try {
+            $options = [];
+            if ($request->filled('driver_id')) {
+                $options['driver_id'] = (int) $request->input('driver_id');
+            }
+            if ($request->filled('vehicle_id')) {
+                $options['vehicle_id'] = (int) $request->input('vehicle_id');
+            }
+
             $updatedRequest = $action->execute(
                 $vehicleRequest,
                 $role,
                 'approved',
                 $request->input('notes'),
-                $request->input('approved_by_name')
+                $request->input('approved_by_name'),
+                $options
             );
             
             return response()->json([

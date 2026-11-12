@@ -181,6 +181,11 @@ class RequestResource extends JsonResource
             'security_checkin_notes'  => $this->security_checkin_notes,
             'start_km'                => $this->start_km ?? $this->operationalTrip?->start_km ?? $trips->first()?->start_km ?? $this->itineraries?->first()?->start_km,
             'end_km'                  => $this->end_km ?? $this->operationalTrip?->end_km ?? $trips->first()?->end_km ?? $this->itineraries?->last()?->end_km,
+            'driver_has_started_km'   => (bool)(
+                ($this->trip_mode === 'split_drop_pickup')
+                    ? (($this->departure_start_km ?? $this->start_km) && (float)($this->departure_start_km ?? $this->start_km) > 0)
+                    : (($this->start_km ?? $this->operationalTrip?->start_km ?? $trips->first()?->start_km ?? $this->itineraries?->first()?->start_km) && (float)($this->start_km ?? $this->operationalTrip?->start_km ?? $trips->first()?->start_km ?? $this->itineraries?->first()?->start_km) > 0)
+            ),
             'total_km'                => ($this->trip_mode === 'split_drop_pickup')
                 ? (($this->departure_total_km ?? 0) + ($this->return_total_km ?? 0) ?: ($this->total_km ?? null))
                 : ($this->total_km ?? $this->operationalTrip?->total_km ?? $trips->first()?->total_km ?? ($this->itineraries ? $this->itineraries->sum('total_km') : null)),
@@ -282,22 +287,28 @@ class RequestResource extends JsonResource
             ],
             'approvals' => $this->whenLoaded('approvals', fn() =>
                 $this->approvals->map(function ($a) {
-                    $approverName = $a->approver?->name;
+                    $approver = $a->approver;
+                    $approverName = $approver?->name;
+                    $isAdmin = $approver?->hasRoleDirect('Admin') || $a->role === 'admin' || str_contains(strtolower($a->role ?? ''), 'admin');
                     $isGaTeam = $a->role === 'ga_team' || str_contains(strtolower($approverName ?? ''), 'gateam');
                     if ($isGaTeam) {
                         $specified = $this->ga_approved_by_name;
                         $approverName = $specified ? ('GA Team oleh ' . $specified) : 'GA Team (Backup Account)';
                     }
                     return [
-                        'id'       => $a->id,
-                        'role'     => $a->role === 'ga_team' ? 'GA Team Backup' : $a->role,
-                        'status'   => $a->status,
-                        'notes'    => $a->notes,
-                        'approver' => [
-                            'id'   => $a->approver?->id,
-                            'name' => $approverName,
+                        'id'          => $a->id,
+                        'role'        => $a->role === 'ga_team' ? 'GA Team Backup' : ($isAdmin ? 'admin' : $a->role),
+                        'role_label'  => $isAdmin ? 'Admin System' : ($a->role === 'ga_team' ? 'GA Team Backup' : ($a->role === 'dept_head' ? 'Kepala Departemen' : 'GA & HRD')),
+                        'status'      => $a->status,
+                        'notes'       => $a->notes,
+                        'is_admin'    => $isAdmin,
+                        'admin_label' => $isAdmin ? 'Disetujui oleh Admin' : null,
+                        'approver'    => [
+                            'id'       => $approver?->id,
+                            'name'     => $approverName,
+                            'is_admin' => $isAdmin,
                         ],
-                        'created_at' => $a->created_at,
+                        'created_at'  => $a->created_at,
                     ];
                 })
             ),
