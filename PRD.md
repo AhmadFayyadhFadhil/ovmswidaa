@@ -4,7 +4,7 @@
 ---
 
 > **Dokumen Kontinuitas Sistem, Arsitektur, Hak Akses, Riwayat Fitur, dan SOP Pengembangan**  
-> **Terakhir Diperbarui:** 9 November 2026  
+> **Terakhir Diperbarui:** 12 November 2026  
 > **Target Branch Aktif:** `dev` (Local & Remote)
 
 ---
@@ -106,6 +106,24 @@
 | **11** | Filter tanggal riwayat security default Hari Ini (*Today*) | **SUDAH** | Riwayat Security default menyaring data **Hari Ini (Today)**, dilengkapi pilihan periode (Minggu Ini, Bulan Ini, Semua, Kustom), sinkronisasi kartu statistik, dan auto-expand handling. |
 | **12** | Notifikasi Evaluasi Bintang / Rating Pemohon ke Koordinator & GA | **SUDAH** | Ulasan bintang (1–5) dan catatan pemohon mengirim notifikasi evaluasi berstatus `rated` (`req-{$id}-rated`) ke Bp Winaryo dan Tim GA. |
 
+### C. Fitur & Penyempurnaan Siklus Hidup Split Trip (Dual-Session Drop & Pickup)
+1. **Lifecycle Dua Sesi Terpisah (Sesi 1 Antar vs Sesi 2 Jemput)**:
+   - Dukungan penugasan armada dan pengemudi yang berbeda secara independen untuk Sesi Pengantaran (Sesi 1) dan Sesi Penjemputan (Sesi 2).
+   - Penambahan kolom database terpisah: `departure_total_km`, `return_total_km`, `return_start_km`, `return_end_km`, `return_checked_out_at`, `return_checked_in_at`, dsb.
+   - Akumulasi kalkulasi total jarak tempuh permohonan gabungan: `departure_total_km + return_total_km`.
+2. **Rekonsiliasi Status Permohonan & Ketersediaan Armada Otomatis**:
+   - Begitu Sesi 1 Antar discan check-in gerbang kembali ke pabrik: Mobil 1 otomatis dipulihkan menjadi **`Tersedia` (Available)** dan Driver 1 kembali `Standby`. Status permohonan otomatis berpindah menjadi **`Terjadwal Jemput`**.
+   - Stepper permohonan pada Permohonan Saya (`employee/myrequests`) menampilkan tahap aktif biru: **`TERJADWAL JEMPUT`**.
+   - Begitu Sesi 2 Jemput discan check-out keluar gerbang: Mobil 2 menjadi `In Use`, Driver 2 `On Trip`, dan status permohonan menjadi `Sedang Menjemput` / `Sedang Berjalan`.
+   - Begitu Sesi 2 Jemput discan check-in masuk gerbang pabrik: Mobil 2 kembali `Tersedia`, Driver 2 menginput KM Akhir di Portal Driver untuk menandai permohonan tuntas menjadi **`COMPLETED`**.
+3. **Penyempurnaan Pos Gerbang (Security Dashboard Scan & History)**:
+   - Tampilan multi-sesi mandiri untuk Sesi 1 dan Sesi 2 dengan indikator badge sesi, pencatatan odometer keluar/masuk per sesi, dan pencegahan tabrakan status scan gerbang.
+4. **Pencegahan Fatal Crash & Retensi Portal Driver**:
+   - Null-safety guard menyeluruh pada `assignedVehicleObj`, `partnerDriverName`, `partnerVehicleObj`, `displayDestination`, dan `displayTime` di `src/pages/driver/dasboard/index.tsx`.
+   - Tiket penugasan driver penjemputan tetap dipertahankan pada `activeTrips` sampai driver menyelesaikan input KM akhir, memunculkan prompt aksi pengisian KM akhir secara presisi setelah gerbang discan satpam.
+5. **Standarisasi Visual & Pembersihan Emoticon**:
+   - Seluruh icon/emoticon tidak relevan (seperti icon pesawat `✈️`) dan emoji non-korporat telah dibersihkan total dan digantikan oleh Google Material Icons resmi (`directions_car`, `sync`, `schedule`, `check_circle`) dengan nuansa enterprise yang bersih dan formal.
+
 ---
 
 ## 5. Standar Operasional Prosedur (SOP) Development & Deployment
@@ -113,9 +131,8 @@
 ### A. Aturan Git & Branching
 1. Seluruh pekerjaan pengembangan **WAJIB** berada di branch `dev`.
 2. Jangan melakukan commit langsung ke branch `main`.
-3. Sebelum melakukan commit frontend, pastikan lolos type-check:
+3. Sebelum melakukan commit frontend, pastikan lolos type-check dan build:
    ```bash
-   npx tsc --noEmit
    npm run build
    ```
 4. Sebelum melakukan commit backend, pastikan sintaks bebas dari error:
@@ -132,9 +149,9 @@
   ```
 * **Frontend DEV**:
   ```bash
-  cd /www/wwwroot/ovmsdev.widatra.com/frontend && git reset --hard && git pull origin dev
+  cd /www/wwwroot/ovmsdev.widatra.com/frontend && git reset --hard && git pull origin dev && rm -f .env .env.production .env.local && npx vite build
   ```
-  *(Catatan: folder `dist/` sudah otomatis ter-compile dan ter-push dari lokal, tidak perlu menjalankan build di server).*
+  *(Catatan alternatif: jika folder `dist/` sudah otomatis ter-compile dan di-push dari lokal, cukup `git reset --hard && git pull origin dev`).*
 
 ### C. Prosedur Rilis ke Server LIVE (Production)
 Setelah fitur diuji tuntas di lingkungan DEV:
@@ -153,5 +170,5 @@ Setelah fitur diuji tuntas di lingkungan DEV:
    ```
 3. **Frontend LIVE**:
    ```bash
-   cd /www/wwwroot/OVMS/frontend && git reset --hard && git pull origin main
+   cd /www/wwwroot/OVMS/frontend && git reset --hard && git pull origin main && rm -f .env .env.production .env.local && npx vite build
    ```
