@@ -4,7 +4,7 @@
 ---
 
 > **Dokumen Kontinuitas Sistem, Arsitektur, Hak Akses, Riwayat Fitur, dan SOP Pengembangan**  
-> **Terakhir Diperbarui:** 12 November 2026  
+> **Terakhir Diperbarui:** 16 November 2026  
 > **Target Branch Aktif:** `dev` (Local & Remote)
 
 ---
@@ -23,15 +23,15 @@
 
 ---
 
-## 2. Status Repositori & Git Branching
+## 2. Status Repositori & Git Branching (per 16 November 2026)
 
 1. **Repositori Backend**: `AhmadFayyadhFadhil/ovmswidaa`
    * **Path Lokal**: `d:\ovmswida2`
-   * **Branch Aktif**: `dev`
+   * **Branch Aktif**: `dev` (Commit: `70fa3ad` - *feat: implement multi-request pooling, master qr, and auto-chaining km*)
    * **Aturan**: Seluruh modifikasi backend dimulai dan diuji di branch `dev`. Merge ke `main` hanya saat siap rilis produksi.
 2. **Repositori Frontend**: `AhmadFayyadhFadhil/ovmswidaafe`
    * **Path Lokal**: `D:\OVMS`
-   * **Branch Aktif**: `dev`
+   * **Branch Aktif**: `dev` (Commit: `1acc829` - *feat: add multi-request pooling UI, master QR, and auto-chained km support*)
    * **Aturan**: Seluruh modifikasi UI/UX diuji via `npx tsc --noEmit` dan `npm run build` sebelum di-push ke remote `origin/dev`.
 
 ---
@@ -89,15 +89,15 @@
 6. **Sistem Upload Avatar & Berkas Anti-Finfo**: Menggunakan Pure Native PHP Binary Stream ganda (`storage/app/public/` & `public/storage/`) untuk server tanpa ekstensi PHP `fileinfo`.
 7. **Sistem Notifikasi Enterprise**: Polling latar belakang senyap (SWR), persistent read/delete state berbasis event token `req-{id}-{status}`, dan role-aware filtering.
 
-### B. 12 Poin Revisi Operasional OVMS (Status: 10 Selesai, 2 Pending)
+### B. 12 Poin Revisi Operasional OVMS (Status: 12 Selesai, 0 Pending)
 
 | No | Poin Revisi | Status | Keterangan Implementasi |
 | :---: | :--- | :---: | :--- |
 | **1** | Modul *Buat Permohonan* & *Permohonan Saya* untuk Driver Coordinator | **SUDAH** | Bp Winaryo dapat mengajukan permohonan langsung dan memantau statusnya di sidebar/dashboard layout. |
 | **2** | Tanda bintang merah mandatory (`*`) pada form pengajuan | **SUDAH** | Indikator visual field wajib (`*` merah) di seluruh input pengajuan [createrequest](file:///D:/OVMS/src/pages/employee/createrequest/index.tsx). |
-| **3** | Rekapitulasi riwayat & sinkronisasi status trip gabungan (*merged trip*) | *PENDING* | Penyesuaian tampilan riwayat permohonan dan alur status untuk permohonan gabungan. |
+| **3** | Rekapitulasi riwayat & sinkronisasi status trip gabungan (*merged trip*) | **SUDAH** | Implementasi Multi-Request Pooling / Shared Ride: Master QR tunggal, sinkronisasi status transaksional gerbang, dan rekapitulasi rombongan di GA, Driver, dan Security. |
 | **4** | Catatan Penumpang Tambahan Hari-H di Pos Security | **SUDAH** | Sistem hybrid: input teks nama bebas dan/atau pencarian autocomplete karyawan internal dari `/users-search` di modal scan checkout security. |
-| **5** | Penjadwalan & Multi-trip Driver | *PENDING* | Fleksibilitas penugasan 1 driver untuk lebih dari 1 permohonan/itinerary pada hari yang sama. |
+| **5** | Penjadwalan & Multi-trip Driver | **SUDAH** | Penjadwalan multi-request dan Auto-Chaining KM antar-trip penjemputan bertahap tanpa perlu supir mengetik ulang speedometer. |
 | **6** | Bypass validasi H-1 untuk GA & Driver Coordinator | **SUDAH** | Tim GA dan Koordinator Driver dapat membuat permohonan armada untuk hari-H (tanpa terblokir validasi H-1). |
 | **7** | Akun bersama Pos Security & penyesuaian login | **SUDAH** | Label login diubah menjadi *"NIK / Username / Email"* dan mendukung akun pos security bersama (`security` / NIK: `SECURITY`). |
 | **8** | Opsi *"Tanpa Penumpang"* untuk muatan logistik / barang / dokumen | **SUDAH** | Checkbox *"Tanpa Penumpang"* menonaktifkan validasi wajib daftar penumpang saat pengajuan khusus kargo barang. |
@@ -123,6 +123,24 @@
    - Tiket penugasan driver penjemputan tetap dipertahankan pada `activeTrips` sampai driver menyelesaikan input KM akhir, memunculkan prompt aksi pengisian KM akhir secara presisi setelah gerbang discan satpam.
 5. **Standarisasi Visual & Pembersihan Emoticon**:
    - Seluruh icon/emoticon tidak relevan (seperti icon pesawat `✈️`) dan emoji non-korporat telah dibersihkan total dan digantikan oleh Google Material Icons resmi (`directions_car`, `sync`, `schedule`, `check_circle`) dengan nuansa enterprise yang bersih dan formal.
+
+### D. Fitur Multi-Request Pooling / Shared Ride & Auto-Chaining KM (November 2026)
+1. **Zero Effort Penumpang**: Penumpang tidak perlu memindai kode atau membuka aplikasi di gerbang satpam. Seluruh proses otentikasi keluar gerbang ditangani supir via Master QR.
+2. **Driver Master QR (`POOL-QR-...`)**: Supir memegang 1 Master QR pada dashboard yang secara otomatis merangkum seluruh penumpang dan tujuan yang digabungkan.
+3. **Gate Security One-Click Checkout**: Satpam memindai 1 Master QR, menampilkan daftar seluruh rombongan, dan tombol *"Konfirmasi Berangkat Rombongan"* langsung mengubah seluruh tiket menjadi `ON_GOING` serta mencatat KM Awal yang sama secara transaksional dalam 1 kali aksi.
+4. **Asynchronous Returns & Auto-Chaining KM**:
+   - Jika kepulangan bertahap (jam berbeda): Tiket kloter pertama check-in -> KM Akhir tercatat -> tiket pertama selesai -> gembok ketersediaan kendaraan terbuka.
+   - Saat supir berangkat menjemput tiket kedua, KM awal otomatis mengambil KM akhir tiket pertama via tombol Auto-Chain tanpa supir perlu mengetik manual speedometer.
+   - Jika penjemputan ditugaskan ke supir berbeda, jadwal penjemputan otomatis muncul di akun supir penjemput yang bersangkutan.
+5. **Komponen Backend**:
+   - Migrasi: `2026_11_16_000001_add_pooling_fields_to_requests_table.php` (`pool_group_id`, `is_pooled`, `master_pool_qr`, `chained_from_request_id`).
+   - Action: `AssignDriverAction::poolRequests()`.
+   - Guard: `TripAvailabilityGuardService` mendukung parameter `$excludePoolGroupId`.
+   - Controller: `SecurityController` (Master QR support, synchronized checkout) & `AssignmentController@poolStore`.
+6. **Komponen Frontend**:
+   - GA/HRD Request List: Multi-select checkbox, Floating Action Bar, dan Modal Gabung Jadwal.
+   - Driver Dashboard: Hero Card Rombongan, daftar penumpang pooled, Master QR, dan tombol Auto-Chain KM.
+   - Security Dashboard: Banner Rombongan Perjalanan Gabungan dan tombol Konfirmasi Berangkat Rombongan.
 
 ---
 
