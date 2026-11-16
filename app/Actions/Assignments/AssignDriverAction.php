@@ -57,16 +57,17 @@ class AssignDriverAction
             }
 
             $poolGroupId = $data['pool_group_id'] ?? $request->pool_group_id;
+            $pooledRequestIds = $data['pooled_request_ids'] ?? [];
 
             // ===== VALIDATE DRIVER & VEHICLE TIME CONFLICTS =====
             // 1. Sesi Keberangkatan / Antar:
-            $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $depEndTime, $poolGroupId);
-            $this->validateVehicleTimeConflict($vehicleId, $request, $effectiveStartTime, $depEndTime, $poolGroupId);
+            $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $depEndTime, $poolGroupId, $pooledRequestIds);
+            $this->validateVehicleTimeConflict($vehicleId, $request, $effectiveStartTime, $depEndTime, $poolGroupId, $pooledRequestIds);
 
             // 2. Sesi Penjemputan (khusus split_drop_pickup):
             if ($isSplitTrip && $returnDepartureTime) {
-                $this->validateDriverTimeConflict($returnDriverId, $request, $returnDepartureTime, $effectiveEndTime, $poolGroupId);
-                $this->validateVehicleTimeConflict($returnVehicleId, $request, $returnDepartureTime, $effectiveEndTime, $poolGroupId);
+                $this->validateDriverTimeConflict($returnDriverId, $request, $returnDepartureTime, $effectiveEndTime, $poolGroupId, $pooledRequestIds);
+                $this->validateVehicleTimeConflict($returnVehicleId, $request, $returnDepartureTime, $effectiveEndTime, $poolGroupId, $pooledRequestIds);
             }
 
             // Priority check
@@ -282,7 +283,7 @@ class AssignDriverAction
      * Validate driver doesn't have conflicting assignment at the same time
      * Supports smart leg checking for split_drop_pickup requests
      */
-    private function validateDriverTimeConflict(int $driverId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null, ?string $ignorePoolGroupId = null): void
+    private function validateDriverTimeConflict(int $driverId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null, ?string $ignorePoolGroupId = null, array $ignoreRequestIds = []): void
     {
         $startTime = $effectiveStartTime ?? ($request->start_time ? \Carbon\Carbon::parse($request->start_time) : null);
         $endTime = $effectiveEndTime ?? ($request->end_time ? \Carbon\Carbon::parse($request->end_time) : null);
@@ -295,8 +296,13 @@ class AssignDriverAction
                 $dQuery->where('driver_id', $driverId)
                        ->orWhere('return_driver_id', $driverId);
             })
-            ->where('id', '!=', $request->id)
             ->whereNotIn('status', ['completed', 'cancelled', 'rejected']);
+
+        if (!empty($ignoreRequestIds)) {
+            $conflictQuery->whereNotIn('id', array_unique(array_merge([$request->id], $ignoreRequestIds)));
+        } else {
+            $conflictQuery->where('id', '!=', $request->id);
+        }
 
         $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id;
         if (!empty($poolGroup)) {
@@ -341,7 +347,7 @@ class AssignDriverAction
      * Validate vehicle doesn't have conflicting assignment at the same time
      * Supports smart leg checking for split_drop_pickup requests
      */
-    private function validateVehicleTimeConflict(int $vehicleId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null, ?string $ignorePoolGroupId = null): void
+    private function validateVehicleTimeConflict(int $vehicleId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null, ?string $ignorePoolGroupId = null, array $ignoreRequestIds = []): void
     {
         $startTime = $effectiveStartTime ?? ($request->start_time ? \Carbon\Carbon::parse($request->start_time) : null);
         $endTime = $effectiveEndTime ?? ($request->end_time ? \Carbon\Carbon::parse($request->end_time) : null);
@@ -354,8 +360,13 @@ class AssignDriverAction
                 $vQuery->where('vehicle_id', $vehicleId)
                        ->orWhere('return_vehicle_id', $vehicleId);
             })
-            ->where('id', '!=', $request->id)
             ->whereNotIn('status', ['completed', 'cancelled', 'rejected']);
+
+        if (!empty($ignoreRequestIds)) {
+            $conflictQuery->whereNotIn('id', array_unique(array_merge([$request->id], $ignoreRequestIds)));
+        } else {
+            $conflictQuery->where('id', '!=', $request->id);
+        }
 
         $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id;
         if (!empty($poolGroup)) {
@@ -420,14 +431,23 @@ class AssignDriverAction
 
         $updatedRequests = [];
 
-        DB::transaction(function () use ($requests, $driverId, $vehicleId, $data, $poolGroupId, $masterPoolQr, &$updatedRequests) {
+        DB::transaction(function () use ($requests, $requestIds, $driverId, $vehicleId, $data, $poolGroupId, $masterPoolQr, &$updatedRequests) {
+            // Pre-stamp all requests in the pool with pool_group_id so mutual operations recognize the group
+            Request::whereIn('id', $requestIds)->update([
+                'pool_group_id'  => $poolGroupId,
+                'is_pooled'      => true,
+                'master_pool_qr' => $masterPoolQr,
+            ]);
+
             $previousReqId = null;
 
             foreach ($requests as $idx => $req) {
+                $req->refresh();
                 $reqData = $data;
                 $reqData['pool_group_id'] = $poolGroupId;
                 $reqData['is_pooled'] = true;
                 $reqData['master_pool_qr'] = $masterPoolQr;
+                $reqData['pooled_request_ids'] = $requestIds;
 
                 // For subsequent legs or requests in pool, record chained_from_request_id
                 if ($previousReqId !== null) {
