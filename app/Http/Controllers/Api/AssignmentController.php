@@ -456,30 +456,57 @@ class AssignmentController extends Controller
 
     public function cancel(Assignment $assignment): JsonResponse
     {
-        if (!$this->hasRoleDirect(Auth::user(), ['Admin', 'admin']) && !Auth::user()->isHrGaHead() && !$this->hasRoleDirect(Auth::user(), ['GA', 'ga'])) {
+        $user = Auth::user();
+        if (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator', 'coordinator']) && !$user->isHrGaHead()) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
         }
 
-        if ($assignment->status !== 'pending_driver') {
-            return response()->json(['status' => 'error', 'message' => 'Tidak dapat membatalkan assignment yang sudah diproses'], 422);
+        if (in_array($assignment->status, ['completed', 'rejected', 'cancelled'], true)) {
+            return response()->json(['status' => 'error', 'message' => 'Tidak dapat membatalkan assignment yang sudah selesai atau dibatalkan'], 422);
         }
 
-        // Kembalikan status request ke state sebelumnya (submitted)
-        $revertStatus = \App\Enums\RequestStatus::SUBMITTED;
+        $vReq = $assignment->request;
 
-        $assignment->request()->update([
-            'status'      => $revertStatus,
-            'driver_id'   => null,
-            'vehicle_id'  => null,
-            'assigned_by' => null,
-            'assigned_at' => null,
-            'driver_response_status' => null,
-            'qr_code_token' => null,
-        ]);
+        // Reset driver availability status
+        if ($assignment->driver) {
+            try {
+                $assignment->driver->update(['availability_status' => 'available']);
+            } catch (\Throwable $ex) {}
+        }
 
-        $assignment->delete();
+        if ($vReq) {
+            // Check approvals to revert to the proper approved state
+            $hasHrdGaApproval = $vReq->approvals()->whereIn('role', ['hrd', 'ga', 'hr_ga_head', 'ga_coordinator', 'ga_team'])->where('status', 'approved')->exists();
+            $revertStatus = $hasHrdGaApproval ? \App\Enums\RequestStatus::APPROVED_HRD_GA : \App\Enums\RequestStatus::APPROVED_DEPARTMENT;
 
-        return response()->json(['status' => 'success', 'message' => 'Assignment berhasil dibatalkan'], 200);
+            // Delete operational trips
+            \App\Models\OperationalTrip::where('request_id', $vReq->id)->delete();
+
+            $vReq->update([
+                'status'                 => $revertStatus,
+                'driver_id'              => null,
+                'vehicle_id'             => null,
+                'assigned_by'            => null,
+                'assigned_at'            => null,
+                'return_driver_id'       => null,
+                'return_vehicle_id'      => null,
+                'return_departure_time'  => null,
+                'return_notes'           => null,
+                'is_pooled'              => false,
+                'pool_group_id'          => null,
+                'master_pool_qr'         => null,
+                'chained_from_request_id'=> null,
+                'driver_response_status' => null,
+                'qr_code_token'          => null,
+            ]);
+
+            // Delete all assignments associated with this request
+            \App\Models\Assignment::where('request_id', $vReq->id)->delete();
+        } else {
+            $assignment->delete();
+        }
+
+        return response()->json(['status' => 'success', 'message' => 'Penugasan driver berhasil dibatalkan'], 200);
     }
 
     public function storeDailyAssignments(Request $request, VehicleRequest $vehicleRequest): JsonResponse
