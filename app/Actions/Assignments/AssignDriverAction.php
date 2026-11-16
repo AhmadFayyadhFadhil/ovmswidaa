@@ -91,6 +91,13 @@ class AssignDriverAction
             $asgStatus = $isDirectScheduled ? 'accepted' : 'allocated';
             $reqStatus = $isDirectScheduled ? RequestStatus::DRIVER_ASSIGNED : RequestStatus::ASSIGNED_BY_GA;
 
+            // Cancel any old assignments for drivers not part of this new assignment
+            $activeDriverIds = array_filter([$driverId, $returnDriverId]);
+            Assignment::where('request_id', $request->id)
+                ->whereNotIn('driver_id', $activeDriverIds)
+                ->whereNotIn('status', ['completed'])
+                ->update(['status' => 'cancelled']);
+
             // Create assignment for primary (departure) driver
             $assignment = Assignment::create([
                 'request_id'  => $request->id,
@@ -238,6 +245,15 @@ class AssignDriverAction
             'return_reassigned_by'  => $assignerId,
             'return_reassign_notes' => $notes,
         ]);
+
+        // Cancel any previous return driver assignment if different from departure and new driver
+        try {
+            Assignment::where('request_id', $request->id)
+                ->where('driver_id', '!=', $request->driver_id)
+                ->where('driver_id', '!=', $newDriverId)
+                ->whereNotIn('status', ['completed'])
+                ->update(['status' => 'cancelled']);
+        } catch (\Throwable $e) {}
 
         // Update or create assignment record for return driver
         try {
