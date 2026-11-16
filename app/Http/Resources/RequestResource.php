@@ -125,6 +125,11 @@ class RequestResource extends JsonResource
                         'status'            => $r->status instanceof \BackedEnum ? $r->status->value : (string)$r->status,
                         'passenger_count'   => $r->passenger_count,
                         'passengers'        => $r->passengers->map(fn($p) => ['name' => $p->name, 'notes' => $p->notes]),
+                        'driver_id'         => $r->driver_id,
+                        'vehicle_id'        => $r->vehicle_id,
+                        'return_driver_id'  => $r->return_driver_id,
+                        'return_vehicle_id' => $r->return_vehicle_id,
+                        'trip_mode'         => $r->trip_mode,
                     ]), collect());
             }),
             'all_drivers_approved' => $allDriversApproved,
