@@ -456,16 +456,34 @@ class SecurityController extends Controller
                                     ->get();
 
                                 foreach ($otherPooledReqs as $otherReq) {
-                                    $otherReqData = [
-                                        'status'                   => RequestStatus::ON_GOING,
-                                        'departure_checked_out_at' => $scanTime,
-                                        'departure_checkout_by'    => $validated['security_name'],
-                                    ];
-                                    if ($inputStartKm !== null) {
-                                        $otherReqData['departure_start_km'] = $inputStartKm;
-                                        $otherReqData['start_km']           = $inputStartKm;
+                                    if ($otherReq->driver_id == $vehicleRequest->driver_id) {
+                                        $otherReqData = [
+                                            'status'                   => RequestStatus::ON_GOING,
+                                            'departure_checked_out_at' => $scanTime,
+                                            'departure_checkout_by'    => $validated['security_name'],
+                                        ];
+                                        if ($inputStartKm !== null) {
+                                            $otherReqData['departure_start_km'] = $inputStartKm;
+                                            $otherReqData['start_km']           = $inputStartKm;
+                                        }
+                                        $otherReq->update($otherReqData);
+
+                                        $otherTrip1 = \App\Models\OperationalTrip::where('request_id', $otherReq->id)
+                                            ->where('driver_id', $vehicleRequest->driver_id)
+                                            ->orderBy('id', 'asc')
+                                            ->first();
+                                        if ($otherTrip1) {
+                                            $ot1Data = [
+                                                'status'                  => 'on_going',
+                                                'security_checked_out_at' => $scanTime,
+                                                'security_checkout_by'    => $validated['security_name'],
+                                            ];
+                                            if ($inputStartKm !== null) {
+                                                $ot1Data['start_km'] = $inputStartKm;
+                                            }
+                                            $otherTrip1->update($ot1Data);
+                                        }
                                     }
-                                    $otherReq->update($otherReqData);
                                 }
                                 $customMessage = 'Scan Checkout Rombongan Perjalanan Gabungan (' . ($otherPooledReqs->count() + 1) . ' permohonan) Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan berangkat.';
                             } else {
@@ -515,7 +533,46 @@ class SecurityController extends Controller
                                 $retVehicle->update($vData);
                             }
 
-                            $customMessage = 'Scan Checkout Sesi Jemput berhasil. Driver (' . ($retDriver?->name ?? 'Driver') . ') berangkat menjemput.';
+                            if ($vehicleRequest->pool_group_id) {
+                                $otherPooledReqs = VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                                    ->where('id', '!=', $vehicleRequest->id)
+                                    ->whereNotIn('status', [RequestStatus::COMPLETED, RequestStatus::CANCELLED, RequestStatus::REJECTED])
+                                    ->get();
+
+                                foreach ($otherPooledReqs as $otherReq) {
+                                    $otherRetDriverId = $otherReq->return_driver_id ?? $otherReq->driver_id;
+                                    if ($otherRetDriverId == $retDriverId) {
+                                        $otherReqData = [
+                                            'status'                => RequestStatus::ON_GOING,
+                                            'return_checked_out_at' => $scanTime,
+                                            'return_checkout_by'    => $validated['security_name'],
+                                        ];
+                                        if ($inputStartKm !== null) {
+                                            $otherReqData['return_start_km'] = $inputStartKm;
+                                        }
+                                        $otherReq->update($otherReqData);
+
+                                        $otherTrip2 = \App\Models\OperationalTrip::where('request_id', $otherReq->id)
+                                            ->where('driver_id', $otherRetDriverId)
+                                            ->orderBy('id', 'desc')
+                                            ->first();
+                                        if ($otherTrip2) {
+                                            $ot2Data = [
+                                                'status'                  => 'on_going',
+                                                'security_checked_out_at' => $scanTime,
+                                                'security_checkout_by'    => $validated['security_name'],
+                                            ];
+                                            if ($inputStartKm !== null) {
+                                                $ot2Data['start_km'] = $inputStartKm;
+                                            }
+                                            $otherTrip2->update($ot2Data);
+                                        }
+                                    }
+                                }
+                                $customMessage = 'Scan Checkout Rombongan Perjalanan Gabungan Sesi Jemput berhasil. Driver (' . ($retDriver?->name ?? 'Driver') . ') berangkat menjemput.';
+                            } else {
+                                $customMessage = 'Scan Checkout Sesi Jemput berhasil. Driver (' . ($retDriver?->name ?? 'Driver') . ') berangkat menjemput.';
+                            }
                         }
                     } else {
                         $reqData = [
@@ -811,7 +868,47 @@ class SecurityController extends Controller
                                 $vehicleRequest->vehicle->update($vData);
                             }
 
-                            $customMessage = 'Scan Checkin Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan telah kembali ke pabrik dan siap untuk tugas lain.';
+                            if ($vehicleRequest->pool_group_id) {
+                                $otherPooledReqs = VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                                    ->where('id', '!=', $vehicleRequest->id)
+                                    ->whereNotIn('status', [RequestStatus::COMPLETED, RequestStatus::CANCELLED, RequestStatus::REJECTED])
+                                    ->get();
+
+                                foreach ($otherPooledReqs as $otherReq) {
+                                    if ($otherReq->driver_id == $vehicleRequest->driver_id) {
+                                        $otherReqData = [
+                                            'status'                  => RequestStatus::DRIVER_ASSIGNED,
+                                            'departure_checked_in_at' => $scanTime,
+                                            'departure_checkin_by'    => $validated['security_name'],
+                                        ];
+                                        if ($inputEndKm !== null) {
+                                            $otherReqData['departure_end_km']   = $depEffectiveEndKm;
+                                            $otherReqData['departure_total_km'] = $depTotKm;
+                                        }
+                                        $otherReq->update($otherReqData);
+
+                                        $otherTrip1 = \App\Models\OperationalTrip::where('request_id', $otherReq->id)
+                                            ->where('driver_id', $vehicleRequest->driver_id)
+                                            ->orderBy('id', 'asc')
+                                            ->first();
+                                        if ($otherTrip1) {
+                                            $ot1Data = [
+                                                'status'                 => 'completed',
+                                                'security_checked_in_at' => $scanTime,
+                                                'security_checkin_by'    => $validated['security_name'],
+                                            ];
+                                            if ($inputEndKm !== null) {
+                                                $ot1Data['end_km'] = $depEffectiveEndKm;
+                                                $ot1Data['total_km'] = $depTotKm;
+                                            }
+                                            $otherTrip1->update($ot1Data);
+                                        }
+                                    }
+                                }
+                                $customMessage = 'Scan Checkin Rombongan Perjalanan Gabungan (' . ($otherPooledReqs->count() + 1) . ' permohonan) Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan telah kembali ke pabrik.';
+                            } else {
+                                $customMessage = 'Scan Checkin Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan telah kembali ke pabrik dan siap untuk tugas lain.';
+                            }
                         } else {
                             // STAGE 4: Checkin Selesai (Sesi Jemput Selesai)
                             $retStartKm = $vehicleRequest->return_start_km ?? 0;
@@ -876,7 +973,55 @@ class SecurityController extends Controller
                                 $retVehicle->update($vData);
                             }
 
-                            $customMessage = 'Scan Checkin Sesi Jemput berhasil. Seluruh rangkaian perjalanan telah SELESAI (Completed). Total KM: ' . $totalKmCombined . ' KM.';
+                            if ($vehicleRequest->pool_group_id) {
+                                $otherPooledReqs = VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                                    ->where('id', '!=', $vehicleRequest->id)
+                                    ->whereNotIn('status', [RequestStatus::CANCELLED, RequestStatus::REJECTED])
+                                    ->get();
+
+                                foreach ($otherPooledReqs as $otherReq) {
+                                    $otherRetDriverId = $otherReq->return_driver_id ?? $otherReq->driver_id;
+                                    if ($otherRetDriverId == $retDriverId) {
+                                        $otherTotKmCombined = ($otherReq->departure_total_km ?? 0) + ($retTotKm ?? 0);
+                                        $otherReqData = [
+                                            'status'                 => RequestStatus::COMPLETED,
+                                            'completed_at'           => $scanTime,
+                                            'security_checked_in_at' => $scanTime,
+                                            'security_checkin_by'    => $validated['security_name'],
+                                            'security_checkin_notes' => $validated['notes'] ?? null,
+                                            'return_checked_in_at'   => $scanTime,
+                                            'return_checkin_by'      => $validated['security_name'],
+                                        ];
+                                        if ($inputEndKm !== null) {
+                                            $otherReqData['return_end_km']   = $retEffectiveEndKm;
+                                            $otherReqData['return_total_km'] = $retTotKm;
+                                            $otherReqData['end_km']          = $retEffectiveEndKm;
+                                            $otherReqData['total_km']        = $otherTotKmCombined;
+                                        }
+                                        $otherReq->update($otherReqData);
+
+                                        $otherTrip2 = \App\Models\OperationalTrip::where('request_id', $otherReq->id)
+                                            ->where('driver_id', $otherRetDriverId)
+                                            ->orderBy('id', 'desc')
+                                            ->first();
+                                        if ($otherTrip2) {
+                                            $ot2Data = [
+                                                'status'                 => 'completed',
+                                                'security_checked_in_at' => $scanTime,
+                                                'security_checkin_by'    => $validated['security_name'],
+                                            ];
+                                            if ($inputEndKm !== null) {
+                                                $ot2Data['end_km'] = $retEffectiveEndKm;
+                                                $ot2Data['total_km'] = $retTotKm;
+                                            }
+                                            $otherTrip2->update($ot2Data);
+                                        }
+                                    }
+                                }
+                                $customMessage = 'Scan Checkin Rombongan Perjalanan Gabungan Sesi Jemput berhasil. Seluruh rangkaian perjalanan telah SELESAI (Completed). Total KM: ' . $totalKmCombined . ' KM.';
+                            } else {
+                                $customMessage = 'Scan Checkin Sesi Jemput berhasil. Seluruh rangkaian perjalanan telah SELESAI (Completed). Total KM: ' . $totalKmCombined . ' KM.';
+                            }
                         }
                     } else {
                         $stKmReq = $vehicleRequest->start_km ?? 0;
@@ -927,6 +1072,54 @@ class SecurityController extends Controller
                                     }
                                 }
                             }
+                        }
+
+                        if ($vehicleRequest->pool_group_id) {
+                            $otherPooledReqs = VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                                ->where('id', '!=', $vehicleRequest->id)
+                                ->whereNotIn('status', [RequestStatus::CANCELLED, RequestStatus::REJECTED])
+                                ->get();
+
+                            foreach ($otherPooledReqs as $otherReq) {
+                                if ($otherReq->driver_id == $vehicleRequest->driver_id) {
+                                    $otherStKmReq = $otherReq->start_km ?? 0;
+                                    $otherReqData = [
+                                        'security_checked_in_at' => $scanTime,
+                                        'security_checkin_by'    => $validated['security_name'],
+                                        'security_checkin_notes' => $validated['notes'] ?? null,
+                                    ];
+                                    if ($effectiveEndKm !== null || $otherReq->is_external) {
+                                        $otherReqData['status'] = RequestStatus::COMPLETED;
+                                        $otherReqData['completed_at'] = $otherReq->completed_at ?? $scanTime;
+                                        if ($effectiveEndKm !== null) {
+                                            $otherReqData['end_km'] = $effectiveEndKm;
+                                            $otherReqData['total_km'] = max(0, $effectiveEndKm - $otherStKmReq);
+                                        }
+                                    }
+                                    $otherReq->update($otherReqData);
+
+                                    if (!$otherReq->is_external) {
+                                        $oTrips = \App\Models\OperationalTrip::where('request_id', $otherReq->id)->get();
+                                        foreach ($oTrips as $oTrip) {
+                                            $oStTripKm = $oTrip->start_km ?? $otherStKmReq;
+                                            $oTripEffectiveEndKm = $effectiveEndKm ?? $oTrip->end_km;
+                                            $otData = [
+                                                'security_checked_in_at' => $scanTime,
+                                                'security_checkin_by'    => $validated['security_name'],
+                                                'security_checkin_notes' => $validated['notes'] ?? null,
+                                            ];
+                                            if ($oTripEffectiveEndKm !== null) {
+                                                $otData['status'] = 'completed';
+                                                $otData['end_datetime'] = $oTrip->end_datetime ?? $scanTime;
+                                                $otData['end_km'] = $oTripEffectiveEndKm;
+                                                $otData['total_km'] = max(0, $oTripEffectiveEndKm - $oStTripKm);
+                                            }
+                                            $oTrip->update($otData);
+                                        }
+                                    }
+                                }
+                            }
+                            $customMessage = 'Scan Checkin Rombongan Perjalanan Gabungan (' . ($otherPooledReqs->count() + 1) . ' permohonan) berhasil. Perjalanan dinas telah SELESAI.';
                         }
                     }
                 }
