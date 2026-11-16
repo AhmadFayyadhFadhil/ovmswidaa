@@ -662,6 +662,16 @@ class RequestController extends Controller
                         'departure_start_km' => $startKm,
                         'start_km'           => $startKm,
                     ]);
+                    if ($vehicleRequest->pool_group_id) {
+                        VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                            ->where('id', '!=', $vehicleRequest->id)
+                            ->whereNull('departure_checked_out_at')
+                            ->whereNull('security_checked_out_at')
+                            ->update([
+                                'departure_start_km' => $startKm,
+                                'start_km'           => $startKm,
+                            ]);
+                    }
                     if ($myTrip) {
                         $myTrip->update(['start_km' => $startKm]);
                     }
@@ -683,6 +693,17 @@ class RequestController extends Controller
             } else {
                 // Update request start_km
                 $vehicleRequest->update(['start_km' => $startKm]);
+
+                if ($vehicleRequest->pool_group_id) {
+                    VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                        ->where('id', '!=', $vehicleRequest->id)
+                        ->whereNull('departure_checked_out_at')
+                        ->whereNull('security_checked_out_at')
+                        ->update([
+                            'departure_start_km' => $startKm,
+                            'start_km'           => $startKm,
+                        ]);
+                }
 
                 // Update operational trip for this driver
                 if ($myTrip) {

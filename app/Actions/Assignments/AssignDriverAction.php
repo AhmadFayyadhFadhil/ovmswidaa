@@ -56,15 +56,17 @@ class AssignDriverAction
                 }
             }
 
+            $poolGroupId = $data['pool_group_id'] ?? $request->pool_group_id;
+
             // ===== VALIDATE DRIVER & VEHICLE TIME CONFLICTS =====
             // 1. Sesi Keberangkatan / Antar:
-            $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $depEndTime);
-            $this->validateVehicleTimeConflict($vehicleId, $request, $effectiveStartTime, $depEndTime);
+            $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $depEndTime, $poolGroupId);
+            $this->validateVehicleTimeConflict($vehicleId, $request, $effectiveStartTime, $depEndTime, $poolGroupId);
 
             // 2. Sesi Penjemputan (khusus split_drop_pickup):
             if ($isSplitTrip && $returnDepartureTime) {
-                $this->validateDriverTimeConflict($returnDriverId, $request, $returnDepartureTime, $effectiveEndTime);
-                $this->validateVehicleTimeConflict($returnVehicleId, $request, $returnDepartureTime, $effectiveEndTime);
+                $this->validateDriverTimeConflict($returnDriverId, $request, $returnDepartureTime, $effectiveEndTime, $poolGroupId);
+                $this->validateVehicleTimeConflict($returnVehicleId, $request, $returnDepartureTime, $effectiveEndTime, $poolGroupId);
             }
 
             // Priority check
@@ -134,6 +136,15 @@ class AssignDriverAction
                 'driver_response_status' => $asgStatus,
                 'qr_code_token'          => $qrCodeToken,
             ];
+
+            if (isset($data['pool_group_id'])) {
+                $updatePayload['pool_group_id'] = $data['pool_group_id'];
+                $updatePayload['is_pooled'] = (bool)($data['is_pooled'] ?? true);
+                $updatePayload['master_pool_qr'] = $data['master_pool_qr'] ?? null;
+            }
+            if (isset($data['chained_from_request_id'])) {
+                $updatePayload['chained_from_request_id'] = $data['chained_from_request_id'];
+            }
 
             if ($isSplitTrip) {
                 $updatePayload['return_departure_time'] = $returnDepartureTime ? $returnDepartureTime->format('Y-m-d H:i:s') : null;
@@ -271,7 +282,7 @@ class AssignDriverAction
      * Validate driver doesn't have conflicting assignment at the same time
      * Supports smart leg checking for split_drop_pickup requests
      */
-    private function validateDriverTimeConflict(int $driverId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null): void
+    private function validateDriverTimeConflict(int $driverId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null, ?string $ignorePoolGroupId = null): void
     {
         $startTime = $effectiveStartTime ?? ($request->start_time ? \Carbon\Carbon::parse($request->start_time) : null);
         $endTime = $effectiveEndTime ?? ($request->end_time ? \Carbon\Carbon::parse($request->end_time) : null);
@@ -280,13 +291,22 @@ class AssignDriverAction
             return; // Cannot validate without time range
         }
 
-        $conflict = Request::where(function ($dQuery) use ($driverId) {
+        $conflictQuery = Request::where(function ($dQuery) use ($driverId) {
                 $dQuery->where('driver_id', $driverId)
                        ->orWhere('return_driver_id', $driverId);
             })
             ->where('id', '!=', $request->id)
-            ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
-            ->where(function ($q) use ($startTime, $endTime) {
+            ->whereNotIn('status', ['completed', 'cancelled', 'rejected']);
+
+        $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id;
+        if (!empty($poolGroup)) {
+            $conflictQuery->where(function ($q) use ($poolGroup) {
+                $q->whereNull('pool_group_id')
+                  ->orWhere('pool_group_id', '!=', $poolGroup);
+            });
+        }
+
+        $conflict = $conflictQuery->where(function ($q) use ($startTime, $endTime) {
                 $q->where(function ($sub) use ($startTime, $endTime) {
                     // Check split trips: check overlap with departure leg or return leg independently
                     $sub->where('trip_mode', 'split_drop_pickup')
@@ -321,7 +341,7 @@ class AssignDriverAction
      * Validate vehicle doesn't have conflicting assignment at the same time
      * Supports smart leg checking for split_drop_pickup requests
      */
-    private function validateVehicleTimeConflict(int $vehicleId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null): void
+    private function validateVehicleTimeConflict(int $vehicleId, Request $request, ?\Carbon\Carbon $effectiveStartTime = null, ?\Carbon\Carbon $effectiveEndTime = null, ?string $ignorePoolGroupId = null): void
     {
         $startTime = $effectiveStartTime ?? ($request->start_time ? \Carbon\Carbon::parse($request->start_time) : null);
         $endTime = $effectiveEndTime ?? ($request->end_time ? \Carbon\Carbon::parse($request->end_time) : null);
@@ -330,13 +350,22 @@ class AssignDriverAction
             return; // Cannot validate without time range
         }
 
-        $conflict = Request::where(function ($vQuery) use ($vehicleId) {
+        $conflictQuery = Request::where(function ($vQuery) use ($vehicleId) {
                 $vQuery->where('vehicle_id', $vehicleId)
                        ->orWhere('return_vehicle_id', $vehicleId);
             })
             ->where('id', '!=', $request->id)
-            ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
-            ->where(function ($q) use ($startTime, $endTime) {
+            ->whereNotIn('status', ['completed', 'cancelled', 'rejected']);
+
+        $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id;
+        if (!empty($poolGroup)) {
+            $conflictQuery->where(function ($q) use ($poolGroup) {
+                $q->whereNull('pool_group_id')
+                  ->orWhere('pool_group_id', '!=', $poolGroup);
+            });
+        }
+
+        $conflict = $conflictQuery->where(function ($q) use ($startTime, $endTime) {
                 $q->where(function ($sub) use ($startTime, $endTime) {
                     // Check split trips: check overlap with departure leg or return leg independently
                     $sub->where('trip_mode', 'split_drop_pickup')
@@ -365,5 +394,58 @@ class AssignDriverAction
                 'vehicle_id' => 'Kendaraan ini sudah ditugaskan ke request lain (#REQ-' . $conflict->id . ') pada rentang waktu yang sama (' . \Carbon\Carbon::parse($conflict->start_time)->format('d/m/Y H:i') . ' - ' . \Carbon\Carbon::parse($conflict->end_time)->format('d/m/Y H:i') . '). Silakan pilih kendaraan lain atau sesuaikan jam keberangkatan.',
             ]);
         }
+    }
+
+    /**
+     * Group multiple requests into a shared pooled ride with 1 driver and 1 vehicle.
+     * Generates a shared pool_group_id and master_pool_qr.
+     */
+    public function poolRequests(array $requestIds, int $driverId, int $vehicleId, array $data = []): array
+    {
+        if (count($requestIds) < 2) {
+            throw new Exception("Minimal 2 permohonan kendaraan diperlukan untuk menggabungkan perjalanan (shared ride).");
+        }
+
+        $requests = Request::whereIn('id', $requestIds)
+            ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
+            ->orderBy('start_time', 'asc')
+            ->get();
+
+        if ($requests->count() < 2) {
+            throw new Exception("Permohonan yang dipilih tidak memenuhi syarat atau sudah berstatus selesai/batal.");
+        }
+
+        $poolGroupId = 'POOL-' . date('Ymd') . '-' . strtoupper(\Illuminate\Support\Str::random(6));
+        $masterPoolQr = 'POOL-QR-' . time() . '-' . strtoupper(\Illuminate\Support\Str::random(6));
+
+        $updatedRequests = [];
+
+        DB::transaction(function () use ($requests, $driverId, $vehicleId, $data, $poolGroupId, $masterPoolQr, &$updatedRequests) {
+            $previousReqId = null;
+
+            foreach ($requests as $idx => $req) {
+                $reqData = $data;
+                $reqData['pool_group_id'] = $poolGroupId;
+                $reqData['is_pooled'] = true;
+                $reqData['master_pool_qr'] = $masterPoolQr;
+
+                // For subsequent legs or requests in pool, record chained_from_request_id
+                if ($previousReqId !== null) {
+                    $reqData['chained_from_request_id'] = $previousReqId;
+                }
+
+                // If specific return schedule per request is not set, keep request's own return_departure_time if exists
+                if (empty($reqData['return_departure_time']) && !empty($req->return_departure_time)) {
+                    $reqData['return_departure_time'] = $req->return_departure_time;
+                }
+
+                $this->execute($req, $driverId, $vehicleId, $data['notes'] ?? 'Perjalanan Gabungan (Shared Ride)', $reqData);
+                $updatedRequests[] = $req->fresh(['user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle', 'passengers']);
+
+                $previousReqId = $req->id;
+            }
+        });
+
+        return $updatedRequests;
     }
 }

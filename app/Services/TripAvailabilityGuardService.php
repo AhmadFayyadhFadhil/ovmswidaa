@@ -15,7 +15,7 @@ class TripAvailabilityGuardService
      * Check if a vehicle currently has an unfinished/active trip in another request
      * where start_km/checkout has occurred but end_km/checkin has not finished.
      */
-    public static function getUnfinishedTripForVehicle(int $vehicleId, ?int $excludeRequestId = null): ?array
+    public static function getUnfinishedTripForVehicle(int $vehicleId, ?int $excludeRequestId = null, ?string $excludePoolGroupId = null): ?array
     {
         // 1. Check in requests table (standard single-day requests)
         $reqQuery = VehicleRequest::where('vehicle_id', $vehicleId)
@@ -28,6 +28,13 @@ class TripAvailabilityGuardService
 
         if ($excludeRequestId) {
             $reqQuery->where('id', '!=', $excludeRequestId);
+        }
+
+        if (!empty($excludePoolGroupId)) {
+            $reqQuery->where(function ($q) use ($excludePoolGroupId) {
+                $q->whereNull('pool_group_id')
+                  ->orWhere('pool_group_id', '!=', $excludePoolGroupId);
+            });
         }
 
         // Active operational criteria:
@@ -77,10 +84,15 @@ class TripAvailabilityGuardService
             $tripQuery->where('request_id', '!=', $excludeRequestId);
         }
 
+        if (!empty($excludePoolGroupId)) {
+            $tripQuery->whereDoesntHave('request', function ($q) use ($excludePoolGroupId) {
+                $q->where('pool_group_id', $excludePoolGroupId);
+            });
+        }
+
         $activeTrip = (clone $tripQuery)
             ->where(function ($q) {
                 $q->whereNotNull('start_km')
-                  ->orWhereNotNull('start_datetime')
                   ->orWhereNotNull('security_checked_out_at')
                   ->orWhere('status', 'on_going');
             })
@@ -119,6 +131,12 @@ class TripAvailabilityGuardService
 
         if ($excludeRequestId) {
             $itQuery->where('request_id', '!=', $excludeRequestId);
+        }
+
+        if (!empty($excludePoolGroupId)) {
+            $itQuery->whereDoesntHave('request', function ($q) use ($excludePoolGroupId) {
+                $q->where('pool_group_id', $excludePoolGroupId);
+            });
         }
 
         $activeIt = (clone $itQuery)
@@ -169,7 +187,7 @@ class TripAvailabilityGuardService
     /**
      * Check if a driver currently has an unfinished/active trip in another request.
      */
-    public static function getUnfinishedTripForDriver(int $driverId, ?int $excludeRequestId = null): ?array
+    public static function getUnfinishedTripForDriver(int $driverId, ?int $excludeRequestId = null, ?string $excludePoolGroupId = null): ?array
     {
         // 1. Check in requests
         $reqQuery = VehicleRequest::where('driver_id', $driverId)
@@ -181,6 +199,13 @@ class TripAvailabilityGuardService
 
         if ($excludeRequestId) {
             $reqQuery->where('id', '!=', $excludeRequestId);
+        }
+
+        if (!empty($excludePoolGroupId)) {
+            $reqQuery->where(function ($q) use ($excludePoolGroupId) {
+                $q->whereNull('pool_group_id')
+                  ->orWhere('pool_group_id', '!=', $excludePoolGroupId);
+            });
         }
 
         $activeReq = (clone $reqQuery)
@@ -223,10 +248,15 @@ class TripAvailabilityGuardService
             $tripQuery->where('request_id', '!=', $excludeRequestId);
         }
 
+        if (!empty($excludePoolGroupId)) {
+            $tripQuery->whereDoesntHave('request', function ($q) use ($excludePoolGroupId) {
+                $q->where('pool_group_id', $excludePoolGroupId);
+            });
+        }
+
         $activeTrip = (clone $tripQuery)
             ->where(function ($q) {
                 $q->whereNotNull('start_km')
-                  ->orWhereNotNull('start_datetime')
                   ->orWhereNotNull('security_checked_out_at')
                   ->orWhere('status', 'on_going');
             })
@@ -291,7 +321,7 @@ class TripAvailabilityGuardService
 
             // Check vehicle lock
             if ($vehicleId) {
-                $vLock = self::getUnfinishedTripForVehicle((int)$vehicleId, (int)$request->id);
+                $vLock = self::getUnfinishedTripForVehicle((int)$vehicleId, (int)$request->id, $request->pool_group_id);
                 if ($vLock) {
                     return [
                         'is_locked'         => true,
@@ -326,7 +356,7 @@ class TripAvailabilityGuardService
                     }
                 }
 
-                $dLock = self::getUnfinishedTripForDriver((int)$driverId, (int)$request->id);
+                $dLock = self::getUnfinishedTripForDriver((int)$driverId, (int)$request->id, $request->pool_group_id);
                 if ($dLock) {
                     return [
                         'is_locked'         => true,

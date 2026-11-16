@@ -106,12 +106,17 @@ class Request extends Model
         'return_reassigned_at',
         'return_reassigned_by',
         'return_reassign_notes',
+        'pool_group_id',
+        'is_pooled',
+        'master_pool_qr',
+        'chained_from_request_id',
     ];
 
     protected $casts = [
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'is_external' => 'boolean',
+        'is_pooled' => 'boolean',
         'security_checked_out_at' => 'datetime',
         'security_checked_in_at' => 'datetime',
         'coordinator_assigned_at' => 'datetime',
@@ -241,6 +246,16 @@ class Request extends Model
     public function returnReassignedBy()
     {
         return $this->belongsTo(User::class, 'return_reassigned_by');
+    }
+
+    public function chainedFrom()
+    {
+        return $this->belongsTo(Request::class, 'chained_from_request_id');
+    }
+
+    public function pooledRequests()
+    {
+        return $this->hasMany(Request::class, 'pool_group_id', 'pool_group_id');
     }
 
     public function getDepartureTotalKmAttribute($value = null): ?float

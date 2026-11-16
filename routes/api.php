@@ -130,6 +130,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ===== ASSIGNMENT ENDPOINTS =====
     Route::get('/assignments', [AssignmentController::class, 'index']);
+    Route::post('/assignments/pool', [AssignmentController::class, 'poolStore']);
     Route::post('/assignments', [AssignmentController::class, 'store']);
     Route::get('/assignments/{assignment}', [AssignmentController::class, 'show']);
     Route::put('/assignments/{assignment}', [AssignmentController::class, 'update']);

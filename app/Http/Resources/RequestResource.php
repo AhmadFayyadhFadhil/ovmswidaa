@@ -95,7 +95,38 @@ class RequestResource extends JsonResource
             $allDriversApproved = false;
         }
 
+        $chainedEndKm = null;
+        if ($this->chained_from_request_id) {
+            $prev = rescue(fn() => \App\Models\Request::find($this->chained_from_request_id), null, false);
+            if ($prev) {
+                $chainedEndKm = $prev->departure_end_km ?? $prev->end_km ?? null;
+            }
+        }
+
         return [
+            'is_pooled'               => (bool)$this->is_pooled,
+            'pool_group_id'           => $this->pool_group_id,
+            'master_pool_qr'          => $this->master_pool_qr,
+            'chained_from_request_id' => $this->chained_from_request_id,
+            'chained_from_end_km'     => $chainedEndKm,
+            'pooled_requests'         => $this->when(!empty($this->pool_group_id), function() {
+                return rescue(fn() => \App\Models\Request::where('pool_group_id', $this->pool_group_id)
+                    ->with(['user', 'department', 'passengers'])
+                    ->get()
+                    ->map(fn($r) => [
+                        'id'                => $r->id,
+                        'user_name'         => $r->user?->name,
+                        'department_name'   => $r->department?->name,
+                        'destination_city'  => $r->destination_city,
+                        'destination_place' => $r->destination_place,
+                        'purpose'           => $r->purpose,
+                        'start_time'        => $r->start_time ? ($r->start_time instanceof \DateTimeInterface ? $r->start_time->format('Y-m-d H:i:s') : (string)$r->start_time) : null,
+                        'end_time'          => $r->end_time ? ($r->end_time instanceof \DateTimeInterface ? $r->end_time->format('Y-m-d H:i:s') : (string)$r->end_time) : null,
+                        'status'            => $r->status instanceof \BackedEnum ? $r->status->value : (string)$r->status,
+                        'passenger_count'   => $r->passenger_count,
+                        'passengers'        => $r->passengers->map(fn($p) => ['name' => $p->name, 'notes' => $p->notes]),
+                    ]), collect());
+            }),
             'all_drivers_approved' => $allDriversApproved,
             'driver_name'       => $driverNameStr,
             'vehicle_model'     => $vehicleModelStr,

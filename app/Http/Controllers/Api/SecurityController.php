@@ -218,7 +218,7 @@ class SecurityController extends Controller
                         if (!$vehicleRequest->is_external) {
                             $targetVehicleId = $targetTrip?->vehicle_id ?? $vehicleRequest->vehicle_id;
                             if ($targetVehicleId) {
-                                $unfinished = \App\Services\TripAvailabilityGuardService::getUnfinishedTripForVehicle((int)$targetVehicleId, (int)$vehicleRequest->id);
+                                $unfinished = \App\Services\TripAvailabilityGuardService::getUnfinishedTripForVehicle((int)$targetVehicleId, (int)$vehicleRequest->id, $vehicleRequest->pool_group_id);
                                 if ($unfinished) {
                                     return response()->json([
                                         'status'  => 'error',
@@ -449,7 +449,28 @@ class SecurityController extends Controller
                                 $vehicleRequest->vehicle->update($vData);
                             }
 
-                            $customMessage = 'Scan Checkout Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan berangkat mengantar.';
+                            if ($vehicleRequest->pool_group_id) {
+                                $otherPooledReqs = VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                                    ->where('id', '!=', $vehicleRequest->id)
+                                    ->whereNotIn('status', [RequestStatus::COMPLETED, RequestStatus::CANCELLED, RequestStatus::REJECTED])
+                                    ->get();
+
+                                foreach ($otherPooledReqs as $otherReq) {
+                                    $otherReqData = [
+                                        'status'                   => RequestStatus::ON_GOING,
+                                        'departure_checked_out_at' => $scanTime,
+                                        'departure_checkout_by'    => $validated['security_name'],
+                                    ];
+                                    if ($inputStartKm !== null) {
+                                        $otherReqData['departure_start_km'] = $inputStartKm;
+                                        $otherReqData['start_km']           = $inputStartKm;
+                                    }
+                                    $otherReq->update($otherReqData);
+                                }
+                                $customMessage = 'Scan Checkout Rombongan Perjalanan Gabungan (' . ($otherPooledReqs->count() + 1) . ' permohonan) Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan berangkat.';
+                            } else {
+                                $customMessage = 'Scan Checkout Sesi Antar berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan berangkat mengantar.';
+                            }
                         } else {
                             // STAGE 3: Checkout Sesi Jemput
                             $retDriver = $vehicleRequest->returnDriver ?? $vehicleRequest->driver;
@@ -541,6 +562,28 @@ class SecurityController extends Controller
                                     $trip->vehicle->update($vData);
                                 }
                             }
+                        }
+
+                        if ($vehicleRequest->pool_group_id) {
+                            $otherPooledReqs = VehicleRequest::where('pool_group_id', $vehicleRequest->pool_group_id)
+                                ->where('id', '!=', $vehicleRequest->id)
+                                ->whereNotIn('status', [RequestStatus::COMPLETED, RequestStatus::CANCELLED, RequestStatus::REJECTED])
+                                ->get();
+
+                            foreach ($otherPooledReqs as $otherReq) {
+                                $otherReqData = [
+                                    'status'                  => RequestStatus::ON_GOING,
+                                    'started_at'              => $otherReq->started_at ?? $scanTime,
+                                    'security_checked_out_at' => $scanTime,
+                                    'security_checkout_by'    => $validated['security_name'],
+                                    'security_checkout_notes' => $validated['notes'] ?? null,
+                                ];
+                                if ($inputStartKm !== null) {
+                                    $otherReqData['start_km'] = $inputStartKm;
+                                }
+                                $otherReq->update($otherReqData);
+                            }
+                            $customMessage = 'Scan Checkout Rombongan Perjalanan Gabungan (' . ($otherPooledReqs->count() + 1) . ' permohonan) berhasil. Driver (' . ($vehicleRequest->driver?->name ?? 'Driver') . ') & Kendaraan berangkat.';
                         }
                     }
                 }
@@ -927,7 +970,7 @@ class SecurityController extends Controller
 
     public function lookup(Request $request): JsonResponse
     {
-        $token = $request->query('qr_code_token');
+        $token = $request->query('qr_code_token') ?? $request->query('token');
         if (!empty($token) && (filter_var($token, FILTER_VALIDATE_URL) || str_contains($token, '?token='))) {
             $parts = parse_url($token);
             if (isset($parts['query'])) {
@@ -1009,6 +1052,14 @@ class SecurityController extends Controller
 
         // 1. Exact match by qr_code_token
         $req = VehicleRequest::where('qr_code_token', $token)->first();
+        if ($req) return $req;
+
+        // 1b. Exact match by master_pool_qr
+        $req = VehicleRequest::where('master_pool_qr', $token)->first();
+        if ($req) return $req;
+
+        // 1c. Exact match by pool_group_id
+        $req = VehicleRequest::where('pool_group_id', $token)->first();
         if ($req) return $req;
 
         // 2. Partial match by qr_code_token

@@ -69,7 +69,7 @@ class AssignmentController extends Controller
         ], 200);
     }
 
-    public function store(Request $request, AssignDriverAction $action): JsonResponse
+    public function poolStore(Request $request, AssignDriverAction $action): JsonResponse
     {
         try {
             $user = Auth::user();
@@ -78,7 +78,72 @@ class AssignmentController extends Controller
             }
 
             $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
-                'request_id'         => 'required|exists:requests,id',
+                'request_ids'        => 'required|array|min:2',
+                'request_ids.*'      => 'exists:requests,id',
+                'driver_id'          => 'required|exists:users,id',
+                'vehicle_id'         => 'required|exists:vehicles,id',
+                'trip_mode'          => 'nullable|string|in:standby,split_drop_pickup',
+                'return_driver_id'   => 'nullable|exists:users,id',
+                'return_vehicle_id'  => 'nullable|exists:vehicles,id',
+                'return_departure_time' => 'nullable|string',
+                'return_notes'       => 'nullable|string|max:1000',
+                'notes'              => 'nullable|string|max:1000',
+                'start_time'         => 'nullable|string',
+                'end_time'           => 'nullable|string',
+                'estimated_duration' => 'nullable|integer|min:1',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => $validator->errors()->first(),
+                    'errors'  => $validator->errors()
+                ], 422);
+            }
+
+            $validated = $validator->validated();
+            $updatedRequests = $action->poolRequests(
+                $validated['request_ids'],
+                (int)$validated['driver_id'],
+                (int)$validated['vehicle_id'],
+                $validated
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Perjalanan gabungan (' . count($updatedRequests) . ' permohonan) berhasil dialokasikan.',
+                'data'    => \App\Http\Resources\RequestResource::collection(collect($updatedRequests)),
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => collect($ve->errors())->flatten()->first() ?: 'Terjadi kesalahan validasi',
+                'errors'  => $ve->errors(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal mengalokasikan perjalanan gabungan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function store(Request $request, AssignDriverAction $action): JsonResponse
+    {
+        try {
+            if ($request->has('request_ids') && is_array($request->input('request_ids')) && count($request->input('request_ids')) > 1) {
+                return $this->poolStore($request, $action);
+            }
+
+            $user = Auth::user();
+            if (!$user || (!$this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga', 'Approver', 'approver', 'HRD', 'hrd', 'head', 'Driver Coordinator', 'driver coordinator', 'coordinator']) && !$user->isHrGaHead())) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+            }
+
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+                'request_id'         => 'required_without:request_ids|nullable|exists:requests,id',
+                'request_ids'        => 'nullable|array',
+                'request_ids.*'      => 'exists:requests,id',
                 'is_external'        => 'nullable|boolean',
                 'third_party_cost'   => 'nullable|numeric|min:0',
                 'start_time'         => 'nullable|string',

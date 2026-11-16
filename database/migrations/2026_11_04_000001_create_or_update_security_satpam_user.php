@@ -36,7 +36,10 @@ return new class extends Migration
         $securityUser->save();
 
         if (method_exists($securityUser, 'syncRoles')) {
-            $securityUser->syncRoles(['Security']);
+            try {
+                $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'Security', 'guard_name' => 'sanctum']);
+                $securityUser->syncRoles([$role]);
+            } catch (\Throwable $e) {}
         }
     }
 
