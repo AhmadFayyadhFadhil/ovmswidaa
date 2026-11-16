@@ -195,7 +195,7 @@ class Request extends Model
 
     public function operationalTrip()
     {
-        return $this->hasOne(OperationalTrip::class);
+        return $this->hasOne(OperationalTrip::class)->orderBy('id', 'asc');
     }
 
     public function operationalTrips()
