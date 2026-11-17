@@ -38,7 +38,7 @@ class AssignmentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user    = Auth::user();
-        $perPage = $request->query('per_page', 15);
+        $perPage = min((int) $request->query('per_page', 15), 1000);
         $status  = $request->query('status');
 
         $query = Assignment::with(['request.user', 'request.passengers.department', 'request.driver', 'request.vehicle', 'request.operationalTrip.vehicle', 'request.operationalTrip.driver', 'request.operationalTrips.driver', 'request.operationalTrips.vehicle', 'request.assignments.driver', 'request.assignments.vehicle', 'request.approvals.approver', 'request.itineraries.driver', 'request.itineraries.vehicle', 'driver', 'vehicle', 'assignedBy']);
@@ -532,16 +532,47 @@ class AssignmentController extends Controller
 
         try {
             \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated, $user) {
+                $isDirectScheduled = $this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga']) || $user->isHrGaHead();
+                $isUrgent = in_array(strtoupper($vehicleRequest->priority instanceof \BackedEnum ? $vehicleRequest->priority->value : (string)($vehicleRequest->priority ?? '')), ['URGENT', 'CRITICAL']);
+                $isCoordinatorOnly = !$isDirectScheduled && $this->hasRoleDirect($user, ['Driver Coordinator', 'driver coordinator', 'coordinator']);
+
+                $isAlreadyOnGoing = ($vehicleRequest->status === \App\Enums\RequestStatus::ON_GOING)
+                    || $vehicleRequest->itineraries()->where('status', 'on_going')->exists()
+                    || !empty($vehicleRequest->security_checked_out_at);
+
+                if ($isAlreadyOnGoing) {
+                    $targetRequestStatus = \App\Enums\RequestStatus::ON_GOING;
+                } elseif ($isCoordinatorOnly && !$isUrgent) {
+                    $targetRequestStatus = \App\Enums\RequestStatus::ASSIGNED_BY_GA;
+                } else {
+                    $targetRequestStatus = \App\Enums\RequestStatus::DRIVER_ASSIGNED;
+                }
+
+                $activeDriverIds = [];
+
                 foreach ($validated['daily_assignments'] as $asg) {
                     $itinerary = \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)
                         ->where('id', $asg['itinerary_id'])
                         ->firstOrFail();
+
+                    // Completed Day Protection: Do not overwrite driver/vehicle or status if already completed
+                    $isFinishedDay = ($itinerary->status === 'completed') ||
+                        ($itinerary->morning_status === 'completed' && ($itinerary->afternoon_status === 'completed' || empty($itinerary->afternoon_destination)));
+
+                    if ($isFinishedDay) {
+                        if ($itinerary->driver_id) {
+                            $activeDriverIds[] = (int) $itinerary->driver_id;
+                        }
+                        continue;
+                    }
 
                     $isExternal = !empty($asg['is_external']);
                     $driverId = $asg['driver_id'] ?? null;
                     $vehicleId = $asg['vehicle_id'] ?? null;
 
                     if (!$isExternal && $driverId) {
+                        $activeDriverIds[] = (int) $driverId;
+
                         // Check driver SIM expiry
                         $driver = \App\Models\User::find($driverId);
                         $driverName = $driver ? $driver->name : 'Driver';
@@ -563,7 +594,6 @@ class AssignmentController extends Controller
                         }
 
                         // Check driver conflict on this itinerary's date
-
                         $conflictingDriverItinerary = \App\Models\RequestItinerary::where('driver_id', $driverId)
                             ->where('request_id', '!=', $vehicleRequest->id)
                             ->where('date', $itDateStr)
@@ -632,6 +662,8 @@ class AssignmentController extends Controller
                         }
                     }
 
+                    $itStatus = ($itinerary->status === 'on_going' || $itinerary->morning_status === 'on_going') ? 'on_going' : 'assigned';
+
                     $updateItData = [
                         'driver_id' => $isExternal ? null : $driverId,
                         'vehicle_id' => $isExternal ? null : $vehicleId,
@@ -640,7 +672,7 @@ class AssignmentController extends Controller
                         'external_license_plate' => $isExternal ? ($asg['external_license_plate'] ?? null) : null,
                         'external_fleet_info' => $isExternal ? ($asg['external_fleet_info'] ?? null) : null,
                         'third_party_cost' => $isExternal ? ($asg['third_party_cost'] ?? 0) : 0,
-                        'status' => 'assigned',
+                        'status' => $itStatus,
                     ];
 
                     if (!empty($asg['morning_time'])) {
@@ -669,6 +701,14 @@ class AssignmentController extends Controller
                     }
                 }
 
+                // Cancel any obsolete driver assignments no longer part of this request
+                $activeDriverIds = array_unique(array_filter($activeDriverIds));
+                if (!empty($activeDriverIds)) {
+                    \App\Models\Assignment::where('request_id', $vehicleRequest->id)
+                        ->whereNotIn('driver_id', $activeDriverIds)
+                        ->update(['status' => 'cancelled']);
+                }
+
                 $firstInternalDriver = null;
                 $firstInternalVehicle = null;
                 foreach ($validated['daily_assignments'] as $asg) {
@@ -682,14 +722,17 @@ class AssignmentController extends Controller
                     ? $vehicleRequest->qr_code_token
                     : ('REQ-' . time() . '-' . bin2hex(random_bytes(4)));
 
-                $vehicleRequest->update([
-                    'status' => \App\Enums\RequestStatus::DRIVER_ASSIGNED,
+                $updatePayload = [
+                    'status'        => $targetRequestStatus,
                     'qr_code_token' => $qrToken,
-                    'assigned_by' => $user->id,
-                    'assigned_at' => now(),
-                    'driver_id' => $firstInternalDriver ?? $vehicleRequest->driver_id,
-                    'vehicle_id' => $firstInternalVehicle ?? $vehicleRequest->vehicle_id,
-                ]);
+                    'assigned_by'   => $user->id,
+                    'assigned_at'   => now(),
+                    'driver_id'     => $firstInternalDriver ?? $vehicleRequest->driver_id,
+                    'vehicle_id'    => $firstInternalVehicle ?? $vehicleRequest->vehicle_id,
+                ];
+
+                $vehicleRequest->update($updatePayload);
+                $vehicleRequest->syncStatus();
             });
 
             return response()->json([

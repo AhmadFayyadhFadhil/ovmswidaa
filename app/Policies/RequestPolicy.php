@@ -99,13 +99,21 @@ class RequestPolicy
             return true;
         }
 
-        // GA Coordinator / GA Staff / HRGA Head can approve fleet allocations
+        // GA Coordinator / GA Staff / HRGA Head can approve fleet allocations,
+        // and also act as the Head Dept approver for "Outsource / Tamu" requests in SUBMITTED state.
         if ($user->hasRoleDirect(['GA', 'Admin']) || $user->isHrGaHead()) {
             if (in_array($statusStr, [
                 RequestStatus::ASSIGNED_BY_GA->value,
                 RequestStatus::APPROVED_DEPARTMENT->value
             ], true)) {
                 return true;
+            }
+
+            if ($statusStr === RequestStatus::SUBMITTED->value) {
+                $deptNameLower = strtolower($request->department?->name ?? '');
+                if (str_contains($deptNameLower, 'outsource') || str_contains($deptNameLower, 'tamu')) {
+                    return true;
+                }
             }
         }
 

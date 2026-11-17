@@ -231,7 +231,18 @@ class CreateRequestAction
                     $userId = $passengerData['user_id'] ?? null;
                     $cleanName = trim($passengerData['name']);
                     if (!$userId && strlen($cleanName) >= 3) {
-                        $resolved = \App\Models\User::where(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), strtolower($cleanName))->first();
+                        $lowerName = strtolower($cleanName);
+                        // 1. Exact case-insensitive match on name
+                        $resolved = \App\Models\User::where(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), $lowerName)->first();
+                        
+                        // 2. Unambiguous partial match for internal staff
+                        if (!$resolved && strlen($cleanName) >= 4) {
+                            $candidates = \App\Models\User::where(\Illuminate\Support\Facades\DB::raw('LOWER(name)'), 'like', "%{$lowerName}%")->get();
+                            if ($candidates->count() === 1) {
+                                $resolved = $candidates->first();
+                            }
+                        }
+
                         if ($resolved) {
                             $userId = $resolved->id;
                         }

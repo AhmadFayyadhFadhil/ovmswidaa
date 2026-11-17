@@ -57,6 +57,27 @@ class CheckPendingEndKmCommand extends Command
         $count = 0;
         foreach ($pendingRequests as $req) {
             try {
+                // Multi-Day awareness: verify active segment for today
+                if ($req->itineraries()->exists()) {
+                    $todayStr = now()->toDateString();
+                    $todayItinerary = $req->itineraries()->where('date', $todayStr)->first();
+                    
+                    if (!$todayItinerary) {
+                        continue; // No scheduled segment for today
+                    }
+
+                    $hasGateCheckin = !empty($todayItinerary->security_checked_in_at)
+                        || !empty($todayItinerary->morning_checked_in_at)
+                        || !empty($todayItinerary->afternoon_checked_in_at);
+
+                    $hasEndKm = !empty($todayItinerary->end_km) && (float)$todayItinerary->end_km > 0;
+
+                    // If today segment has not checked in at gate or has already filled end_km, do not send reminder
+                    if (!$hasGateCheckin || $hasEndKm) {
+                        continue;
+                    }
+                }
+
                 EmailNotificationService::sendPendingEndKmReminder($req);
                 $req->update(['end_km_reminder_sent_at' => now()]);
                 $count++;

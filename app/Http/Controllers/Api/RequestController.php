@@ -23,7 +23,7 @@ class RequestController extends Controller
         \App\Services\RequestExpirationService::checkAndCancelExpired();
 
         $user    = Auth::user();
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = min((int) $request->query('per_page', 15), 1000);
         $status  = $request->query('status');
         $search  = $request->query('search');
 
@@ -71,6 +71,10 @@ class RequestController extends Controller
                     $q->whereIn('department_id', $deptIds)
                       ->orWhereHas('user', function ($u) use ($deptIds) {
                           $u->whereIn('department_id', $deptIds);
+                      })
+                      ->orWhereHas('department', function ($dQuery) {
+                          $dQuery->where('name', 'like', '%Outsource%')
+                                 ->orWhere('name', 'like', '%Tamu%');
                       })
                       ->orWhere(function ($q) {
                           $q->whereIn('status', [
@@ -1192,13 +1196,27 @@ class RequestController extends Controller
         \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $user, $inputEndKm, $totKm, &$errorResponse) {
             $itineraries = $vehicleRequest->itineraries;
             if ($itineraries->isNotEmpty()) {
-                // Find the itinerary for the logged-in driver that is currently 'on_going'
+                // Find the itinerary for the logged-in driver that is currently 'on_going' or checked-in by gate security
                 $activeItinerary = $itineraries->first(function ($it) use ($user) {
-                    return $it->driver_id === $user->id && $it->status === 'on_going';
+                    $isDriver = ((int)$it->driver_id === (int)$user->id);
+                    $isActive = $it->status === 'on_going' 
+                        || $it->morning_status === 'on_going' 
+                        || $it->afternoon_status === 'on_going'
+                        || ($it->morning_checked_in_at !== null && empty($it->end_km))
+                        || ($it->afternoon_checked_in_at !== null && empty($it->end_km))
+                        || ($it->security_checked_in_at !== null && empty($it->end_km));
+                    return $isDriver && $isActive;
                 });
 
                 if (!$activeItinerary) {
-                    $errorResponse = response()->json(['status' => 'error', 'message' => 'Tidak ditemukan jadwal penugasan harian Anda yang berstatus sedang berjalan (on_going).'], 422);
+                    // Fallback: any active or pending itinerary of this driver that is not yet completed
+                    $activeItinerary = $itineraries->first(function ($it) use ($user) {
+                        return ((int)$it->driver_id === (int)$user->id) && $it->status !== 'completed';
+                    });
+                }
+
+                if (!$activeItinerary) {
+                    $errorResponse = response()->json(['status' => 'error', 'message' => 'Tidak ditemukan jadwal penugasan harian Anda yang berstatus sedang berjalan atau menunggu KM Akhir.'], 422);
                     return;
                 }
 
@@ -1209,22 +1227,25 @@ class RequestController extends Controller
                 }
 
                 // Determine if we are completing Sesi 1 or Sesi 2
-                if ($activeItinerary->morning_status === 'on_going') {
+                if ($activeItinerary->morning_status === 'on_going' || ($activeItinerary->morning_checked_in_at !== null && empty($activeItinerary->end_km))) {
                     $itUpdateData['morning_status'] = 'completed';
-                    $itUpdateData['morning_checked_in_at'] = now();
-                    $itUpdateData['morning_checkin_by'] = $user->name;
+                    $itUpdateData['morning_checked_in_at'] = $activeItinerary->morning_checked_in_at ?? now();
+                    $itUpdateData['morning_checkin_by'] = $activeItinerary->morning_checkin_by ?? $user->name;
 
                     // If no afternoon destination, complete the itinerary status
                     if (empty($activeItinerary->afternoon_destination)) {
                         $itUpdateData['status'] = 'completed';
-                        $itUpdateData['security_checked_in_at'] = now();
+                        $itUpdateData['security_checked_in_at'] = $activeItinerary->security_checked_in_at ?? now();
                     }
-                } else if ($activeItinerary->afternoon_status === 'on_going') {
+                } else if ($activeItinerary->afternoon_status === 'on_going' || ($activeItinerary->afternoon_checked_in_at !== null && empty($activeItinerary->end_km))) {
                     $itUpdateData['afternoon_status'] = 'completed';
-                    $itUpdateData['afternoon_checked_in_at'] = now();
-                    $itUpdateData['afternoon_checkin_by'] = $user->name;
+                    $itUpdateData['afternoon_checked_in_at'] = $activeItinerary->afternoon_checked_in_at ?? now();
+                    $itUpdateData['afternoon_checkin_by'] = $activeItinerary->afternoon_checkin_by ?? $user->name;
                     $itUpdateData['status'] = 'completed';
-                    $itUpdateData['security_checked_in_at'] = now();
+                    $itUpdateData['security_checked_in_at'] = $activeItinerary->security_checked_in_at ?? now();
+                } else {
+                    $itUpdateData['status'] = 'completed';
+                    $itUpdateData['security_checked_in_at'] = $activeItinerary->security_checked_in_at ?? now();
                 }
 
                 $activeItinerary->update($itUpdateData);
