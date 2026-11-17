@@ -110,9 +110,12 @@ class Request extends Model
         'is_pooled',
         'master_pool_qr',
         'chained_from_request_id',
+        'end_km_reminder_sent_at',
+        'return_pool_group_id',
     ];
 
     protected $casts = [
+        'end_km_reminder_sent_at' => 'datetime',
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'is_external' => 'boolean',

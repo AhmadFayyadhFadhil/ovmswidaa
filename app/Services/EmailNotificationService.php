@@ -715,4 +715,57 @@ class EmailNotificationService
             }
         }
     }
+
+    /**
+     * Send email reminder to Driver if trip gate check-in has passed > 5 minutes without recording end KM.
+     */
+    public static function sendPendingEndKmReminder(VehicleRequest $request): void
+    {
+        $request->loadMissing(['user', 'driver', 'returnDriver', 'vehicle', 'returnVehicle', 'assignments.driver', 'assignments.vehicle']);
+
+        $isSplit = $request->trip_mode === 'split_drop_pickup';
+        $isReturnLeg = $isSplit && !empty($request->return_driver_id) && !empty($request->return_checked_in_at);
+
+        $driver = $isReturnLeg 
+            ? ($request->returnDriver ?? $request->driver)
+            : ($request->driver ?? $request->assignments?->sortByDesc('id')->first()?->driver);
+
+        if (!$driver || empty($driver->email)) {
+            Log::info("No driver email found for end KM reminder on Request #{$request->id}");
+            return;
+        }
+
+        $vehicle = $isReturnLeg ? ($request->returnVehicle ?? $request->vehicle) : $request->vehicle;
+        $vehicleInfo = $vehicle ? "{$vehicle->name} [{$vehicle->plate_number}]" : 'Armada Operasional';
+
+        $checkinTime = $isReturnLeg 
+            ? ($request->return_checked_in_at ?? now())
+            : ($request->security_checked_in_at ?? $request->departure_checked_in_at ?? now());
+        $checkinCarbon = $checkinTime instanceof \Carbon\Carbon ? $checkinTime : \Carbon\Carbon::parse($checkinTime);
+        $checkinStr = $checkinCarbon->format('d M Y, H:i') . ' WIB';
+
+        $taskUrl = self::getFrontendUrl() . "/driver/dashboard?focus_id={$request->id}";
+
+        $subjectTitle = "[OVMS Pengingat] Harap Lengkapi KM Akhir Spidometer (#REQ-{$request->id})";
+        $messageBody = "Pemberitahuan: Kendaraan operasional {$vehicleInfo} telah diverifikasi masuk gerbang pabrik oleh Security pada {$checkinStr}. Mohon segera buka aplikasi OVMS dan catat kilometer akhir spidometer untuk menyelesaikan penugasan dinas Anda.";
+        $extraNote = "Perhatian: Status penugasan dinas ini belum tuntas dan armada belum dapat dialokasikan ke tugas berikutnya sebelum KM Akhir spidometer dilengkapi.";
+
+        $data = self::buildCommonData(
+            $request,
+            $driver->name,
+            'REMINDER KM AKHIR',
+            '#f59e0b',
+            $subjectTitle,
+            $messageBody,
+            $extraNote,
+            "{$vehicleInfo} • Driver: {$driver->name}"
+        );
+
+        $data['ctaBtnText'] = 'Buka Aplikasi & Catat KM Akhir';
+        $data['ctaBtnColor'] = '#d97706';
+        $data['actionUrl'] = $taskUrl;
+
+        self::sendSafe($driver->email, $data);
+        Log::info("Sent Pending End KM reminder email to {$driver->email} for Request #{$request->id}");
+    }
 }

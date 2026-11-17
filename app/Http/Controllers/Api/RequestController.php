@@ -1141,13 +1141,14 @@ class RequestController extends Controller
             }
         } else {
             $isAssigned = $vehicleRequest->driver_id === $user->id ||
+                $vehicleRequest->return_driver_id === $user->id ||
                 $vehicleRequest->operationalTrip?->driver_id === $user->id ||
                 $vehicleRequest->assignments()->where('driver_id', $user->id)->exists() ||
                 \App\Models\OperationalTrip::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists() ||
                 \App\Models\RequestItinerary::where('request_id', $vehicleRequest->id)->where('driver_id', $user->id)->exists();
 
-            if (!$isAssigned && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead()) {
-                return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Kepala Departemen HRD&GA yang dapat menyelesaikan perjalanan.'], 403);
+            if (!$isAssigned && !$user->hasRoleDirect('Admin') && !$user->isHrGaHead() && !$user->hasRoleDirect('GA')) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthorized. Hanya driver yang ditugaskan atau Admin/GA yang dapat menyelesaikan perjalanan.'], 403);
             }
         }
 
@@ -1594,6 +1595,51 @@ class RequestController extends Controller
             } catch (\Throwable $ex) {
                 return null;
             }
+        }
+    }
+
+    /**
+     * Pool return penjemputan across multiple requests.
+     */
+    public function poolReturn(Request $request, AssignDriverAction $action): JsonResponse
+    {
+        $user = Auth::user();
+        $isAuthorized = $user && (
+            $user->hasRoleDirect(['Admin', 'admin', 'GA', 'ga', 'Driver Coordinator', 'driver coordinator']) ||
+            $user->isHrGaHead() ||
+            ($user->isHrGaDepartment() && $user->hasRoleDirect(['Approver', 'approver']))
+        );
+
+        if (!$isAuthorized) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'request_ids'       => 'required|array|min:2',
+            'request_ids.*'     => 'required|integer|exists:requests,id',
+            'return_driver_id'  => 'required|integer|exists:users,id',
+            'return_vehicle_id' => 'nullable|integer|exists:vehicles,id',
+            'notes'             => 'nullable|string|max:1000',
+        ]);
+
+        try {
+            $updatedList = $action->poolReturnTrips(
+                $validated['request_ids'],
+                (int)$validated['return_driver_id'],
+                !empty($validated['return_vehicle_id']) ? (int)$validated['return_vehicle_id'] : null,
+                $validated['notes'] ?? null
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Penjemputan berhasil digabungkan (Shared Return Pickup) untuk ' . count($updatedList) . ' permohonan.',
+                'data'    => \App\Http\Resources\RequestResource::collection(collect($updatedList)),
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
         }
     }
 }

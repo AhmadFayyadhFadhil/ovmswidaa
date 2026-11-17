@@ -229,10 +229,11 @@ class AssignDriverAction
 
         $targetVehicleId = $newVehicleId ?? $request->return_vehicle_id ?? $request->vehicle_id;
 
-        // Validate conflicts for return window
-        $this->validateDriverTimeConflict($newDriverId, $request, $returnDepartureTime, $effectiveEndTime);
+        // Validate conflicts for return window (support return_pool_group_id)
+        $ignorePool = $request->return_pool_group_id ?? $request->pool_group_id;
+        $this->validateDriverTimeConflict($newDriverId, $request, $returnDepartureTime, $effectiveEndTime, $ignorePool);
         if ($targetVehicleId) {
-            $this->validateVehicleTimeConflict($targetVehicleId, $request, $returnDepartureTime, $effectiveEndTime);
+            $this->validateVehicleTimeConflict($targetVehicleId, $request, $returnDepartureTime, $effectiveEndTime, $ignorePool);
         }
 
         $authUser = auth()->user();
@@ -320,11 +321,16 @@ class AssignDriverAction
             $conflictQuery->where('id', '!=', $request->id);
         }
 
-        $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id;
+        $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id ?? $request->return_pool_group_id;
         if (!empty($poolGroup)) {
             $conflictQuery->where(function ($q) use ($poolGroup) {
-                $q->whereNull('pool_group_id')
-                  ->orWhere('pool_group_id', '!=', $poolGroup);
+                $q->where(function ($sub) use ($poolGroup) {
+                    $sub->whereNull('pool_group_id')
+                        ->orWhere('pool_group_id', '!=', $poolGroup);
+                })->where(function ($sub) use ($poolGroup) {
+                    $sub->whereNull('return_pool_group_id')
+                        ->orWhere('return_pool_group_id', '!=', $poolGroup);
+                });
             });
         }
 
@@ -384,11 +390,16 @@ class AssignDriverAction
             $conflictQuery->where('id', '!=', $request->id);
         }
 
-        $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id;
+        $poolGroup = $ignorePoolGroupId ?? $request->pool_group_id ?? $request->return_pool_group_id;
         if (!empty($poolGroup)) {
             $conflictQuery->where(function ($q) use ($poolGroup) {
-                $q->whereNull('pool_group_id')
-                  ->orWhere('pool_group_id', '!=', $poolGroup);
+                $q->where(function ($sub) use ($poolGroup) {
+                    $sub->whereNull('pool_group_id')
+                        ->orWhere('pool_group_id', '!=', $poolGroup);
+                })->where(function ($sub) use ($poolGroup) {
+                    $sub->whereNull('return_pool_group_id')
+                        ->orWhere('return_pool_group_id', '!=', $poolGroup);
+                });
             });
         }
 
@@ -479,6 +490,41 @@ class AssignDriverAction
                 $updatedRequests[] = $req->fresh(['user', 'driver', 'vehicle', 'returnDriver', 'returnVehicle', 'passengers']);
 
                 $previousReqId = $req->id;
+            }
+        });
+
+        return $updatedRequests;
+    }
+
+    /**
+     * Pool return penjemputan across multiple requests that originally had different drivers/vehicles.
+     */
+    public function poolReturnTrips(array $requestIds, int $returnDriverId, ?int $returnVehicleId = null, ?string $notes = null): array
+    {
+        if (count($requestIds) < 2) {
+            throw new Exception("Minimal 2 permohonan kendaraan diperlukan untuk menggabungkan penjemputan.");
+        }
+
+        $requests = Request::whereIn('id', $requestIds)
+            ->whereNotIn('status', ['completed', 'cancelled', 'rejected'])
+            ->get();
+
+        if ($requests->count() < 2) {
+            throw new Exception("Permohonan yang dipilih tidak memenuhi syarat atau sudah berstatus selesai/batal.");
+        }
+
+        $returnPoolGroupId = 'RET-POOL-' . date('Ymd') . '-' . strtoupper(\Illuminate\Support\Str::random(6));
+
+        $updatedRequests = [];
+        DB::transaction(function () use ($requests, $requestIds, $returnDriverId, $returnVehicleId, $notes, $returnPoolGroupId, &$updatedRequests) {
+            // Pre-stamp all requests with return_pool_group_id so conflict validator recognizes them as mutual pool
+            Request::whereIn('id', $requestIds)->update([
+                'return_pool_group_id' => $returnPoolGroupId,
+            ]);
+
+            foreach ($requests as $req) {
+                $req->refresh();
+                $updatedRequests[] = $this->reassignReturnTrip($req, $returnDriverId, $returnVehicleId, $notes ?? 'Penjemputan Gabungan (Shared Return Pickup)');
             }
         });
 
