@@ -94,13 +94,17 @@ class ApproveRequestAction
                     if ($isGaTeamAccount) {
                         $updatePayload['ga_approval_source'] = 'ga_team';
                         $cleanApprovedName = $approvedByName ? trim($approvedByName) : '';
-                        $updatePayload['ga_approved_by_name'] = $cleanApprovedName !== '' ? $cleanApprovedName : 'Tim GA Operasional';
+                        if ($cleanApprovedName === '') {
+                            $activeMaster = \App\Models\GaTeamApprover::where('is_active', true)->first();
+                            $cleanApprovedName = $activeMaster?->name ?? 'Tim GA Operasional';
+                        }
+                        $updatePayload['ga_approved_by_name'] = $cleanApprovedName;
                     } elseif ($isAdmin) {
                         $updatePayload['ga_approval_source'] = 'admin';
-                        $updatePayload['ga_approved_by_name'] = $user->name ?? 'Administrator';
+                        $updatePayload['ga_approved_by_name'] = !empty($user->name) ? $user->name : 'Administrator';
                     } else {
                         $updatePayload['ga_approval_source'] = 'primary';
-                        $updatePayload['ga_approved_by_name'] = $approvedByName ? trim($approvedByName) : ($user->name ?? 'Melodi Bella Astria');
+                        $updatePayload['ga_approved_by_name'] = !empty($approvedByName) ? trim($approvedByName) : (!empty($user->name) ? $user->name : 'Melodi Bella Astria');
                     }
 
                     if (!$request->qr_code_token) {

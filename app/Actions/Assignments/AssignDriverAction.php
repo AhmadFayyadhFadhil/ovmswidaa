@@ -59,6 +59,16 @@ class AssignDriverAction
             $poolGroupId = $data['pool_group_id'] ?? $request->pool_group_id;
             $pooledRequestIds = $data['pooled_request_ids'] ?? [];
 
+            // Pessimistic Locking: Lock targeted vehicles & drivers against concurrent race conditions
+            $lockedVehicles = array_filter(array_unique([$vehicleId, $returnVehicleId]));
+            if (!empty($lockedVehicles)) {
+                \App\Models\Vehicle::whereIn('id', $lockedVehicles)->lockForUpdate()->get();
+            }
+            $lockedDrivers = array_filter(array_unique([$driverId, $returnDriverId]));
+            if (!empty($lockedDrivers)) {
+                \App\Models\User::whereIn('id', $lockedDrivers)->lockForUpdate()->get();
+            }
+
             // ===== VALIDATE DRIVER & VEHICLE TIME CONFLICTS =====
             // 1. Sesi Keberangkatan / Antar:
             $this->validateDriverTimeConflict($driverId, $request, $effectiveStartTime, $depEndTime, $poolGroupId, $pooledRequestIds);
@@ -459,6 +469,9 @@ class AssignDriverAction
         $updatedRequests = [];
 
         DB::transaction(function () use ($requests, $requestIds, $driverId, $vehicleId, $data, $poolGroupId, $masterPoolQr, &$updatedRequests) {
+            \App\Models\Vehicle::where('id', $vehicleId)->lockForUpdate()->first();
+            \App\Models\User::where('id', $driverId)->lockForUpdate()->first();
+
             // Pre-stamp all requests in the pool with pool_group_id so mutual operations recognize the group
             Request::whereIn('id', $requestIds)->update([
                 'pool_group_id'  => $poolGroupId,
@@ -517,6 +530,9 @@ class AssignDriverAction
 
         $updatedRequests = [];
         DB::transaction(function () use ($requests, $requestIds, $returnDriverId, $returnVehicleId, $notes, $returnPoolGroupId, &$updatedRequests) {
+            \App\Models\Vehicle::where('id', $returnVehicleId)->lockForUpdate()->first();
+            \App\Models\User::where('id', $returnDriverId)->lockForUpdate()->first();
+
             // Pre-stamp all requests with return_pool_group_id so conflict validator recognizes them as mutual pool
             Request::whereIn('id', $requestIds)->update([
                 'return_pool_group_id' => $returnPoolGroupId,

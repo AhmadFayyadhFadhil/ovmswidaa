@@ -822,6 +822,17 @@ class RequestController extends Controller
             ], 422);
         }
 
+        $diffKm = $endKm - $stKm;
+        $forceConfirm = $httpRequest->boolean('force_confirm');
+        if ($stKm > 0 && $diffKm > 1000 && !$forceConfirm) {
+            return response()->json([
+                'status'               => 'error',
+                'require_confirmation' => true,
+                'diff_km'              => $diffKm,
+                'message'              => 'Jarak tempuh terdeteksi sangat tinggi (+' . number_format($diffKm, 0, ',', '.') . ' KM). Harap periksa kembali apakah angka spidometer ini sudah benar dan bukan salah ketik.',
+            ], 422);
+        }
+
         $totKm = max(0, $endKm - $stKm);
         $isSecurityCheckedIn = !empty($vehicleRequest->security_checked_in_at) || ($myTrip && !empty($myTrip->security_checked_in_at));
 
@@ -1167,6 +1178,19 @@ class RequestController extends Controller
                 'status' => 'error',
                 'message' => "KM Akhir (" . number_format($inputEndKm, 0, ',', '.') . ") tidak boleh lebih kecil dari KM Awal (" . number_format($stKm, 0, ',', '.') . ")."
             ], 422);
+        }
+
+        if ($inputEndKm !== null && $stKm > 0) {
+            $diffKm = $inputEndKm - $stKm;
+            $forceConfirm = $httpRequest->boolean('force_confirm');
+            if ($diffKm > 1000 && !$forceConfirm) {
+                return response()->json([
+                    'status'               => 'error',
+                    'require_confirmation' => true,
+                    'diff_km'              => $diffKm,
+                    'message'              => "Jarak tempuh terdeteksi sangat tinggi (+" . number_format($diffKm, 0, ',', '.') . " KM). Harap periksa kembali apakah angka spidometer ini sudah benar dan bukan salah ketik.",
+                ], 422);
+            }
         }
 
         $totKm = ($inputEndKm !== null && $stKm > 0) ? max(0, $inputEndKm - $stKm) : null;

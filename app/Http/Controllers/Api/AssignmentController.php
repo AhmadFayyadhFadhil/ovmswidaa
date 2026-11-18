@@ -532,6 +532,16 @@ class AssignmentController extends Controller
 
         try {
             \Illuminate\Support\Facades\DB::transaction(function () use ($vehicleRequest, $validated, $user) {
+                // Pessimistic Locking: Lock vehicles and drivers involved in this daily assignment
+                $vIds = array_filter(array_unique(array_map(fn($a) => $a['vehicle_id'] ?? null, $validated['daily_assignments'])));
+                if (!empty($vIds)) {
+                    \App\Models\Vehicle::whereIn('id', $vIds)->lockForUpdate()->get();
+                }
+                $dIds = array_filter(array_unique(array_map(fn($a) => $a['driver_id'] ?? null, $validated['daily_assignments'])));
+                if (!empty($dIds)) {
+                    \App\Models\User::whereIn('id', $dIds)->lockForUpdate()->get();
+                }
+
                 $isDirectScheduled = $this->hasRoleDirect($user, ['Admin', 'admin', 'GA', 'ga']) || $user->isHrGaHead();
                 $isUrgent = in_array(strtoupper($vehicleRequest->priority instanceof \BackedEnum ? $vehicleRequest->priority->value : (string)($vehicleRequest->priority ?? '')), ['URGENT', 'CRITICAL']);
                 $isCoordinatorOnly = !$isDirectScheduled && $this->hasRoleDirect($user, ['Driver Coordinator', 'driver coordinator', 'coordinator']);
